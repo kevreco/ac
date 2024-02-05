@@ -1,0 +1,619 @@
+#include "parser.h"
+
+#include "ast.h"
+#include "global.h"
+#include "lexer.h"
+
+#define CAST(type_, object) (type_)(object)
+
+#define AST_NEW(type_, ident_, location_, ast_type_) \
+        type_* ident_ = (type_*)malloc(sizeof(type_)); \
+        if (!ident_) exit(-1); \
+        do { \
+            ident_->type = ast_type_; \
+            ident_->loc = location_; \
+        } while (0);
+
+#define if_printf(condition_, ...) do { if(condition_) printf(__VA_ARGS__); } while(0);
+
+static struct ac_ast_file* parse_file(struct ac_parser* p);
+static struct ac_ast_expr* parse_expr(struct ac_parser* p, struct ac_ast_expr* lhs);
+static struct ac_ast_expr* parse_primary(struct ac_parser* p);
+static struct ac_ast_expr* parse_rhs(struct ac_parser* p, struct ac_ast_expr* lhs, int lhs_precedence);
+static struct ac_ast_identifier* parse_identifier(struct ac_parser* p);
+static struct ac_ast_expr* parse_declaration(struct ac_parser* p, struct ac_ast_identifier* ident);
+static struct ac_ast_expr* parse_block(struct ac_parser* p, bool expect_braces);
+static struct ac_ast_expr* parse_postfix_expression(struct ac_parser* p, struct ac_ast_identifier* identifier);
+static struct ac_ast_expr* parse_unary(struct ac_parser* p);
+
+static const struct ac_token* token(const struct ac_parser* p); /* current token type */
+static struct ac_location location(const struct ac_parser* p);
+static void goto_next_token(struct ac_parser* p);
+static enum ac_token_type token_type(const struct ac_parser* p);              /* current token type */
+static bool token_is(const struct ac_parser* p, enum ac_token_type type);     /* current token is */
+static bool token_is_not(const struct ac_parser* p, enum ac_token_type type); /* current token is not */
+static bool token_is_unary_operator(const struct ac_parser* p);              /* current token is an unary operator */
+static bool token_equal_type(struct ac_token, enum ac_token_type type);
+static bool expect_and_consume(struct ac_parser* p, enum ac_token_type type);
+
+static bool expr_is(struct ac_ast_expr* expr, enum ac_ast_type type);
+static bool expr_is_declaration(struct ac_ast_expr* expr);
+static bool expr_is_statement(struct ac_ast_expr* expr);
+
+void ac_parser_init(struct ac_parser* p, struct ac_manager* mgr)
+{
+    memset(p, 0, sizeof(struct ac_parser));
+
+    p->mgr = mgr;
+
+    ac_lex_init(&p->lex, mgr);
+
+    p->options.debug_verbose = true;
+}
+
+void ac_parser_destroy(struct ac_parser* p)
+{
+    (void)p;
+
+    ac_lex_destroy(&p->lex);
+}
+
+bool ac_parser_parse(struct ac_parser* p, const char* content, size_t content_size, const char* filepath)
+{
+    ac_lex_set_source(&p->lex, content, content_size, filepath);
+
+    parse_file(p);
+
+    return true;
+}
+
+static struct ac_ast_file* parse_file(struct ac_parser* p)
+{
+    (void)p;
+    //assert(0 && "@TODO allocate this");
+    ac_report_error("@TODO allocate this");
+    return 0;
+    //struct ac_ast_file* file = 0;
+    //
+    //while (token_is_not(p, ac_token_type_EOF))
+    //{
+    //    union ac_ast_expr* expr = parse_expr(p);
+    //
+    //    if (!expr_is_declaration(expr))
+    //    {
+    //        ac_report_error_expr(expr, "Top level expression can only be declarations.\n");
+    //        return 0;
+    //    }
+    //}
+    //
+    //return file;
+}
+
+static struct ac_ast_expr* parse_expr(struct ac_parser* p, struct ac_ast_expr* lhs)
+{
+    if_printf(p->options.debug_verbose, "parse_expression\n");
+
+    lhs = lhs ? lhs : parse_primary(p);
+
+    if (!lhs) {
+        return 0;
+    }
+
+    struct ac_ast_expr* rhs = parse_rhs(p, lhs, 0);
+
+    if (!rhs) {
+        return lhs;
+    }
+
+    return rhs;
+}
+
+static struct ac_ast_expr* parse_primary(struct ac_parser* p) {
+    if_printf(p->options.debug_verbose, "parse_primary\n");
+
+    struct ac_ast_expr* result = 0;
+
+    if (token_is_unary_operator(p))
+    {
+        result = parse_unary(p);
+    }
+    else
+    {
+        switch (token_type(p)) {
+        case ac_token_type_BRACE_L: { /* parse nested block */
+            bool expect_braces = true;
+            result = parse_block(p, expect_braces);
+            break;
+        }
+        case ac_token_type_EOF: { /* Error must have been reported by "goto_next_token" or "expect_and_consume" */
+            result = 0;
+            return result;
+        }
+        case ac_token_type_IDENTIFIER: { /* <identifier> */
+            struct ac_ast_identifier* ident = parse_identifier(p);
+            /* can be function call, array access, any kind of declarations etc. */
+            /* if not then the identifier itself is returned */
+            result = parse_postfix_expression(p, ident);
+            break;
+        }
+        case ac_token_type_LITERAL_BOOL: {
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_token_type_LITERAL_BOOL);
+            literal->u.boolean = p->lex.token.u.b.value;
+            result = CAST(struct ac_ast_expr*, literal);
+            goto_next_token(p);
+            break;
+        }
+        case ac_token_type_LITERAL_INTEGER: { 
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_token_type_LITERAL_INTEGER);
+            literal->u.integer = p->lex.token.u.i.value;
+            result = CAST(struct ac_ast_expr*, literal);
+            goto_next_token(p);
+            break;
+        }
+        case ac_token_type_LITERAL_FLOAT: {
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_token_type_LITERAL_FLOAT);
+            literal->type = ac_ast_type_LITERAL_FLOAT;
+            literal->u._float = p->lex.token.u.f.value;
+            result = CAST(struct ac_ast_expr*, literal);
+            goto_next_token(p);
+            break;
+        }
+        case ac_token_type_LITERAL_NULL: {
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_NULL);
+            result = CAST(struct ac_ast_expr*, literal);
+            goto_next_token(p);
+            break;
+        }
+        case ac_token_type_LITERAL_STRING: {
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_STRING);
+            literal->u.str = p->lex.token.text;
+            result = CAST(struct ac_ast_expr*, literal);
+            goto_next_token(p);
+            break;
+        }
+        case ac_token_type_RETURN: {
+            goto_next_token(p); /* Skip 'return' */
+            struct ac_ast_expr* lhs = 0;
+            result = parse_expr(p, lhs);
+            break;
+        }
+        case ac_token_type_SEMI_COLON: { /* empty expression */
+            AST_NEW(struct ac_ast_expr, empty_statement, location(p), ac_ast_type_EMPTY_STATEMENT);
+
+            goto_next_token(p); /* Skip ';' */
+
+            result = empty_statement;
+            break;
+        }
+        
+        default: {
+            ac_report_error_loc(location(p), "parse_primary, case note handled %d\n", token_type(p));
+            return 0;
+        }
+        } /* switch (token_type(p)) */
+    }
+
+    return result;
+}
+
+struct ac_ast_type_specifier* parse_type_specifier(struct ac_parser* p) {
+
+    struct ac_ast_type_specifier* result = 0;
+
+    assert(token_is(p, ac_token_type_IDENTIFIER)
+        || token_is(p, ac_token_type_SQUARE_L)  /* '['  array */
+        || token_is(p, ac_token_type_STAR)      /* '*'  pointer */
+        || token_is(p, ac_token_type_PAREN_L)   /* '('  function type */
+    );
+
+    source_location loc = p.lex.location;
+    std::deque<unsigned int> arrays;
+    if (token_is(p, ac_token_type_SQUARE_L)) {     /* '[' */
+        p.lex.goto_next_token(); // Skip '['
+        if (token_is(p, ac_token_type_SQUARE_R)) { /* ']' */
+            report_error(location(p), "array in type specifier must have a size\n");
+            return 0;
+        }
+        else if (p.lex.token.type == token_type_LiteralInteger) {
+            //@TODO check if is a positive integer
+            int i = -1;// std::atoi(p.lex.token.text);
+            assert(false); // CHeck if we can use p.lex.token.integer_value instead
+            if (i <= 0) {
+                // @TODO move this in to semantic analysis
+                p.manager.report_error(p.lex.location, "array size can't be 0 or negative\n");
+                return 0;
+            }
+            else {
+                arrays.push_back(i);
+            }
+
+        }
+    }
+
+    if (p.lex.token.type == token_type_Identifier) {
+        ast_identifier* identifier = parse_identifier(p);
+        //ast_expression* expression = parse_postfix_expression(p, ident);
+        result = AST_NEW(ast_type_specifier, loc);
+        result->kind = type_specifier_kind_IDENTIFIER;
+        result->identifier = identifier;
+    }
+
+    return result;
+}
+
+static struct ac_ast_expr* parse_unary(struct ac_parser* p) {
+    if_printf(p->options.debug_verbose, "parse_unary\n");
+
+    assert(token_is_unary_operator(p));
+
+    AST_NEW(struct ac_ast_unary, unary, location(p), ac_ast_type_UNARY);
+    unary->op = p->lex.token.type;
+
+    goto_next_token(p); /* skip current unary token */
+
+    unary->operand = parse_primary(p);
+
+    return CAST(struct ac_ast_expr*, unary);
+}
+
+/* See http://en.wikipedia.org/wiki/Operator-precedence_parser */
+static struct ac_ast_expr* parse_rhs(struct ac_parser* p, struct ac_ast_expr* lhs, int lhs_precedence) {
+    if_printf(p->options.debug_verbose, "parse_rhs\n");
+
+    (void)lhs_precedence; /* @TODO */
+
+    if (lhs
+        && expr_is(lhs, ac_ast_type_IDENTIFIER)
+        && token_is(p, ac_token_type_COLON)) /* idenfitifer followed by ':' is a declaration */
+    {
+        struct ac_ast_identifier* ident = CAST(struct ac_ast_identifier*, lhs);
+        return parse_expression_from_identifier(p, ident);
+    }
+
+    return lhs;
+}
+
+static struct ac_ast_identifier* parse_identifier(struct ac_parser* p) {
+
+    assert(token_is(p, ac_token_type_IDENTIFIER));
+
+    AST_NEW(struct ac_ast_identifier, result, location(p), ac_ast_type_IDENTIFIER);
+
+    goto_next_token(p); /* Skip identifier */
+
+    return result;
+}
+
+static struct ac_ast_expr* parse_postfix_expression(struct ac_parser* p, struct ac_ast_identifier* identifier)
+{
+    struct ac_ast_expr* previous = CAST(struct ac_ast_expr* , identifier);
+    struct ac_ast_expr* parsed;
+
+    do {
+        parsed = 0;
+        switch (token_type(p)) {
+        case ac_token_type_PAREN_L: { /* parse function call */
+            /* @TODO */
+            /* struct ac_ast_function_call* function_call = parse_function_call(p, previous); */
+            /* parsed = function_call; */
+            break;
+        }
+        /* Parse array like <previous-expression>[<expression-for-index>] */
+        case ac_token_type_SQUARE_L: {  /* parse array access */
+            /* @TODO */
+            /*goto_next_token(p);*/ /* skip [ */
+            /*AST_NEW(struct ac_ast_array_access, array_access, location(p), ac_ast_type_ARRAY_ACCESS); */
+            /*array_access->left = previous; */
+            /*array_access->index_expression = parse_expression(p); */
+            
+            /*if (!array_access->index_expression) return false; */
+            /*if (!expect_and_consume(p, token_type_SquareR)) return false; */
+
+            /*parsed = array_access; */
+            break;
+        }
+        case ac_token_type_DOT: { /* parse member access */
+            /* goto_next_token(p); */ /* skip [ */
+            /* AST_NEW(struct ac_ast_member_access, array_access, location(p), ac_ast_type_MEMBER_ACCESS); */
+            /* member_access->left = previous; */
+            /* member_access->identifier = parse_identifier(p);*/
+
+            /* if (!member_access->identifier) return false; */
+
+            /*parsed = member_access; */
+            break;
+        }
+        case ac_token_type_COLON: { /* parse declaration */
+            struct ac_ast_expr* expr = parse_declaration(p, identifier);
+            if (!expr) return 0;
+            assert(expr_is_declaration(expr));
+            parsed = expr;
+        }
+        default: /* do nothing */
+        } /* end of switch (token_type(p)) */
+
+        /* only update previous if new has been parsed. */
+        previous = parsed ? parsed : previous;
+    } while (parsed);
+
+    return previous;
+}
+
+static struct ac_ast_expr* parse_declaration(struct ac_parser* p, struct ac_ast_identifier* ident)
+{
+    if (!expect_and_consume(p, ac_token_type_COLON)) return 0; /* ':' */
+
+    switch (token_type(p)) {
+        case ac_token_type_ENUM: { /* parse enum definition */
+            assert(0 && "@TODO parse enum definition");
+            break;
+        }
+        case ac_token_type_PAREN_L: { /* parse function definition or function type */
+            AST_NEW(struct ac_ast_declaration_func, decl, ident->loc, ac_ast_type_DECLARATION_FUNCTION);
+        
+            decl->identifier = ident;
+
+            if (!parse_parameters(p, &block->parameters)) return 0; /* ( ... ) */
+
+            if (!expect_and_consume(p, ac_token_type_ARROW)) return 0; /* '->' */
+
+            declaration->return_type_expression = parse_ty(p);
+
+            if (!declaration->return_type_expression) return 0;
+
+            /* parse function body */
+            if (token_is(p, ac_token_type_BRACE_L))
+            {
+                AST_NEW(struct ac_ast_declaration_func, decl, ident->loc, ac_ast_type_DECLARATION_FUNCTION_DEFINITION);
+
+                bool expect_braces = true;
+                struct ac_ast_expr* expr_block = parse_block(p, block, expect_braces);
+            
+                if (!expr_is(expr_block, ac_ast_type_BLOCK)) return 0;
+
+                return decl;
+            }
+            else if (token_is(p, ac_token_type_SEMI_COLON))
+            {
+                AST_NEW(struct ac_ast_declaration_func, decl, ident->loc, ac_ast_type_DECLARATION_FUNCTION);
+                return decl;
+            }
+            else if (token_is(p, ac_token_type_EQUAL))
+            {
+                AST_NEW(struct ac_ast_declaration_func, decl, ident->loc, ac_ast_type_DECLARATION_FUNCTION);
+                return decl;
+            }
+
+            break;
+        }
+        case ac_token_type_STRUCT: { /* parse struct definition */
+            assert(0 && "@TODO parse struct definition");
+            break;
+        }
+
+        case ac_token_type_TUPLE: { /* parse tuple definition */
+            assert(0 && "@TODO parse tuple definition");
+            break;
+        }
+        default: /* parse type specifier */
+        {
+
+            AST_NEW(struct ac_ast_type_specifier, type_specifier, location(p), ac_ast_type_UNKNOWN);
+
+            type_specifier->identifier = ident;
+
+
+            type_specifier->type_specifier_expression = parse_expression(p);
+
+            if (token_is(p, ac_token_type_EQUAL))
+            {
+                goto_next_token(p); /* Skip '=' */
+
+                result->initializer_expression = parse_expression(p);
+            }
+        }
+
+    } /*switch (token_type(p)) */
+
+    
+    return result;
+}
+
+struct ac_ast_expr* parse_block(struct ac_parser* p, bool expect_braces) {
+    if_printf(p->options.debug_verbose, "parse_block_body\n");
+
+    AST_NEW(struct ac_ast_block, block, location(p), ac_ast_type_BLOCK);
+
+    if (expect_braces && !expect_and_consume(p, ac_token_type_BRACE_L)) return false;
+
+    /* empty block no need to do anything else */
+    if (expect_braces && token_is(p, ac_token_type_BRACE_R))
+    {
+        goto_next_token(p);
+        return true;
+    }
+
+    // Loop parsing one top level item
+    while (!token_is(p, ac_token_type_BRACE_R)
+        && !token_is(p, ac_token_type_EOF))
+    {
+        struct ac_ast_expr* expr = parse_statement(p);
+
+        if (!expr) return false;
+
+        block->statements.push_back(expression);
+    }
+
+    if (expect_braces && !expect_and_consume(p, ac_token_type_BRACE_R)) return false;
+
+    return true;
+
+} 
+
+struct ac_ast_parameters* parse_parameters(struct ac_parser* p, bool square_bracket)
+{
+    source_location loc = p.lex.location;
+    Token token = p.lex.token;
+
+    enum ac_token_type type_L = square_bracket ? ac_token_type_SQUARE_L : ac_token_type_PAREN_L;
+    enum ac_token_type type_R = square_bracket ? ac_token_type_SQUARE_R : ac_token_type_PAREN_R;
+
+    if (!expect_and_consume(p, type_L))
+    {
+        return 0; /* '(' or '[' */
+    }
+
+    AST_NEW(struct ac_ast_parameters*, params, location(p), ac_ast_type_PARAMETER_LIST);
+    *params = { 0 };
+    // empty parameters
+    if (token_is(p, type_R)) /* ')' or ']' */
+    {
+        goto_next_token(p);
+        return params;
+    }
+
+    Token token = p.lex.token;
+    // @SEM we should just parse any expression between the '(', ')' and commas, and let the semantic analysis check what's inside.
+    do
+    {
+        struct ac_token* token = token(p);
+
+        struct ac_location location = location(p);
+
+        struct ac_ast_expr* lhs = 0;
+        struct ac_ast_expr* expr = parse_expr(p, lhs);
+
+        if (!expr)
+        {
+            dstr_view token_str = token_to_strv(token);
+            ac_report_error(location, "Could not parse expression after %.*s", token_str.size, token_str.data);
+            return 0;
+        }
+
+        /* @TODO */
+        parameters->push_back(expression);
+        add_parameter(params, expression);
+
+        if (token_is(p, ac_token_type_COMMA))
+        { /* ',' */
+            goto_next_token(p);
+        }
+
+    } while (token_is(p, type_R) /* ')' or ']' */
+        && token_is(p, ac_token_type_EOF));
+
+    if (!expect_and_consume(p, type_R))
+    {
+        return 0; /* ')' or ']' */
+    }
+
+    return params;
+
+}
+
+static const struct ac_token* token(const struct ac_parser* p) {
+    return &p->lex.token;
+}
+
+static struct ac_location location(const struct ac_parser* p) {
+    return p->lex.location;
+}
+
+static void goto_next_token(struct ac_parser* p)
+{
+    ac_lex_goto_next(&p->lex);
+}
+static enum ac_token_type token_type(const struct ac_parser* p){
+    return p->lex.token.type;
+}
+
+static bool token_is(const struct ac_parser* p, enum ac_token_type type) {
+    return token_equal_type(p->lex.token, type);
+}
+
+static bool token_is_not(const struct ac_parser* p, enum ac_token_type type)
+{
+    return !token_is(p, type);
+}
+
+static bool token_is_unary_operator(const struct ac_parser* p)
+{
+    switch (p->lex.token.type) {
+    case ac_token_type_AMP:
+    case ac_token_type_DOT:
+    case ac_token_type_EXCLAM:
+    case ac_token_type_MINUS:
+    case ac_token_type_PLUS:
+    case ac_token_type_STAR:
+    case ac_token_type_TILDE:
+        return true;
+    }
+    return false;
+}
+
+static bool token_equal_type(struct ac_token token, enum ac_token_type type)
+{
+    return token.type == type;
+}
+
+static bool expect(const struct ac_parser* p, enum ac_token_type type) {
+    struct ac_location current_location = p->lex.location;
+    struct ac_token current = p->lex.token;
+    if (current.type != type)
+    {
+        dstr_view expected = ac_token_type_to_strv(type);
+        dstr_view actual = ac_token_to_strv(current);
+
+        ac_report_error_loc(current_location, "Syntax error: expected '%.*s', actual '%.*s'\n"
+            , expected.size, expected.data
+            , actual.size, actual.data
+        );
+
+        return false;
+    }
+    return true;
+}
+
+static bool expect_and_consume(struct ac_parser* p, enum ac_token_type type)
+{
+    struct ac_location current_location = p->lex.location;
+    struct ac_token current = p->lex.token;
+    if (expect(p, type)) {
+        goto_next_token(p);
+
+        if (token_is(p, ac_token_type_EOF)
+            && (!token_equal_type(current, ac_token_type_SEMI_COLON) && !token_equal_type(current, ac_token_type_BRACE_R)))
+        {
+            dstr_view current_string = ac_token_to_strv(current);
+
+            ac_report_error_loc(current_location, "Syntax error: unexpected end-of-file after: '%.*s'\n"
+                , current_string.size, current_string.data
+            );
+
+            return false;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+static bool expr_is(struct ac_ast_expr* expr, enum ac_ast_type type)
+{
+    return expr->type == type;
+}
+
+static bool expr_is_declaration(struct ac_ast_expr* expr)
+{
+    return expr->type == ac_ast_type_DECLARATION_SIMPLE
+        || expr->type == ac_ast_type_DECLARATION_FUNCTION;
+}
+
+static bool expr_is_statement(struct ac_ast_expr* expr)
+{
+    return expr->type == ac_ast_type_EMPTY_STATEMENT
+        || expr->type == ac_ast_type_IF
+        || expr->type == ac_ast_type_RETURN
+        
+        || expr_is_declaration(expr);
+}

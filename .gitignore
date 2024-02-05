@@ -1,3 +1,9 @@
+# where the builds are generated from premake
+.build/
+
+# generated files
+*.generated
+
 # Prerequisites
 *.d
 
