@@ -1,6 +1,7 @@
 #include "converter_c.h"
 
 #include <stdio.h> /* FILE */
+#include <inttypes.h> /* PRIiMAX, PRIuMAX */
 
 #include <re/file/file.h>
 
@@ -54,11 +55,9 @@ static void print_top_level(struct ac_converter_c* c)
         do
         {
             print_expr(c, current->value);
-
+            print_str(c, "\n");
         } while ((current = current->next) != 0 && current->value != 0);
     }
-
-
 }
 
 static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
@@ -67,6 +66,18 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
     {
         CAST_TO(struct ac_ast_declaration*, declaration, expr);
         print_declaration(c, declaration);
+    }
+    else if (expr->type == ac_ast_type_LITERAL_INTEGER)
+    {
+        // @TODO handle unsigned integer
+        CAST_TO(struct ac_ast_literal*, literal, expr);
+        /* print maximal size possible value of an integer with PRIiMAX */
+        print_f(c, "%" PRIiMAX "", literal->u.integer);
+    }
+    else
+    {
+        // @TODO we should report an error here.
+        assert(0 && "unhandled ast type.");
     }
 }
 
@@ -80,6 +91,11 @@ static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaratio
     print_identifier(c, declaration->type_specifier->identifier);
     print_str(c, " ");
     print_identifier(c, declaration->ident);
+    if (declaration->initializer)
+    {
+        print_str(c, " = ");
+        print_expr(c, declaration->initializer);
+    }
     print_str(c, ";");
 }
 

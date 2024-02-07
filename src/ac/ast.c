@@ -11,7 +11,7 @@ void ac_ast_type_specifier_init(struct ac_ast_type_specifier* node)
 
 void ac_ast_declaration_init(struct ac_ast_declaration* node)
 {
-    memset(node, 0, sizeof(struct ac_ast_type_specifier));
+    memset(node, 0, sizeof(struct ac_ast_declaration));
     node->type = ac_ast_type_DECLARATION;
 }
 

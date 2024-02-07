@@ -1,6 +1,8 @@
 #ifndef AC_AST_H
 #define AC_AST_H
 
+#include <inttypes.h> /* intmax_t */
+
 #include "re/dstr.h"
 #include "location.h"
 
@@ -31,7 +33,7 @@ struct ac_ast_literal {
     struct ac_location loc;
     union {
         dstr_view str;
-        int integer;
+        intmax_t integer;
         double _float;
         bool boolean;
     } u;
@@ -56,12 +58,6 @@ struct ac_ast_type_specifier {
 
 void ac_ast_type_specifier_init(struct ac_ast_type_specifier* node);
 
-/* @TODO remove ac_ast_simple_declaration if not used */
-struct ac_ast_simple_declaration {
-    struct ac_ast_identifier ident;
-    struct ac_ast_type_specifier* type_specifier;
-};
-
 struct ac_ast_declaration {
     enum ac_ast_type type;
     struct ac_location loc;
@@ -69,7 +65,17 @@ struct ac_ast_declaration {
     struct ac_ast_type_specifier* type_specifier;
     struct ac_ast_identifier* ident;
 
-    /* @TODO add function information here as well whether it's a forward declaration or a proper function definition */
+    /* we use an initializer and not an assignment here because those are not the same operations.
+       we can initialize a global variable, but we cannot assign it again somewhere else.
+    */
+    struct ac_ast_expr* initializer;     /* optional, cannot have an 'initializer' and '' at the same time */
+    struct ac_ast_block* function_block; /* optional, cannot have an 'function_block' and 'initializer' at the same time */
+
+    union {
+        struct c {
+            struct ac_ast_declaration* next; /* in C there could be multiple declaration for a type so we keep them in here */
+        } c;
+    } u;
 };
 
 void ac_ast_declaration_init(struct ac_ast_declaration* node);
@@ -104,6 +110,14 @@ struct ac_ast_unary {
     struct ac_location loc;
     enum ac_token_type op;       /* which type of unary operator */
     struct ac_ast_expr* operand; /* primary ast expr */
+};
+
+struct ac_ast_binary {
+    enum ac_ast_type type;
+    struct ac_location loc;
+    enum ac_token_type op;     /* which type of binary operator */
+    struct ac_ast_expr* left;
+    struct ac_ast_expr* right;
 };
 
 void ac_ast_unary_init(struct ac_ast_unary* unary);

@@ -118,6 +118,10 @@ static void parse_top_level_declarations(struct ac_parser_c* p, struct ac_ast_ex
         struct ac_ast_expr* lhs = 0;
         struct ac_ast_expr* expr = parse_expr(p, lhs);
 
+        if (expr == 0)
+        {
+            return;
+        }
         if (!expr_is_declaration(expr))
         {
             ac_report_error_expr(expr, "Top level expression can only be declarations.\n");
@@ -185,22 +189,21 @@ static struct ac_ast_expr* parse_primary(struct ac_parser_c* p)
             break;
         }
         case ac_token_type_LITERAL_BOOL: {
-            AST_NEW(struct ac_ast_literal, literal, location(p), ac_token_type_LITERAL_BOOL);
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_BOOL);
             literal->u.boolean = p->lex.token.u.b.value;
             result = CAST(struct ac_ast_expr*, literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_INTEGER: { 
-            AST_NEW(struct ac_ast_literal, literal, location(p), ac_token_type_LITERAL_INTEGER);
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_INTEGER);
             literal->u.integer = p->lex.token.u.i.value;
             result = CAST(struct ac_ast_expr*, literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_FLOAT: {
-            AST_NEW(struct ac_ast_literal, literal, location(p), ac_token_type_LITERAL_FLOAT);
-            literal->type = ac_ast_type_LITERAL_FLOAT;
+            AST_NEW(struct ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_FLOAT);
             literal->u._float = p->lex.token.u.f.value;
             result = CAST(struct ac_ast_expr*, literal);
             goto_next_token(p);
@@ -278,8 +281,8 @@ static struct ac_ast_expr* parse_rhs(struct ac_parser_c* p, struct ac_ast_expr* 
     /* @TODO: handle precedence, binary operators etc.*/
     (void)lhs_precedence;
     (void)lhs;
-
-    return parse_expr(p, lhs);
+    
+    return lhs;
 }
 
 static struct ac_ast_identifier* parse_identifier(struct ac_parser_c* p) {
@@ -385,16 +388,17 @@ static struct ac_ast_expr* parse_declaration(struct ac_parser_c* p, struct ac_as
     /* (case 1) */
     if (token_is(p, ac_token_type_SEMI_COLON)) /* ; */
     {
-        expect_and_consume(p, ac_token_type_SEMI_COLON); /* skip ; */
+        expect_and_consume(p, ac_token_type_SEMI_COLON);
         return CAST(struct ac_ast_expr*, declaration);
     }
 
     /* (case 2) */
     if (token_is(p, ac_token_type_EQUAL))  /* = */
     {
-        
-        ac_report_error(" @FIXME: Cannot handle assignment in declaration yet.");
-        return 0;
+        expect_and_consume(p, ac_token_type_EQUAL);
+        declaration->initializer = parse_expr(p, 0);
+        expect_and_consume(p, ac_token_type_SEMI_COLON);
+        return CAST(struct ac_ast_expr*, declaration);
     }
 
     /* (case 3 and 4) */
