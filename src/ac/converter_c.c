@@ -55,7 +55,7 @@ static void print_top_level(struct ac_converter_c* c)
         do
         {
             print_expr(c, current->value);
-            print_str(c, "\n");
+            
         } while ((current = current->next) != 0 && current->value != 0);
     }
 }
@@ -66,6 +66,10 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
     {
         CAST_TO(struct ac_ast_declaration*, declaration, expr);
         print_declaration(c, declaration);
+        if (declaration->u.c.next)
+        {
+            print_declaration(c, declaration->u.c.next);
+        }
     }
     else if (expr->type == ac_ast_type_LITERAL_INTEGER)
     {
@@ -97,6 +101,7 @@ static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaratio
         print_expr(c, declaration->initializer);
     }
     print_str(c, ";");
+    print_str(c, "\n");
 }
 
 static void print_fv(struct ac_converter_c* c, const char* fmt, va_list args)

@@ -78,7 +78,7 @@ project "ac"
 		defines { "WIN32"}
 	filter {}
 	
-	debugargs { "compile " .. path.getabsolute("./testsuits/02-declaration.c") }
+	debugargs { "compile " .. path.getabsolute("./testsuits/03-declaration.c") }
 	
 	-- every time we build we want to check if the compiler actually run the tests
 	postbuildcommands  {

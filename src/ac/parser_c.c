@@ -376,8 +376,9 @@ static struct ac_ast_expr* parse_postfix_expression(struct ac_parser_c* p, struc
 /* Example:
    case 1: <'type'> value;
    case 2: <'type'> value = 0;
-   case 3: <'type'> forward_function_declaration();
-   case 4: <'type'> function_declaration();
+   case 3: <'type'> value = 0, value2 = 0;
+   case 4: <'type'> forward_function_declaration();
+   case 5: <'type'> function_declaration();
 */
 static struct ac_ast_expr* parse_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_identifier* identifier)
 {
@@ -385,28 +386,44 @@ static struct ac_ast_expr* parse_declaration(struct ac_parser_c* p, struct ac_as
     declaration->type_specifier = type_specifier;
     declaration->ident = identifier;
 
-    /* (case 1) */
-    if (token_is(p, ac_token_type_SEMI_COLON)) /* ; */
-    {
-        expect_and_consume(p, ac_token_type_SEMI_COLON);
-        return CAST(struct ac_ast_expr*, declaration);
-    }
-
     /* (case 2) */
     if (token_is(p, ac_token_type_EQUAL))  /* = */
     {
         expect_and_consume(p, ac_token_type_EQUAL);
         declaration->initializer = parse_expr(p, 0);
-        expect_and_consume(p, ac_token_type_SEMI_COLON);
+    }
+
+    /* (case 3) */
+    if (token_is(p, ac_token_type_COMMA))  /* , */
+    {
+        expect_and_consume(p, ac_token_type_COMMA);
+
+        // @TODO handle pointer and array, we actually need to expect something like "identifier" or "identifier[0]" or "idenitifer()" or "* identifier"
+        // so maybe we should just accept any expression and deal with the syntax at the semantic part.
+        if (token_is_not(p, ac_token_type_IDENTIFIER))
+        {
+            ac_report_error_loc(location(p), "expect identifier after the comma in a declaration list.");
+        }
+
+        struct ac_ast_identifier* next_identifier = CAST(struct ac_ast_identifier*, parse_identifier(p));
+        struct ac_ast_expr* declaration_expr = parse_declaration(p, type_specifier,  next_identifier);
+        declaration->u.c.next = CAST(struct ac_ast_declaration*, declaration_expr);
+
         return CAST(struct ac_ast_expr*, declaration);
     }
 
-    /* (case 3 and 4) */
+    /* (case 4 and 5) */
     if (token_is(p, ac_token_type_PAREN_L)) /* ( */
     {
-
         ac_report_error(" @FIXME: Cannot handle function declaration yet.");
         return 0;
+    }
+
+    /* once we reach this that mean all other cases have been handled*/
+    /* (case 1) */
+    if (expect_and_consume(p, ac_token_type_SEMI_COLON)) /* ; */
+    {
+        return CAST(struct ac_ast_expr*, declaration);
     }
 
     return 0;
