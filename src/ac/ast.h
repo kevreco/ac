@@ -10,27 +10,43 @@
 extern "C" {
 #endif
 
+/* We assume that all expr are nodes, 'next' is used with 'ac_expre_list' */
+#define INCLUDE_AST_EXPR_BASE \
+    enum ac_ast_type type;  \
+    struct ac_location loc; \
+    struct ac_ast_expr* next;
+
 enum ac_ast_type {
     ac_ast_type_UNKNOWN,
     ac_ast_type_BLOCK,
-    ac_ast_type_DECLARATION,
     ac_ast_type_EMPTY_STATEMENT,
-    ac_ast_type_TOP_LEVEL,
+    ac_ast_type_DECLARATION,
     ac_ast_type_IDENTIFIER,
-    ac_ast_type_IF,
     ac_ast_type_LITERAL_BOOL,
     ac_ast_type_LITERAL_FLOAT,
     ac_ast_type_LITERAL_INTEGER,
     ac_ast_type_LITERAL_NULL,
     ac_ast_type_LITERAL_STRING,
+    ac_ast_type_TOP_LEVEL,
     ac_ast_type_TYPE_SPECIFIER,
-    ac_ast_type_RETURN,
     ac_ast_type_UNARY
 };
 
+/* NOTE: Not an AST node */
+struct ac_expr_list {
+    struct ac_ast_expr* head;
+    struct ac_ast_expr* tail;
+};
+
+void ac_expr_list_init(struct ac_expr_list* list);
+void ac_expr_list_add(struct ac_expr_list* list, struct ac_ast_expr* next);
+
+# 
+#define EACH_EXPR(item_, list_) \
+    (item_) = list_.head; item_; item_ = item_->next
+
 struct ac_ast_literal {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
     union {
         dstr_view str;
         intmax_t integer;
@@ -40,8 +56,7 @@ struct ac_ast_literal {
 };
 
 struct ac_ast_identifier {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
     dstr_view name;
 };
 
@@ -50,8 +65,7 @@ struct ac_ast_identifier {
    see more here https://en.cppreference.com/w/c/language/declarations#Specifiers
 */
 struct ac_ast_type_specifier {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
 
     struct ac_ast_identifier* identifier;
 };
@@ -59,8 +73,7 @@ struct ac_ast_type_specifier {
 void ac_ast_type_specifier_init(struct ac_ast_type_specifier* node);
 
 struct ac_ast_declaration {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
 
     struct ac_ast_type_specifier* type_specifier;
     struct ac_ast_identifier* ident;
@@ -69,52 +82,37 @@ struct ac_ast_declaration {
        we can initialize a global variable, but we cannot assign it again somewhere else.
     */
     struct ac_ast_expr* initializer;     /* optional, cannot have an 'initializer' and '' at the same time */
+    // @TODO
     struct ac_ast_block* function_block; /* optional, cannot have an 'function_block' and 'initializer' at the same time */
-
-    union {
-        struct c {
-            struct ac_ast_declaration* next; /* in C there could be multiple declaration for a type so we keep them in here */
-        } c;
-    } u;
 };
 
 void ac_ast_declaration_init(struct ac_ast_declaration* node);
 
-/* NOTE: Not an AST node
-*/
-struct ac_ast_expr_list {
-    struct ac_ast_expr* value;
-    struct ac_ast_expr_list* next;
-};
-
-void ac_ast_expr_list_init(struct ac_ast_expr_list* list);
-
-/* block are basically list of expressions*/
+/* block are basically list of expressions */
 struct ac_ast_block {
-
-    struct ac_ast_expr_list parameters; /* parameters for functions, for if/while conditions */
+    INCLUDE_AST_EXPR_BASE
+    struct ac_expr_list parameters; /* parameters for functions, for if/while conditions */
 
     // body of the block, all the statements
-    struct ac_ast_expr_list statements; // @TODO rename body ?
+    struct ac_expr_list statements; // @TODO rename body ?
 };
 
+void ac_ast_block_init(struct ac_ast_block* block);
+
 struct ac_ast_return {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
 
     struct ac_ast_expr* expr;
 };
 
 struct ac_ast_unary {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
     enum ac_token_type op;       /* which type of unary operator */
     struct ac_ast_expr* operand; /* primary ast expr */
 };
 
 struct ac_ast_binary {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
     enum ac_token_type op;     /* which type of binary operator */
     struct ac_ast_expr* left;
     struct ac_ast_expr* right;
@@ -123,17 +121,15 @@ struct ac_ast_binary {
 void ac_ast_unary_init(struct ac_ast_unary* unary);
 
 struct ac_ast_top_level {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
 
-    struct ac_ast_expr_list declarations;
+    struct ac_ast_block block;
 };
 
 void ac_ast_top_level_init(struct ac_ast_top_level* file);
 
 struct ac_ast_expr {
-    enum ac_ast_type type;
-    struct ac_location loc;
+    INCLUDE_AST_EXPR_BASE
 };
 
 struct ac_location ac_ast_expr_location(struct ac_ast_expr* expr);

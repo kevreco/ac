@@ -1,6 +1,6 @@
 
 /* simple declaration */
-int value;
+int value1;
 /* declaration with initializer */
 int value2 = 0;
 /* multiple declarations */

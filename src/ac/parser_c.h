@@ -1,6 +1,7 @@
 #ifndef AC_PARSER_C_H
 #define AC_PARSER_C_H
 
+#include "ast.h" /* ac_ast_block */
 #include "lexer.h"
 #include "manager.h"
 
@@ -18,6 +19,8 @@ struct ac_parser_c
     struct ac_manager* mgr;
     struct ac_lex lex;
     struct ac_parser_options options;
+
+    struct ac_ast_block* current_block;
 };
 
 void ac_parser_c_init(struct ac_parser_c* p, struct ac_manager* mgr);

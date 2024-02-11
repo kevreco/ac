@@ -55,15 +55,12 @@ bool ac_compiler_compile(struct ac_compiler* c, const char* source_file, const c
         return true;
     }
     
-    /* @TODO */
-    
     /*** Generate ***/
 
     if ((c->options.step & ac_compilation_step_GENERATING) == 0)
     {
         return true;
     }
-
 
     struct ac_converter_c conv;
 

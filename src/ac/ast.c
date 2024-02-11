@@ -2,6 +2,29 @@
 
 #include "global.h"
 
+void ac_expr_list_init(struct ac_expr_list* list)
+{
+    memset(list, 0, sizeof(struct ac_expr_list));
+}
+
+void ac_expr_list_add(struct ac_expr_list* list, struct ac_ast_expr* next)
+{
+    assert(list->head != next);
+    assert(list->tail != next);
+
+    // if it's the first value, we initialize the head
+    if (list->head == NULL)
+    {
+        list->head = next;
+
+        list->tail = next;
+    }
+    else
+    {
+        list->tail->next = next;
+        list->tail = next;
+    }
+}
 
 void ac_ast_type_specifier_init(struct ac_ast_type_specifier* node)
 {
@@ -15,9 +38,10 @@ void ac_ast_declaration_init(struct ac_ast_declaration* node)
     node->type = ac_ast_type_DECLARATION;
 }
 
-void ac_ast_expr_list_init(struct ac_ast_expr_list* list)
+void ac_ast_block_init(struct ac_ast_block* node)
 {
-    memset(list, 0, sizeof(struct ac_ast_expr_list));
+    ac_expr_list_init(&node->parameters);
+    ac_expr_list_init(&node->statements);
 }
 
 void ac_ast_unary_init(struct ac_ast_unary* node)
@@ -34,7 +58,7 @@ void ac_ast_top_level_init(struct ac_ast_top_level* node)
     memset(node, 0, sizeof(struct ac_ast_top_level));
     node->type = ac_ast_type_TOP_LEVEL;
 
-    ac_ast_expr_list_init(&node->declarations);
+    ac_ast_block_init(&node->block);
 }
 
 struct ac_location ac_ast_expr_location(struct ac_ast_expr* expr)

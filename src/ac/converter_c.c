@@ -31,7 +31,7 @@ void ac_converter_c_init(struct ac_converter_c* c, struct ac_manager* mgr)
 
 void ac_converter_c_destroy(struct ac_converter_c* c)
 {
-    (void)c;
+    dstr_destroy(&c->string_buffer);
 }
 
 void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath)
@@ -47,16 +47,12 @@ void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath)
 
 static void print_top_level(struct ac_converter_c* c)
 {
-    struct ac_ast_top_level* top_level = c->mgr->top_level; // @TODO use proper top level
+    struct ac_ast_top_level* top_level = c->mgr->top_level;
 
-    struct ac_ast_expr_list* current = &top_level->declarations;
-    if (current->value)
+    struct ac_ast_expr* current = NULL;
+    for(EACH_EXPR(current, top_level->block.statements))
     {
-        do
-        {
-            print_expr(c, current->value);
-            
-        } while ((current = current->next) != 0 && current->value != 0);
+        print_expr(c, current);
     }
 }
 
@@ -66,10 +62,6 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
     {
         CAST_TO(struct ac_ast_declaration*, declaration, expr);
         print_declaration(c, declaration);
-        if (declaration->u.c.next)
-        {
-            print_declaration(c, declaration->u.c.next);
-        }
     }
     else if (expr->type == ac_ast_type_LITERAL_INTEGER)
     {
