@@ -1,0 +1,39 @@
+
+# C
+  - Handle function prototype.
+  - Handle typedef.
+  - Handle struct
+  - Handle basic macro?
+
+# Augmented C
+- find a good iterator implementation for array, lists etc.
+  - current idea:
+  ```
+  iterator my_iterator(int begin, int end) { ... }
+  foreach my_iterator(0, 100) -> x
+  foreach my_iterator(0, 100) -> y
+  { print(x, y); }
+  // You can iterate built-in values
+  int a[10];
+  foreach a -> i { print(i); };
+  int b;
+  foreach b -> i { print(i); }; // even single values
+  
+  // You can also modify the context
+  int c[10];
+  foreach auto c = my_iterator() -> i { print(i); };
+  ```
+- add attributes.
+  ```
+  #pragma AC [attribute_key = attribute_value, attribute_key2]
+  ```
+- add prefix to symbols to simulate namespace?
+- Create compile time evaluation with VM?
+- Think about how we can augment the C language with metaprogramming.
+  - Serialize/deserialize some data.
+  - Iterate over all types of a compilation unit.
+  - Iterate over alls functions of a compilation unit.
+  - Add members to a struct (for example to add debug info).
+  - Remove members from type?
+  - Insert code to functions at the end of at the begining.
+  - Insert code before or after a function call.

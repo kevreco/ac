@@ -10,6 +10,8 @@ extern "C" {
 struct ac_converter_c
 {
     struct ac_manager* mgr;
+    int indentation_level;
+    const char* indent_pattern;
     dstr string_buffer;
 };
 

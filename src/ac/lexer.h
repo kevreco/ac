@@ -58,7 +58,9 @@ void ac_lex_destroy(struct ac_lex* l);
 void ac_lex_set_source(struct ac_lex* l, const char* source_content, size_t source_len, const char* filepath);
 const struct ac_token* ac_lex_goto_next(struct ac_lex* l);
 
+const char* ac_token_type_to_str(enum ac_token_type type); /* this should be used only for printf */
 dstr_view ac_token_type_to_strv(enum ac_token_type type);
+const char* ac_token_to_str(const struct ac_token t);
 dstr_view ac_token_to_strv(const struct ac_token t);
 
 enum ac_token_type {
@@ -106,8 +108,8 @@ enum ac_token_type {
     ac_token_type_MINUS,           // -
     ac_token_type_MINUS_EQUAL,     // -=
     ac_token_type_NOT_EQUAL,       // !=
-    ac_token_type_PAREN_L,         // [
-    ac_token_type_PAREN_R,         // ]
+    ac_token_type_PAREN_L,         // (
+    ac_token_type_PAREN_R,         // )
     ac_token_type_PERCENT,         // %
     ac_token_type_PERCENT_EQUAL,   // %=
     ac_token_type_PIPE,            // |

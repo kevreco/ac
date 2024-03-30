@@ -35,13 +35,28 @@ void ac_ast_type_specifier_init(struct ac_ast_type_specifier* node)
 void ac_ast_declaration_init(struct ac_ast_declaration* node)
 {
     memset(node, 0, sizeof(struct ac_ast_declaration));
-    node->type = ac_ast_type_DECLARATION;
+    node->type = ac_ast_type_DECLARATION_UNKNOWN;
+}
+
+bool ac_ast_is_declaration(struct ac_ast_expr* expr)
+{
+    return expr->type >= ac_ast_type_DECLARATION_BEGIN
+        && expr->type < ac_ast_type_DECLARATION_END;
 }
 
 void ac_ast_block_init(struct ac_ast_block* node)
 {
+    memset(node, 0, sizeof(struct ac_ast_block));
+    node->type = ac_ast_type_BLOCK;
+
     ac_expr_list_init(&node->parameters);
     ac_expr_list_init(&node->statements);
+}
+
+void ac_ast_return_init(struct ac_ast_return* node)
+{
+    memset(node, 0, sizeof(struct ac_ast_return));
+    node->type = ac_ast_type_RETURN;
 }
 
 void ac_ast_unary_init(struct ac_ast_unary* node)

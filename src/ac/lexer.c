@@ -812,10 +812,24 @@ static struct keyword_item keyword_items[] = {
     { ac_token_type_WHILE, "while", 5 },
 };
 
+const char* ac_token_type_to_str(enum ac_token_type type) {
+    return keyword_items[type].name;
+}
+
 dstr_view ac_token_type_to_strv(enum ac_token_type type) {
 
     const struct keyword_item keyword = keyword_items[type];
     return dstr_view_make_from(keyword.name, keyword.size);
+}
+
+const char* ac_token_to_str(struct ac_token token) {
+
+    if (token.type == ac_token_type_IDENTIFIER)
+    {
+        return "identifier";
+    }
+
+    return ac_token_type_to_str(token.type);
 }
 
 dstr_view ac_token_to_strv(struct ac_token token) {

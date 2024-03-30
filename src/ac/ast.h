@@ -20,13 +20,19 @@ enum ac_ast_type {
     ac_ast_type_UNKNOWN,
     ac_ast_type_BLOCK,
     ac_ast_type_EMPTY_STATEMENT,
-    ac_ast_type_DECLARATION,
+    ac_ast_type_DECLARATION_BEGIN,
+    ac_ast_type_DECLARATION_UNKNOWN = ac_ast_type_DECLARATION_BEGIN,
+    ac_ast_type_DECLARATION_SIMPLE = ac_ast_type_DECLARATION_BEGIN,    /* int i;    int i = 0;    int i = 0, j = 0;   int func(); */
+    ac_ast_type_DECLARATION_TYPEDEF,              /* @TODO */          /* typedef int my_int */
+    ac_ast_type_DECLARATION_FUNCTION_DEFINITION,                       /* int func() { } */
+    ac_ast_type_DECLARATION_END,
     ac_ast_type_IDENTIFIER,
     ac_ast_type_LITERAL_BOOL,
     ac_ast_type_LITERAL_FLOAT,
     ac_ast_type_LITERAL_INTEGER,
     ac_ast_type_LITERAL_NULL,
     ac_ast_type_LITERAL_STRING,
+    ac_ast_type_RETURN,
     ac_ast_type_TOP_LEVEL,
     ac_ast_type_TYPE_SPECIFIER,
     ac_ast_type_UNARY
@@ -82,11 +88,11 @@ struct ac_ast_declaration {
        we can initialize a global variable, but we cannot assign it again somewhere else.
     */
     struct ac_ast_expr* initializer;     /* optional, cannot have an 'initializer' and '' at the same time */
-    // @TODO
     struct ac_ast_block* function_block; /* optional, cannot have an 'function_block' and 'initializer' at the same time */
 };
 
 void ac_ast_declaration_init(struct ac_ast_declaration* node);
+bool ac_ast_is_declaration(struct ac_ast_expr* expr);
 
 /* block are basically list of expressions */
 struct ac_ast_block {
@@ -97,13 +103,15 @@ struct ac_ast_block {
     struct ac_expr_list statements; // @TODO rename body ?
 };
 
-void ac_ast_block_init(struct ac_ast_block* block);
+void ac_ast_block_init(struct ac_ast_block* node);
 
 struct ac_ast_return {
     INCLUDE_AST_EXPR_BASE
 
     struct ac_ast_expr* expr;
 };
+
+void ac_ast_return_init(struct ac_ast_return* node);
 
 struct ac_ast_unary {
     INCLUDE_AST_EXPR_BASE
