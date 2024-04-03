@@ -44,12 +44,31 @@ bool ac_ast_is_declaration(struct ac_ast_expr* expr)
         && expr->type < ac_ast_type_DECLARATION_END;
 }
 
+void ac_ast_declarator_init(struct ac_ast_declarator* node)
+{
+    memset(node, 0, sizeof(struct ac_ast_declarator));
+    node->type = ac_ast_type_DECLARATOR;
+}
+
+void ac_ast_parameter_init(struct ac_ast_parameter* node)
+{
+    memset(node, 0, sizeof(struct ac_ast_parameter));
+    node->type = ac_ast_type_PARAMETER;
+}
+
+void ac_ast_parameters_init(struct ac_ast_parameters* node)
+{
+    memset(node, 0, sizeof(struct ac_ast_parameters));
+    node->type = ac_ast_type_PARAMETERS;
+
+    ac_expr_list_init(&node->list);
+}
+
 void ac_ast_block_init(struct ac_ast_block* node)
 {
     memset(node, 0, sizeof(struct ac_ast_block));
     node->type = ac_ast_type_BLOCK;
 
-    ac_expr_list_init(&node->parameters);
     ac_expr_list_init(&node->statements);
 }
 

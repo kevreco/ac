@@ -45,21 +45,24 @@
 typedef bool (*ensure_expr_t)(struct ac_ast_expr* expr);
 
 static struct ac_ast_top_level* parse_top_level(struct ac_parser_c* p);
-static void parse_statements(struct ac_parser_c* p, ensure_expr_t post_check, const char* message);
 static struct ac_ast_expr* parse_expr(struct ac_parser_c* p, struct ac_ast_expr* lhs);
 static struct ac_ast_expr* parse_primary(struct ac_parser_c* p);
+static struct ac_ast_block* parse_block(struct ac_parser_c* p);
+static struct ac_ast_block* parse_block_or_inline_block(struct ac_parser_c* p);
+static bool parse_statements(struct ac_parser_c* p, ensure_expr_t post_check, const char* message);
+static struct ac_ast_expr* parse_statement(struct ac_parser_c* p);
+
 static struct ac_ast_expr* parse_rhs(struct ac_parser_c* p, struct ac_ast_expr* lhs, int lhs_precedence);
 static struct ac_ast_identifier* parse_identifier(struct ac_parser_c* p);
-static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_identifier* identifier);
-static struct ac_ast_declaration* parse_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_identifier* identifier);
-static struct ac_ast_expr* parse_block(struct ac_parser_c* p, bool expect_braces);
-static void parse_parameters(struct ac_parser_c* p, struct ac_expr_list* head, enum ac_token_type expected_opening_token);
-static struct ac_ast_expr* parse_postfix_expression(struct ac_parser_c* p, struct ac_ast_identifier* identifier);
+static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier);
+static struct ac_ast_declaration* make_simple_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator);
+static struct ac_ast_declaration* make_function_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator, struct ac_ast_block* block);
+static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p);
+static struct ac_ast_parameters* parse_parameter_list(struct ac_parser_c* p, enum ac_token_type expected_opening_token);
+static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p);
+static struct ac_ast_expr* parse_statement_from_identifier(struct ac_parser_c* p, struct ac_ast_identifier* identifier);
 static struct ac_ast_expr* parse_unary(struct ac_parser_c* p);
 static struct ac_ast_type_specifier* try_parse_type(struct ac_parser_c* p, struct ac_ast_identifier* identifier);
-
-/* parse function prototype and body if it contains one */
-static struct ac_ast_block* parse_function_info(struct ac_parser_c* p);
 
 static const struct ac_token* token(const struct ac_parser_c* p); /* current token type */
 static struct ac_location location(const struct ac_parser_c* p);
@@ -69,6 +72,7 @@ static bool token_is(const struct ac_parser_c* p, enum ac_token_type type);     
 static bool token_is_not(const struct ac_parser_c* p, enum ac_token_type type); /* current token is not */
 static bool token_is_unary_operator(const struct ac_parser_c* p);               /* current token is an unary operator */
 static bool token_equal_type(struct ac_token, enum ac_token_type type);
+static bool expect(const struct ac_parser_c* p, enum ac_token_type type);
 static bool expect_and_consume(struct ac_parser_c* p, enum ac_token_type type);
 
 static bool expr_is(struct ac_ast_expr* expr, enum ac_ast_type type);
@@ -116,34 +120,14 @@ static struct ac_ast_top_level* parse_top_level(struct ac_parser_c* p)
 
     p->current_block = &top_level->block;
 
-    parse_statements(p, only_declaration, "Top level expressions can only be declarations.\n");
+    if (!parse_statements(p, only_declaration, "top level expressions can only be declarations.\n"))
+    {
+        return 0;
+    }
 
     p->current_block = previous;
 
     return top_level;
-}
-
-static void parse_statements(struct ac_parser_c* p, ensure_expr_t post_check, const char* message)
-{
-    if_printf(p->options.debug_verbose, "parse_statements\n");
-
-    while (token_is_not(p, ac_token_type_BRACE_R)
-        && token_is_not(p, ac_token_type_EOF))
-    {
-        struct ac_ast_expr* lhs = 0;
-        struct ac_ast_expr* expr = parse_expr(p, lhs);
-
-        if (expr == 0)
-        {
-            return;
-        }
-
-        if (!post_check(expr))
-        {
-            ac_report_error_expr(expr, message);
-            return;
-        }
-    }
 }
 
 static struct ac_ast_expr* parse_expr(struct ac_parser_c* p, struct ac_ast_expr* lhs)
@@ -186,20 +170,14 @@ static struct ac_ast_expr* parse_primary(struct ac_parser_c* p)
     else
     {
         switch (token_type(p)) {
-        case ac_token_type_BRACE_L: { /* parse nested block */
-            bool expect_braces = true;
-            result = parse_block(p, expect_braces);
-            break;
-        }
         case ac_token_type_EOF: { /* Error must have been reported by "goto_next_token" or "expect_and_consume" */
             result = 0;
             return result;
         }
         case ac_token_type_IDENTIFIER: { /* <identifier> */
             struct ac_ast_identifier* ident = parse_identifier(p);
-            /* can be function call, array access, any kind of declarations etc. */
-            /* if not then the identifier itself is returned */
-            result = parse_postfix_expression(p, ident);
+            /* @TODO create parse_postfix_expression() to handle function call or array access */
+            result = to_expr(ident);
             break;
         }
         case ac_token_type_LITERAL_BOOL: {
@@ -223,12 +201,6 @@ static struct ac_ast_expr* parse_primary(struct ac_parser_c* p)
             goto_next_token(p);
             break;
         }
-        case ac_token_type_LITERAL_NULL: {
-            AST_NEW(struct ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_NULL);
-            result = to_expr(literal);
-            goto_next_token(p);
-            break;
-        }
         case ac_token_type_LITERAL_STRING: {
             AST_NEW(struct ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_STRING);
             literal->u.str = p->lex.token.text;
@@ -236,38 +208,161 @@ static struct ac_ast_expr* parse_primary(struct ac_parser_c* p)
             goto_next_token(p);
             break;
         }
-        case ac_token_type_RETURN: {
-            goto_next_token(p); /* Skip 'return' */
-            AST_NEW_CTOR(struct ac_ast_return, ret, location(p), ac_ast_return_init);
-           
-            struct ac_ast_expr* lhs = 0;
-            ret->expr = parse_expr(p, lhs);
-            result = to_expr(ret);
-
-            expect_and_consume(p, ac_token_type_SEMI_COLON);
-            break;
-        }
-        case ac_token_type_SEMI_COLON: { /* empty expression */
-            AST_NEW(struct ac_ast_expr, empty_statement, location(p), ac_ast_type_EMPTY_STATEMENT);
-
-            goto_next_token(p); /* Skip ';' */
-
-            result = empty_statement;
-            break;
-        }
         
         default: {
-            ac_report_error_loc(location(p), "parse_primary, case note handled %d\n", token_type(p));
+            ac_report_error_loc(location(p), "parse_primary, case not handled %d\n", token_type(p));
             return 0;
         }
         } /* switch (token_type(p)) */
     }
 
-    /* declarations are already handled when they are created, we only need to add the other statements into there parent block */
-    if (!ac_ast_is_declaration(result) && expr_is_statement(result))
+    return result;
+}
+
+static struct ac_ast_block* parse_block(struct ac_parser_c* p)
+{
+    if_printf(p->options.debug_verbose, "parse_block\n");
+
+    AST_NEW_CTOR(struct ac_ast_block, block, location(p), ac_ast_block_init);
+
+    if (!expect_and_consume(p, ac_token_type_BRACE_L))
     {
-        add_to_current_block(p, result);
+        return 0;
     }
+
+    struct ac_ast_block* previous = p->current_block;
+
+    p->current_block = block;
+
+    if (!parse_statements(p, any_expr, ""))
+    {
+        return 0;
+    }
+
+    p->current_block = previous;
+
+    if (!expect_and_consume(p, ac_token_type_BRACE_R))
+    {
+        return 0;
+    }
+
+    return block;
+}
+
+static struct ac_ast_block* parse_block_or_inline_block(struct ac_parser_c* p)
+{
+    if (token_is_not(p, ac_token_type_BRACE_L))
+    {
+        AST_NEW_CTOR(struct ac_ast_block, block, location(p), ac_ast_block_init);
+        struct ac_ast_block* previous = p->current_block;
+
+        p->current_block = block;
+
+        struct ac_ast_expr* statement = parse_statement(p);
+        if (!statement)
+        {
+            return 0;
+        }
+
+        p->current_block = previous;
+        return block;
+    }
+
+    return parse_block(p);
+}
+
+static bool parse_statements(struct ac_parser_c* p, ensure_expr_t post_check, const char* message)
+{
+    if_printf(p->options.debug_verbose, "parse_statements\n");
+
+    /* no statement if there is already a closing brace */
+    if (token_is(p, ac_token_type_BRACE_R))
+    {
+        return true;
+    }
+
+    /* if last expression is not null this means everything was alright */
+    struct ac_ast_expr* expr = 0;
+    while (token_is_not(p, ac_token_type_BRACE_R)
+        && token_is_not(p, ac_token_type_EOF))
+    {
+        expr = parse_statement(p);
+
+        if (expr == 0)
+        {
+            return false;
+        }
+
+        if (!post_check(expr))
+        {
+            ac_report_error_expr(expr, message);
+            return false;
+        }
+    }
+
+    return expr != 0;
+}
+
+static struct ac_ast_expr* parse_statement(struct ac_parser_c* p)
+{
+    if_printf(p->options.debug_verbose, "parse_statement\n");
+
+    struct ac_ast_expr* result = 0;
+
+    switch (token_type(p)) {
+    case ac_token_type_BRACE_L: { /* parse nested block statement */
+
+        ac_report_error_loc(location(p), "internal error: nested block not handled yet, case not handled %d\n", token_type(p));
+        return 0;
+    }
+    case ac_token_type_IDENTIFIER: { /* <identifier> */
+        struct ac_ast_identifier* ident = parse_identifier(p);
+
+        /* any kind of declarations etc. */
+        struct ac_ast_expr* declaration = parse_statement_from_identifier(p, ident);
+
+        assert(ac_ast_is_declaration(declaration));
+
+        /* all declarations (exception function definition) requires a trailing semi-colon */
+        if (declaration->type != ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
+        {
+            if (!expect_and_consume(p, ac_token_type_SEMI_COLON))
+            {
+                return 0;
+            }
+        }
+
+        return declaration;
+    }
+    case ac_token_type_RETURN: {
+        goto_next_token(p); /* Skip 'return' */
+        AST_NEW_CTOR(struct ac_ast_return, ret, location(p), ac_ast_return_init);
+
+        struct ac_ast_expr* lhs = 0;
+        ret->expr = parse_expr(p, lhs);
+        result = to_expr(ret);
+
+        if (!expect_and_consume(p, ac_token_type_SEMI_COLON))
+        {
+            return 0;
+        }
+        break;
+    }
+    case ac_token_type_SEMI_COLON: { /* empty expression */
+        AST_NEW(struct ac_ast_expr, empty_statement, location(p), ac_ast_type_EMPTY_STATEMENT);
+
+        goto_next_token(p); /* Skip ';' */
+
+        result = empty_statement;
+        break;
+    }
+
+    default: {
+        ac_report_error_loc(location(p), "parse_statement, case not handled %d\n", token_type(p));
+    }
+    }
+
+    add_to_current_block(p, to_expr(result));
 
     return result;
 }
@@ -300,37 +395,6 @@ static struct ac_ast_type_specifier* try_parse_type(struct ac_parser_c* p, struc
     return type_specifier;
 }
 
-static struct ac_ast_block* parse_function_info(struct ac_parser_c* p)
-{
-    AST_NEW_CTOR(struct ac_ast_block, block, location(p), ac_ast_block_init);
-
-    parse_parameters(p, &block->parameters, ac_token_type_PAREN_L);
-
-    /* we expect semi colon ...1 */
-    if (token_is(p, ac_token_type_SEMI_COLON))
-    {
-        expect_and_consume(p, ac_token_type_SEMI_COLON);
-        return block;
-    }
-
-    
-    expect_and_consume(p, ac_token_type_BRACE_L);
-
-    /* ...1 or a body */
-
-    struct ac_ast_block* previous = p->current_block;
-
-    p->current_block = block;
-
-    parse_statements(p, any_expr, "");
-
-    p->current_block = previous;
-
-    expect_and_consume(p, ac_token_type_BRACE_R);
-
-    return block;
-}
-
 static struct ac_ast_expr* parse_rhs(struct ac_parser_c* p, struct ac_ast_expr* lhs, int lhs_precedence) {
     if_printf(p->options.debug_verbose, "parse_rhs\n");
 
@@ -348,234 +412,222 @@ static struct ac_ast_identifier* parse_identifier(struct ac_parser_c* p) {
     AST_NEW(struct ac_ast_identifier, result, location(p), ac_ast_type_IDENTIFIER);
     result->name = token(p)->text;
 
-    expect_and_consume(p, ac_token_type_IDENTIFIER); /* Skip identifier */
+    goto_next_token(p); /* skip identifier */
 
     return result;
 }
 
-static struct ac_ast_expr* parse_postfix_expression(struct ac_parser_c* p, struct ac_ast_identifier* identifier)
+static struct ac_ast_expr* parse_statement_from_identifier(struct ac_parser_c* p, struct ac_ast_identifier* identifier)
 {
-    struct ac_ast_expr* previous = CAST(struct ac_ast_expr* , identifier);
-    struct ac_ast_expr* parsed;
-    
-    /* Maybe the identifier is a "long" then we should look for "long long" or similar.
-       Maybe the identifier is a previously defined type (typedef, enum or struct)
-    */
     struct ac_ast_type_specifier* parsed_type = try_parse_type(p, identifier);
 
-    do {
-        parsed = 0;
-        switch (token_type(p)) {
-        case ac_token_type_PAREN_L: { /* parse function call */
-            /* @TODO */
-            /* struct ac_ast_function_call* function_call = parse_function_call(p, previous); */
-            /* parsed = function_call; */
-            break;
-        }
-        /* Parse array like <previous-expression>[<expression-for-index>] */
-        case ac_token_type_SQUARE_L: {  /* parse array access */
-            /* @TODO */
-            /*goto_next_token(p);*/ /* skip [ */
-            /*AST_NEW(struct ac_ast_array_access, array_access, location(p), ac_ast_type_ARRAY_ACCESS); */
-            /*array_access->left = previous; */
-            /*array_access->index_expression = parse_expression(p); */
-            
-            /*if (!array_access->index_expression) return false; */
-            /*if (!expect_and_consume(p, token_type_SquareR)) return false; */
-
-            /*parsed = array_access; */
-            break;
-        }
-        case ac_token_type_DOT: { /* parse member access */
-            /* goto_next_token(p); */ /* skip [ */
-            /* AST_NEW(struct ac_ast_member_access, array_access, location(p), ac_ast_type_MEMBER_ACCESS); */
-            /* member_access->left = previous; */
-            /* member_access->identifier = parse_identifier(p);*/
-
-            /* if (!member_access->identifier) return false; */
-
-            /*parsed = member_access; */
-            break;
-        }
-      
-       
-        case ac_token_type_IDENTIFIER: { /* parse declaration */
-
-            /* If previous expression was a type, and this one is a identifier, then we should parse a declaration.
-            */
-            if (parsed_type)
-            {
-                struct ac_ast_identifier* current_identifier = parse_identifier(p);
-        
-                struct ac_ast_declaration* expr = parse_declaration_list(p, parsed_type, current_identifier);
-                if (!expr) return 0;
-                
-                return to_expr(expr);
-            }
-            else
-            {
-                assert("@FIXME not sure what to do here");
-            }
-           
-        }
-        default: /* do nothing */
-        {}
-        } /* end of switch (token_type(p)) */
-
-        /* only update previous if new has been parsed. */
-        previous = parsed ? parsed : previous;
-    } while (parsed);
-
-    return previous;
+    return to_expr(parse_declaration_list(p, parsed_type));
 }
 
-/* Example:
-   case 1a: <'type'> value;
-   case 1b: <'type'> value = 0;
-   case 2a: <'type'> value, value2;
-   case 2b: <'type'> value = 0, value2 = 0;
-   case 3a: <'type'> forward_function_declaration();
-   case 3b: <'type'> function_declaration() { ... }
-*/
-static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_identifier* identifier)
+static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier)
 {
-    /* case 1 */
-    struct ac_ast_declaration* declaration = parse_declaration(p, type_specifier, identifier);
-    add_to_current_block(p, to_expr(declaration));
+    struct ac_ast_declaration* last_declaration = 0;
 
-    /* case 2 */
+    struct ac_ast_declarator* declarator = parse_declarator(p);
+
+    /* if the declarator match the function prototype "ident(a,b,c)" we check if there is a function body, if that's the case we handle  */
+    if (declarator->pointer_depth == 0
+        && declarator->parameters
+        && declarator->array_specifier == 0
+        && token_is(p, ac_token_type_BRACE_L))
+    {
+        struct ac_ast_block* block = parse_block(p);
+        if (!block)
+        {
+            return 0;
+        }
+
+        return make_function_declaration(p, type_specifier, declarator, block);
+    }
+
+    last_declaration = make_simple_declaration(p, type_specifier, declarator);
+
     while (token_is(p, ac_token_type_COMMA))  /* , */
     {
-        expect_and_consume(p, ac_token_type_COMMA);
+        goto_next_token(p); /* skip , */
 
-        // @TODO handle pointer and array, we actually need to expect something like "identifier" or "identifier[0]" or "idenitifer()" or "* identifier"
-        // so maybe we should just accept any expression and deal with the syntax at the semantic part.
-        if (token_is_not(p, ac_token_type_IDENTIFIER))
-        {
-            ac_report_error_loc(location(p), "expect identifier after the comma in a declaration list.");
-        }
+        struct ac_ast_declarator* next_declarator = parse_declarator(p);
 
-        struct ac_ast_identifier* next_identifier = parse_identifier(p);
+        /* for each new declarator we materialize a separated delcaration, this way "int a, b;" becomes "int a; int b;" */
+        last_declaration = make_simple_declaration(p, type_specifier, next_declarator);
+    }   
 
-        struct ac_ast_expr* next_identifier_expr = to_expr(next_identifier);
-        struct ac_ast_declaration* inner_declaration = parse_declaration(p, type_specifier, next_identifier);
-        
-        assert(inner_declaration);
-
-        if (!inner_declaration)
-        {
-            ac_report_error_expr(next_identifier_expr, "internal error: could not parse declaration after identifier.");
-        }
-
-        add_to_current_block(p, to_expr(inner_declaration));
-    }
-
-    /* case 3 */
-    if (token_is(p, ac_token_type_PAREN_L)) /* ( */
-    {
-        declaration->function_block = parse_function_info(p);
-
-        assert(declaration->function_block);
-
-        if (declaration->function_block)
-        {
-            declaration->type = ac_ast_type_DECLARATION_FUNCTION_DEFINITION;
-            /* we return early here because function definition do not require any semi colon */
-            return declaration;
-        }
-    }
-
-    /* once we reach this that mean all other cases have been handled */
-    if (expect_and_consume(p, ac_token_type_SEMI_COLON)) /* ; */
-    {
-        return declaration;
-    }
-
-    return 0;
+    /* we only return the last declaration to mean that everything want alright. */
+    return last_declaration;
 }
 
-/* Example:
-   case 1a: <'type'> value;
-   case 1b: <'type'> value = 0;
-*/
-static struct ac_ast_declaration* parse_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_identifier* identifier)
+static struct ac_ast_declaration* make_simple_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator)
 {
     AST_NEW_CTOR(struct ac_ast_declaration, declaration, location(p), ac_ast_declaration_init);
+    declaration->type = ac_ast_type_DECLARATION_SIMPLE;
     declaration->type_specifier = type_specifier;
-    declaration->ident = identifier;
+    declaration->declarator = declarator;
 
-    if (token_is(p, ac_token_type_EQUAL))  /* = */
-    {
-        expect_and_consume(p, ac_token_type_EQUAL);
-        declaration->initializer = parse_expr(p, 0);
-    }
+    add_to_current_block(p, to_expr(declaration));
 
     return declaration;
 }
 
-struct ac_ast_expr* parse_block(struct ac_parser_c* p, bool expect_braces) {
-
-    (void)p;
-    (void)expect_braces;
-    return 0;
-
-    //if_printf(p->options.debug_verbose, "parse_block_body\n");
-    //
-    //AST_NEW(struct ac_ast_block, block, location(p), ac_ast_type_BLOCK);
-    //
-    //if (expect_braces && !expect_and_consume(p, ac_token_type_BRACE_L)) return false;
-    //
-    ///* empty block no need to do anything else */
-    //if (expect_braces && token_is(p, ac_token_type_BRACE_R))
-    //{
-    //    goto_next_token(p);
-    //    return true;
-    //}
-    //
-    //// Loop parsing one top level item
-    //while (!token_is(p, ac_token_type_BRACE_R)
-    //    && !token_is(p, ac_token_type_EOF))
-    //{
-    //    struct ac_ast_expr* expr = parse_statement(p);
-    //
-    //    if (!expr) return false;
-    //
-    //    block->statements.push_back(expression);
-    //}
-    //
-    //if (expect_braces && !expect_and_consume(p, ac_token_type_BRACE_R)) return false;
-    //
-    //return true;
-
-} 
-
-static void parse_parameters(struct ac_parser_c* p, struct ac_expr_list* head, enum ac_token_type expected_opening_token)
+static struct ac_ast_declaration* make_function_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator, struct ac_ast_block* block)
 {
+    struct ac_ast_declaration* decl = make_simple_declaration(p, type_specifier, declarator);
+    decl->type = ac_ast_type_DECLARATION_FUNCTION_DEFINITION;
+    decl->function_block = block;
+    return decl;
+}
+
+static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p)
+{
+    AST_NEW_CTOR(struct ac_ast_declarator, declarator, location(p), ac_ast_declarator_init);
+
+    /* check for optional pointer symbol */
+    while (token_is(p, ac_token_type_STAR))
+    {
+        goto_next_token(p); /* skip pointer symbol */
+        declarator->pointer_depth += 1;
+    }
+
+    if (expect(p, ac_token_type_IDENTIFIER))
+    {
+        declarator->ident = parse_identifier(p);
+    }
+
+    /* check for optional array specifier */
+    while (token_is(p, ac_token_type_SQUARE_L)) /* [ */
+    {
+        ac_report_error_loc(location(p), "internal error: array specifier not supported yet.");
+        return 0;
+    }
+
+    if (token_is(p, ac_token_type_EQUAL)) /* = */
+    {
+        goto_next_token(p); /* skip = */
+        struct ac_ast_expr* lhs = 0;
+        declarator->initializer = parse_expr(p, lhs);
+        return declarator;
+    }
+
+    if (token_is(p, ac_token_type_PAREN_L))  /* ( */
+    {
+        declarator->parameters = parse_parameter_list(p, ac_token_type_PAREN_L);
+        return declarator;
+    }
+
+    return declarator;
+}
+
+static struct ac_ast_parameters* parse_parameter_list(struct ac_parser_c* p, enum ac_token_type expected_opening_token)
+{
+    if_printf(p->options.debug_verbose, "parse_parameter_list\n");
+
+    AST_NEW_CTOR(struct ac_ast_parameters, parameters, location(p), ac_ast_parameters_init);
+
     /* only accept [ or ( */
-    assert(expected_opening_token == ac_token_type_PAREN_L || expected_opening_token || ac_token_type_SQUARE_L);
+    assert(expected_opening_token == ac_token_type_PAREN_L
+        || expected_opening_token == ac_token_type_SQUARE_L);
 
-    (void)head;
-
-    if_printf(p->options.debug_verbose, "parse_parameters\n");
-
-   
     if (!expect_and_consume(p, expected_opening_token))
     {
         ac_report_error_loc(location(p), "parameters should start with '%.*s'.\n", ac_token_type_to_strv(expected_opening_token));
-        return;
+        return 0;
     }
 
     enum ac_token_type expected_closing_token = expected_opening_token == ac_token_type_PAREN_L ? ac_token_type_PAREN_R : ac_token_type_SQUARE_R;
 
-    // @TODO handle parameters
+    if (token_is(p, ac_token_type_PAREN_R))
+    {
+        return parameters;
+    }
+
+    do
+    {
+        struct ac_ast_parameter* param = parse_parameter(p);
+
+        if (param == 0)
+        {
+            return 0;
+        }
+
+        ac_expr_list_add(&parameters->list, to_expr(param));
+
+    } while (token_is(p, ac_token_type_COMMA)
+        && expect_and_consume(p, ac_token_type_COMMA));
 
     if (!expect_and_consume(p, expected_closing_token))
     {
         ac_report_error_loc(location(p), "parameters should end with parenthesis or square brackets.\n");
-        return;
+        return 0;
     }
+
+    return parameters;
 }
 
+static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p)
+{
+    if_printf(p->options.debug_verbose, "parse_parameter\n");
+
+    AST_NEW_CTOR(struct ac_ast_parameter, param, location(p), ac_ast_parameter_init);
+
+    if (token_is(p, ac_token_type_TRIPLE_DOT))
+    {
+        ac_report_error_loc(location(p), "internal error: var args are not supported yet.");
+        return param;
+    }
+
+    if (!expect(p, ac_token_type_IDENTIFIER))
+    {
+        return 0;
+    }
+    
+    struct ac_ast_identifier* type_name = parse_identifier(p);
+    param->type_name = type_name;
+
+    /* end of the parameter expression we return early */
+    if (token_is(p, ac_token_type_PAREN_R))
+    {
+        return param;
+    }
+
+    if (dstr_view_equals_str(param->type_name->name, "void"))
+    {
+        goto_next_token(p);
+        /* we return early because void parameter function cannot contains other parameters */
+        if (!expect(p, ac_token_type_PAREN_R))
+        {
+            return 0;
+        }
+        return param;
+    }
+
+    if (token_is(p, ac_token_type_STAR))
+    {
+        ac_report_error_loc(location(p), "internal error: pointers are not supported yet.");
+        return 0;
+    }
+
+    if (token_is(p, ac_token_type_PAREN_L))
+    {
+        ac_report_error_loc(location(p), "internal error: function type are not supported yet.");
+        return 0;
+    }
+
+    /* at this point parsing declarator is the only option */
+    struct ac_ast_declarator* declarator = parse_declarator(p);
+    param->declarator = declarator;
+
+    if (!declarator)
+    {
+        return 0;
+    }
+
+    return param;
+
+}
 static const struct ac_token* token(const struct ac_parser_c* p)
 {
     return &p->lex.token;

@@ -100,7 +100,7 @@ const struct ac_token* ac_lex_goto_next(struct ac_lex* l)
     case '\t':
     case '\f':
     case '\v': {
-        assert(0 && "Internal error unreachable. spaces should have been handled differently.");
+        assert(0 && "internal error unreachable. spaces should have been handled differently.");
     }
     case '#': return set_token(l, ac_token_type_HASH);
     case '[': return set_token(l, ac_token_type_SQUARE_L);
@@ -198,10 +198,10 @@ const struct ac_token* ac_lex_goto_next(struct ac_lex* l)
             return set_token(l, ac_token_type_SLASH_EQUAL);
         }
         else if (next_is(l, '/')) {
-            assert(0 && "Internal error: unreachable opening comments is handled in another place");
+            assert(0 && "internal error: unreachable opening comments is handled in another place");
         }
         else if (next_is(l, '*')) {
-            assert(0 && "Internal error: unreachable opening comments is handled in another place");
+            assert(0 && "internal error: unreachable opening comments is handled in another place");
         }
 
         return set_token(l, ac_token_type_SLASH);
@@ -284,9 +284,8 @@ const struct ac_token* ac_lex_goto_next(struct ac_lex* l)
         } /* end if (is_alpha(l) || is(l, '_') || is_utf8(l)) */
         else
         {
-            // @TODO handle this without assert, likely return a EOF or ERROR token
+            /* @TODO handle this without assert, likely return a EOF or ERROR token */
             assert(0 && "Illegal char");
-            //fprintf(stderr, "Internal error: @TODO handle illegal char for identifier %d, %c\n", l->cur[0], l->cur[0]);
         }
         break;
     } /* end default case */
@@ -779,7 +778,6 @@ static struct keyword_item keyword_items[] = {
     { ac_token_type_LITERAL_CHAR, "<literal-char>", 14 },
     { ac_token_type_LITERAL_FLOAT, "<literal-float>", 14 },
     { ac_token_type_LITERAL_INTEGER, "<literal-integer>", 17 },
-    { ac_token_type_LITERAL_NULL, "null", 4 },
     { ac_token_type_LITERAL_STRING, "<literal-string>", 16 },
     { ac_token_type_MINUS, "-", 1 },
     { ac_token_type_MINUS_EQUAL, "-=", 2 },
@@ -807,7 +805,6 @@ static struct keyword_item keyword_items[] = {
     { ac_token_type_TILDE, "~", 1 },
     { ac_token_type_TILDE_EQUAL, "~=", 2 },
     { ac_token_type_TRIPLE_DOT, "...", 3 },
-    { ac_token_type_TUPLE, "tuple", 5 },
     { ac_token_type_TYPEOF, "typeof", 5 },
     { ac_token_type_WHILE, "while", 5 },
 };
@@ -873,7 +870,6 @@ static bool token_type_is_literal(enum ac_token_type type) {
     case ac_token_type_LITERAL_INTEGER:
     case ac_token_type_LITERAL_FLOAT:
     case ac_token_type_LITERAL_STRING:
-    case ac_token_type_LITERAL_NULL:
         return true;
     }
     return false;

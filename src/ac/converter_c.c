@@ -13,7 +13,12 @@
 static void print_top_level(struct ac_converter_c* c);
 static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr);
 static void print_identifier(struct ac_converter_c* c, struct ac_ast_identifier* identifier);
+static void print_type_specifier(struct ac_converter_c* c, struct ac_ast_type_specifier* type_specifier);
+static void print_pointers(struct ac_converter_c* c, int count);
+static void print_parameters(struct ac_converter_c* c, struct ac_ast_parameters* parameters);
+static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* parameter);
 static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaration* declaration);
+static void print_declarator(struct ac_converter_c* c, struct ac_ast_declarator* declarator);
 
 static void print_fv(struct ac_converter_c* c, const char* fmt, va_list args);
 static void print_f(struct ac_converter_c* c, const char* fmt, ...);
@@ -72,12 +77,23 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
         CAST_TO(struct ac_ast_declaration*, declaration, expr);
         print_declaration(c, declaration);
     }
+    else if (expr->type == ac_ast_type_DECLARATOR)
+    {
+        CAST_TO(struct ac_ast_declarator*, declarator, expr);
+
+        print_declarator(c, declarator);
+    }
     else if (expr->type == ac_ast_type_LITERAL_INTEGER)
     {
-        // @TODO handle unsigned integer
+        /* handle unsigned integer */
         CAST_TO(struct ac_ast_literal*, literal, expr);
         /* print maximal size possible value of an integer with PRIiMAX */
         print_f(c, "%" PRIiMAX "", literal->u.integer);
+    }
+    else if (expr->type == ac_ast_type_PARAMETER)
+    {
+        CAST_TO(struct ac_ast_parameter*, parameter, expr);
+        print_parameter(c, parameter);
     }
     else if (expr->type == ac_ast_type_RETURN)
     {
@@ -87,9 +103,14 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
         print_expr(c, return_->expr);
         print_str(c, ";");
     }
+    else if (expr->type == ac_ast_type_TYPE_SPECIFIER)
+    {
+        CAST_TO(struct ac_ast_type_specifier*, type_specifier, expr);
+        print_type_specifier(c, type_specifier);
+    }
     else
     {
-        assert(0 && "Internal error: unhandled ast type.");
+        assert(0 && "internal error: unhandled ast type.");
     }
 }
 
@@ -98,19 +119,72 @@ static void print_identifier(struct ac_converter_c* c, struct ac_ast_identifier*
     print_dstr_view(c, identifier->name);
 }
 
+static void print_type_specifier(struct ac_converter_c* c, struct ac_ast_type_specifier* type_specifier)
+{
+    print_identifier(c, type_specifier->identifier);
+}
+
+static void print_pointers(struct ac_converter_c* c, int count)
+{
+    if (count)
+    {
+        print_str(c, "*");
+
+        count -= 1;
+    }
+}
+
+static void print_parameters(struct ac_converter_c* c, struct ac_ast_parameters* parameters)
+{
+    print_str(c, "(");
+
+    struct ac_ast_expr* next = parameters->list.head;
+    while (next)
+    {
+        print_expr(c, next);
+        next = next->next;
+
+        if (next)
+        {
+            print_str(c, ", ");
+        }
+    }
+    print_str(c, ")");
+}
+
+static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* parameter)
+{
+    print_identifier(c, parameter->type_name);
+
+    if (parameter->is_var_args)
+    {
+        print_str(c, "...");
+    }
+    else if (parameter->pointer_depth)
+    {
+        print_pointers(c, parameter->pointer_depth);
+    }
+    else if (parameter->declarator)
+    {
+        print_str(c, " ");
+        print_declarator(c, parameter->declarator);
+    }
+    else
+    {
+        assert(0 && "internal error: unreachable");
+    }
+}
+
 static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaration* declaration)
 {
-
     if (declaration->type == ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
     {
         if (declaration->function_block) new_line(c); /* make extra space if it's a function definition */
 
-        print_identifier(c, declaration->type_specifier->identifier);
+        print_type_specifier(c, declaration->type_specifier);
         print_str(c, " ");
-        print_identifier(c, declaration->ident);
-        print_str(c, "(");
-        /* @TODO display arguments */
-        print_str(c, ")");
+        print_identifier(c, declaration->declarator->ident);
+        print_parameters(c, declaration->declarator->parameters);
         if (declaration->function_block)
         {
             push_brace(c);
@@ -132,18 +206,44 @@ static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaratio
 
         print_identifier(c, declaration->type_specifier->identifier);
         print_str(c, " ");
-        print_identifier(c, declaration->ident);
-        if (declaration->initializer)
+        print_identifier(c, declaration->declarator->ident);
+        if (declaration->declarator->initializer)
         {
             print_str(c, " = ");
-            print_expr(c, declaration->initializer);
+            print_expr(c, declaration->declarator->initializer);
         }
         print_str(c, ";");
         print_str(c, "\n");
     }
     else
     {
-        assert(0 && "Internal error: unhandled declaration type");
+        assert(0 && "internal error: unsupported declaration type");
+    }
+}
+
+static void print_declarator(struct ac_converter_c* c, struct ac_ast_declarator* declarator)
+{
+    if (declarator->pointer_depth)
+    {
+        print_pointers(c, declarator->pointer_depth);
+    }
+
+    print_identifier(c, declarator->ident);
+
+    if (declarator->array_specifier)
+    {
+        assert(0 && "internal error: array specifier are not supported yet.");
+    }
+
+    if (declarator->initializer)
+    {
+        print_str(c, " = ");
+        print_expr(c, declarator->initializer);
+    }
+
+    if (declarator->parameters)
+    {
+        print_parameters(c, declarator->parameters);
     }
 }
 

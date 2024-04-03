@@ -103,7 +103,6 @@ enum ac_token_type {
     ac_token_type_LITERAL_CHAR,    
     ac_token_type_LITERAL_FLOAT,   
     ac_token_type_LITERAL_INTEGER,
-    ac_token_type_LITERAL_NULL,
     ac_token_type_LITERAL_STRING,
     ac_token_type_MINUS,           // -
     ac_token_type_MINUS_EQUAL,     // -=
@@ -131,7 +130,6 @@ enum ac_token_type {
     ac_token_type_TILDE,           // ~
     ac_token_type_TILDE_EQUAL,     // ~=
     ac_token_type_TRIPLE_DOT,      // ...
-    ac_token_type_TUPLE,
     ac_token_type_TYPEOF,
     ac_token_type_WHILE,
     ac_token_type_COUNT

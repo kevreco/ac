@@ -20,18 +20,21 @@ enum ac_ast_type {
     ac_ast_type_UNKNOWN,
     ac_ast_type_BLOCK,
     ac_ast_type_EMPTY_STATEMENT,
+    ac_ast_type_DECLARATION_UNKNOWN,
     ac_ast_type_DECLARATION_BEGIN,
-    ac_ast_type_DECLARATION_UNKNOWN = ac_ast_type_DECLARATION_BEGIN,
-    ac_ast_type_DECLARATION_SIMPLE = ac_ast_type_DECLARATION_BEGIN,    /* int i;    int i = 0;    int i = 0, j = 0;   int func(); */
+    ac_ast_type_DECLARATION_SIMPLE = ac_ast_type_DECLARATION_BEGIN,    /* const int i  |  int *i  |  int i = 0  |  int i[0]  |  int func() */
     ac_ast_type_DECLARATION_TYPEDEF,              /* @TODO */          /* typedef int my_int */
     ac_ast_type_DECLARATION_FUNCTION_DEFINITION,                       /* int func() { } */
     ac_ast_type_DECLARATION_END,
+    ac_ast_type_DECLARATOR,                                            /* i  |  *i  |  i = 0  |  i[0]  |  func() */
     ac_ast_type_IDENTIFIER,
     ac_ast_type_LITERAL_BOOL,
     ac_ast_type_LITERAL_FLOAT,
     ac_ast_type_LITERAL_INTEGER,
     ac_ast_type_LITERAL_NULL,
     ac_ast_type_LITERAL_STRING,
+    ac_ast_type_PARAMETERS,
+    ac_ast_type_PARAMETER,
     ac_ast_type_RETURN,
     ac_ast_type_TOP_LEVEL,
     ac_ast_type_TYPE_SPECIFIER,
@@ -78,29 +81,54 @@ struct ac_ast_type_specifier {
 
 void ac_ast_type_specifier_init(struct ac_ast_type_specifier* node);
 
+struct ac_ast_declarator {
+    INCLUDE_AST_EXPR_BASE
+
+    int pointer_depth;
+    struct ac_ast_identifier* ident;
+    int array_specifier;                  /* dummy member so that we already pre-handle this case */
+    struct ac_ast_expr* initializer;      /* optional */
+    struct ac_ast_parameters* parameters; /* optional */
+};
+
+void ac_ast_declarator_init(struct ac_ast_declarator* node);
+
 struct ac_ast_declaration {
     INCLUDE_AST_EXPR_BASE
 
     struct ac_ast_type_specifier* type_specifier;
-    struct ac_ast_identifier* ident;
+    struct ac_ast_declarator* declarator;
 
-    /* we use an initializer and not an assignment here because those are not the same operations.
-       we can initialize a global variable, but we cannot assign it again somewhere else.
-    */
-    struct ac_ast_expr* initializer;     /* optional, cannot have an 'initializer' and '' at the same time */
-    struct ac_ast_block* function_block; /* optional, cannot have an 'function_block' and 'initializer' at the same time */
+    struct ac_ast_block* function_block; /* optional, only used for ac_ast_type_DECLARATION_FUNCTION_DEFINITION */
 };
 
 void ac_ast_declaration_init(struct ac_ast_declaration* node);
 bool ac_ast_is_declaration(struct ac_ast_expr* expr);
 
+/* function parameters */
+struct ac_ast_parameters {
+    INCLUDE_AST_EXPR_BASE
+    struct ac_expr_list list;
+};
+
+void ac_ast_parameters_init(struct ac_ast_parameters* node);
+
+/* This represent a function parameter, it's quite similar to a simple declaration */
+struct ac_ast_parameter {
+    INCLUDE_AST_EXPR_BASE
+    struct ac_ast_identifier* type_name;
+    int pointer_depth;
+    bool is_var_args;                     /* optional */
+    struct ac_ast_declarator* declarator; /* optional */
+};
+
+void ac_ast_parameter_init(struct ac_ast_parameter* node);
+
 /* block are basically list of expressions */
 struct ac_ast_block {
     INCLUDE_AST_EXPR_BASE
-    struct ac_expr_list parameters; /* parameters for functions, for if/while conditions */
-
-    // body of the block, all the statements
-    struct ac_expr_list statements; // @TODO rename body ?
+    /* body of the block */
+    struct ac_expr_list statements;
 };
 
 void ac_ast_block_init(struct ac_ast_block* node);
