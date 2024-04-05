@@ -587,11 +587,6 @@ static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p)
     struct ac_ast_identifier* type_name = parse_identifier(p);
     param->type_name = type_name;
 
-    /* end of the parameter expression we return early */
-    if (token_is(p, ac_token_type_PAREN_R))
-    {
-        return param;
-    }
 
     if (dstr_view_equals_str(param->type_name->name, "void"))
     {
@@ -614,6 +609,13 @@ static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p)
     {
         ac_report_error_loc(location(p), "internal error: function type are not supported yet.");
         return 0;
+    }
+
+    /* End of the parameter expression we return early */
+    if (token_is(p, ac_token_type_COMMA)
+        || token_is(p, ac_token_type_PAREN_R))
+    {
+        return param;
     }
 
     /* at this point parsing declarator is the only option */

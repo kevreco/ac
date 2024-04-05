@@ -169,14 +169,13 @@ static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* p
         print_str(c, " ");
         print_declarator(c, parameter->declarator);
     }
-    else
-    {
-        assert(0 && "internal error: unreachable");
-    }
 }
 
 static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaration* declaration)
 {
+    /* @OPT: ac_ast_type_DECLARATION_SIMPLE and ac_ast_type_DECLARATION_FUNCTION_DEFINITION are really close to each other
+       This can be optimized if it's still true in few years.
+    */
     if (declaration->type == ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
     {
         if (declaration->function_block) new_line(c); /* make extra space if it's a function definition */
@@ -207,11 +206,18 @@ static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaratio
         print_identifier(c, declaration->type_specifier->identifier);
         print_str(c, " ");
         print_identifier(c, declaration->declarator->ident);
+        
+        if (declaration->declarator->parameters)
+        {
+            print_parameters(c, declaration->declarator->parameters);
+        }
+
         if (declaration->declarator->initializer)
         {
             print_str(c, " = ");
             print_expr(c, declaration->declarator->initializer);
         }
+        
         print_str(c, ";");
         print_str(c, "\n");
     }
