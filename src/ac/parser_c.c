@@ -51,15 +51,18 @@ static struct ac_ast_block* parse_block(struct ac_parser_c* p);
 static struct ac_ast_block* parse_block_or_inline_block(struct ac_parser_c* p);
 static bool parse_statements(struct ac_parser_c* p, ensure_expr_t post_check, const char* message);
 static struct ac_ast_expr* parse_statement(struct ac_parser_c* p);
-
 static struct ac_ast_expr* parse_rhs(struct ac_parser_c* p, struct ac_ast_expr* lhs, int lhs_precedence);
 static struct ac_ast_identifier* parse_identifier(struct ac_parser_c* p);
 static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier);
 static struct ac_ast_declaration* make_simple_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator);
 static struct ac_ast_declaration* make_function_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator, struct ac_ast_block* block);
+/* if initial_pointer_depth is equal to 0 we try to parse pointers, other we directly forward it */
+static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, int initial_pointer_depth);
+static struct ac_ast_declarator* parse_declarator_with_pointer_depth(struct ac_parser_c* p, int pointer_depth);
 static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p);
 static struct ac_ast_parameters* parse_parameter_list(struct ac_parser_c* p, enum ac_token_type expected_opening_token);
 static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p);
+static int count_and_consume_pointers(struct ac_parser_c* p);
 static struct ac_ast_expr* parse_statement_from_identifier(struct ac_parser_c* p, struct ac_ast_identifier* identifier);
 static struct ac_ast_expr* parse_unary(struct ac_parser_c* p);
 static struct ac_ast_type_specifier* try_parse_type(struct ac_parser_c* p, struct ac_ast_identifier* identifier);
@@ -481,15 +484,21 @@ static struct ac_ast_declaration* make_function_declaration(struct ac_parser_c* 
     return decl;
 }
 
-static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p)
+static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, int initial_pointer_depth)
 {
+    assert(initial_pointer_depth >= 0);
     AST_NEW_CTOR(struct ac_ast_declarator, declarator, location(p), ac_ast_declarator_init);
 
-    /* check for optional pointer symbol */
-    while (token_is(p, ac_token_type_STAR))
+    if (initial_pointer_depth == 0)
     {
-        goto_next_token(p); /* skip pointer symbol */
-        declarator->pointer_depth += 1;
+        if (token_is(p, ac_token_type_STAR))
+        {
+            declarator->pointer_depth = count_and_consume_pointers(p);
+        }
+    }
+    else
+    {
+        declarator->pointer_depth = initial_pointer_depth;
     }
 
     if (expect(p, ac_token_type_IDENTIFIER))
@@ -519,6 +528,18 @@ static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p)
     }
 
     return declarator;
+}
+
+static struct ac_ast_declarator* parse_declarator_with_pointer_depth(struct ac_parser_c* p, int pointer_depth)
+{
+    assert(pointer_depth > 0);
+    return parse_declarator_core(p, pointer_depth);
+}
+
+static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p)
+{
+    int initial_pointer_depth = 0;
+    return parse_declarator_core(p, initial_pointer_depth);
 }
 
 static struct ac_ast_parameters* parse_parameter_list(struct ac_parser_c* p, enum ac_token_type expected_opening_token)
@@ -601,8 +622,14 @@ static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p)
 
     if (token_is(p, ac_token_type_STAR))
     {
-        ac_report_error_loc(location(p), "internal error: pointers are not supported yet.");
-        return 0;
+        int pointer_depth = count_and_consume_pointers(p);
+        if (token_is(p, ac_token_type_IDENTIFIER))
+        {
+            param->declarator = parse_declarator_with_pointer_depth(p, pointer_depth);
+            return param;
+        }
+        param->pointer_depth = pointer_depth;
+        return param;
     }
 
     if (token_is(p, ac_token_type_PAREN_L))
@@ -630,6 +657,22 @@ static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p)
     return param;
 
 }
+
+static int count_and_consume_pointers(struct ac_parser_c* p)
+{
+    assert(token_is(p, ac_token_type_STAR));
+
+    int i = 0;
+    while (token_is(p, ac_token_type_STAR))
+    {
+        goto_next_token(p); /* skip pointer symbol */
+        
+        i += 1;
+    }
+
+    return i;
+}
+
 static const struct ac_token* token(const struct ac_parser_c* p)
 {
     return &p->lex.token;

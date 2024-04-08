@@ -7,7 +7,7 @@
 	- [./] Suppprt function parameters. "int main(int a, int b) { return 0;}"
 	- [./] Support forward function declaration. "int main(int a);
 	- [./] Support other type char parameter.
-	- [] Support pointer parameters.
+	- [./] Support pointer parameters.
 	- [] Support array parameters.
 	
 # C Parser and C converter - Stage 1
