@@ -1,9 +1,26 @@
 
-# C
-	- Handle function prototype.
-	- Handle typedef.
-	- Handle struct
-	- Handle basic macro?
+# C Parser and C converter - Stage 0
+  
+    - [./] Support integer declaration. "int a = 0;"
+	- [./] Support multiple integer declaration. "int a = 0, b = 1;"
+	- [./] Support function definition. "int main() { return 0; }
+	- [./] Suppprt function parameters. "int main(int a, int b) { return 0;}"
+	- [./] Support forward function declaration. "int main(int a);
+	- [./] Support other type char parameter.
+	- [] Support pointer parameters.
+	- [] Support array parameters.
+	
+# C Parser and C converter - Stage 1
+
+    - [] Support pointer declaration.
+    - [] Support array declaration.
+	- [] Handle typedef.
+	- [] Handle struct
+	- [] Handle basic macro?
+
+# Type check
+
+    - Implement some type check with int8/int16/etc before introducing structure and enum?
 
 # Augmented C
 	- find a good iterator implementation for array, lists etc.
