@@ -18,6 +18,8 @@ extern "C" {
 
 enum ac_ast_type {
     ac_ast_type_UNKNOWN,
+    ac_ast_type_ARRAY_EMPTY_SIZE,
+    ac_ast_type_ARRAY_SPECIFIER,
     ac_ast_type_BLOCK,
     ac_ast_type_EMPTY_STATEMENT,
     ac_ast_type_DECLARATION_UNKNOWN,
@@ -81,12 +83,22 @@ struct ac_ast_type_specifier {
 
 void ac_ast_type_specifier_init(struct ac_ast_type_specifier* node);
 
+struct ac_ast_array_specifier {
+    INCLUDE_AST_EXPR_BASE
+
+    /* There should be an expression resulting into a constant non-negative integer */
+    struct ac_ast_expr* size_expression;
+    struct ac_ast_array_specifier* next_array;
+};
+
+void ac_ast_array_specifier_init(struct ac_ast_array_specifier* node);
+
 struct ac_ast_declarator {
     INCLUDE_AST_EXPR_BASE
 
     int pointer_depth;
     struct ac_ast_identifier* ident;
-    int array_specifier;                  /* dummy member so that we already pre-handle this case */
+    struct ac_ast_array_specifier* array_specifier;                  /* dummy member so that we already pre-handle this case */
     struct ac_ast_expr* initializer;      /* optional */
     struct ac_ast_parameters* parameters; /* optional */
 };
@@ -117,7 +129,6 @@ void ac_ast_parameters_init(struct ac_ast_parameters* node);
 struct ac_ast_parameter {
     INCLUDE_AST_EXPR_BASE
     struct ac_ast_identifier* type_name;
-    int pointer_depth;
     bool is_var_args;                     /* optional */
     struct ac_ast_declarator* declarator; /* optional */
 };
@@ -167,6 +178,15 @@ void ac_ast_top_level_init(struct ac_ast_top_level* file);
 struct ac_ast_expr {
     INCLUDE_AST_EXPR_BASE
 };
+
+/* For expression's like "int[]" we need a valid value for the array size expression, null means that there was an issue somewhere .
+   Hence, this ac_ast_empty_array_size was creaed.
+*/
+struct ac_ast_array_empty_size {
+    INCLUDE_AST_EXPR_BASE
+};
+
+void ac_ast_array_empty_size_init(struct ac_ast_array_empty_size* node);
 
 struct ac_location ac_ast_expr_location(struct ac_ast_expr* expr);
 

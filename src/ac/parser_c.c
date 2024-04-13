@@ -56,13 +56,13 @@ static struct ac_ast_identifier* parse_identifier(struct ac_parser_c* p);
 static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier);
 static struct ac_ast_declaration* make_simple_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator);
 static struct ac_ast_declaration* make_function_declaration(struct ac_parser_c* p, struct ac_ast_type_specifier* type_specifier, struct ac_ast_declarator* declarator, struct ac_ast_block* block);
-/* if initial_pointer_depth is equal to 0 we try to parse pointers, other we directly forward it */
-static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, int initial_pointer_depth);
-static struct ac_ast_declarator* parse_declarator_with_pointer_depth(struct ac_parser_c* p, int pointer_depth);
+static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, bool identifier_required);
+static struct ac_ast_declarator* parse_declarator_for_parameter(struct ac_parser_c* p);
 static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p);
 static struct ac_ast_parameters* parse_parameter_list(struct ac_parser_c* p, enum ac_token_type expected_opening_token);
 static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p);
 static int count_and_consume_pointers(struct ac_parser_c* p);
+static struct ac_ast_array_specifier* parse_array_specifier(struct ac_parser_c* p);
 static struct ac_ast_expr* parse_statement_from_identifier(struct ac_parser_c* p, struct ac_ast_identifier* identifier);
 static struct ac_ast_expr* parse_unary(struct ac_parser_c* p);
 static struct ac_ast_type_specifier* try_parse_type(struct ac_parser_c* p, struct ac_ast_identifier* identifier);
@@ -324,6 +324,8 @@ static struct ac_ast_expr* parse_statement(struct ac_parser_c* p)
         /* any kind of declarations etc. */
         struct ac_ast_expr* declaration = parse_statement_from_identifier(p, ident);
 
+        if (!declaration) { return 0; }
+
         assert(ac_ast_is_declaration(declaration));
 
         /* all declarations (exception function definition) requires a trailing semi-colon */
@@ -433,6 +435,8 @@ static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, 
 
     struct ac_ast_declarator* declarator = parse_declarator(p);
 
+    if (!declarator) { return 0; }
+
     /* if the declarator match the function prototype "ident(a,b,c)" we check if there is a function body, if that's the case we handle  */
     if (declarator->pointer_depth == 0
         && declarator->parameters
@@ -458,6 +462,8 @@ static struct ac_ast_declaration* parse_declaration_list(struct ac_parser_c* p, 
 
         /* for each new declarator we materialize a separated delcaration, this way "int a, b;" becomes "int a; int b;" */
         last_declaration = make_simple_declaration(p, type_specifier, next_declarator);
+
+        if (!last_declaration) { return 0; }
     }   
 
     /* we only return the last declaration to mean that everything want alright. */
@@ -484,24 +490,17 @@ static struct ac_ast_declaration* make_function_declaration(struct ac_parser_c* 
     return decl;
 }
 
-static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, int initial_pointer_depth)
+static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, bool identifier_required)
 {
-    assert(initial_pointer_depth >= 0);
     AST_NEW_CTOR(struct ac_ast_declarator, declarator, location(p), ac_ast_declarator_init);
 
-    if (initial_pointer_depth == 0)
+    if (token_is(p, ac_token_type_STAR))
     {
-        if (token_is(p, ac_token_type_STAR))
-        {
-            declarator->pointer_depth = count_and_consume_pointers(p);
-        }
-    }
-    else
-    {
-        declarator->pointer_depth = initial_pointer_depth;
+        declarator->pointer_depth = count_and_consume_pointers(p);
     }
 
-    if (expect(p, ac_token_type_IDENTIFIER))
+    if ((identifier_required && expect(p, ac_token_type_IDENTIFIER))
+        || token_is(p, ac_token_type_IDENTIFIER))
     {
         declarator->ident = parse_identifier(p);
     }
@@ -509,8 +508,10 @@ static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, in
     /* check for optional array specifier */
     while (token_is(p, ac_token_type_SQUARE_L)) /* [ */
     {
-        ac_report_error_loc(location(p), "internal error: array specifier not supported yet.");
-        return 0;
+        struct ac_ast_array_specifier* array_specifier = parse_array_specifier(p);
+        if (!array_specifier) { return 0; }
+
+        declarator->array_specifier = array_specifier;
     }
 
     if (token_is(p, ac_token_type_EQUAL)) /* = */
@@ -524,22 +525,38 @@ static struct ac_ast_declarator* parse_declarator_core(struct ac_parser_c* p, in
     if (token_is(p, ac_token_type_PAREN_L))  /* ( */
     {
         declarator->parameters = parse_parameter_list(p, ac_token_type_PAREN_L);
+        if (!declarator->parameters) { return 0; }
+
         return declarator;
     }
 
     return declarator;
 }
 
-static struct ac_ast_declarator* parse_declarator_with_pointer_depth(struct ac_parser_c* p, int pointer_depth)
-{
-    assert(pointer_depth > 0);
-    return parse_declarator_core(p, pointer_depth);
-}
-
 static struct ac_ast_declarator* parse_declarator(struct ac_parser_c* p)
 {
-    int initial_pointer_depth = 0;
-    return parse_declarator_core(p, initial_pointer_depth);
+    bool identifier_required = true;
+    struct ac_ast_declarator* declarator = parse_declarator_core(p, identifier_required);
+
+    if (!declarator) { return 0; }
+
+    assert(declarator->ident);
+
+    return declarator;
+}
+
+static struct ac_ast_declarator* parse_declarator_for_parameter(struct ac_parser_c* p)
+{
+    bool identifier_required = false;
+
+    struct ac_ast_declarator* declarator = parse_declarator_core(p, identifier_required);
+
+    if (!declarator) { return 0; }
+
+    /* There must be at least one of an identifier, or a pointer, or an array specifier */
+    assert(declarator->ident || declarator->pointer_depth || declarator->array_specifier);
+
+    return declarator;
 }
 
 static struct ac_ast_parameters* parse_parameter_list(struct ac_parser_c* p, enum ac_token_type expected_opening_token)
@@ -620,42 +637,22 @@ static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p)
         return param;
     }
 
-    if (token_is(p, ac_token_type_STAR))
-    {
-        int pointer_depth = count_and_consume_pointers(p);
-        if (token_is(p, ac_token_type_IDENTIFIER))
-        {
-            param->declarator = parse_declarator_with_pointer_depth(p, pointer_depth);
-            return param;
-        }
-        param->pointer_depth = pointer_depth;
-        return param;
-    }
-
-    if (token_is(p, ac_token_type_PAREN_L))
-    {
-        ac_report_error_loc(location(p), "internal error: function type are not supported yet.");
-        return 0;
-    }
-
-    /* End of the parameter expression we return early */
+    /* End of the parameter expression we return early. */
     if (token_is(p, ac_token_type_COMMA)
         || token_is(p, ac_token_type_PAREN_R))
     {
         return param;
     }
 
+    struct ac_ast_declarator* declarator = parse_declarator_for_parameter(p);
+
+    if (!declarator) { return 0; }
+
     /* at this point parsing declarator is the only option */
-    struct ac_ast_declarator* declarator = parse_declarator(p);
+    //struct ac_ast_declarator* declarator = parse_declarator(p);
     param->declarator = declarator;
 
-    if (!declarator)
-    {
-        return 0;
-    }
-
     return param;
-
 }
 
 static int count_and_consume_pointers(struct ac_parser_c* p)
@@ -671,6 +668,57 @@ static int count_and_consume_pointers(struct ac_parser_c* p)
     }
 
     return i;
+}
+
+static struct ac_ast_array_specifier* parse_array_specifier(struct ac_parser_c* p)
+{
+    assert(token_is(p, ac_token_type_SQUARE_L));
+
+    struct ac_ast_array_specifier* first = 0;
+    struct ac_ast_array_specifier* previous = 0;
+
+    while (token_is(p, ac_token_type_SQUARE_L)) /* [ */
+    {
+        goto_next_token(p); /* Skip [ */
+        AST_NEW_CTOR(struct ac_ast_array_specifier, array_specifier, location(p), ac_ast_array_specifier_init);
+       
+        /* Save the first array specifier, which would need to be returned. */
+        if (!first) { first = array_specifier; }
+
+        /* Attached new "dimensions" to the previous array. */
+        if (previous)
+        {
+            previous->next_array = array_specifier;
+        }
+
+        /* Reach the ], so there is no no size. Could be valid in some case. Like "void func(int[]);" */
+        if (token_is(p, ac_token_type_SQUARE_R))
+        {
+            AST_NEW_CTOR(struct ac_ast_array_empty_size, array_empty_size, location(p), ac_ast_array_empty_size_init);
+            array_specifier->size_expression = to_expr(array_empty_size);
+
+            goto_next_token(p); /* Skip ] */
+            /* continue to the next part (array or not) */
+            continue;
+        }
+
+        struct ac_ast_expr* lhs = 0;
+        struct ac_ast_expr* array_size_expr = parse_expr(p, lhs);
+
+        if (!array_size_expr)
+        {
+            return 0;
+        }
+
+        array_specifier->size_expression = array_size_expr;
+
+        if (!expect_and_consume(p, ac_token_type_SQUARE_R))
+        {
+            return 0;
+        }
+    }
+
+    return first;
 }
 
 static const struct ac_token* token(const struct ac_parser_c* p)

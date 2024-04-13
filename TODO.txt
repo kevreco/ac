@@ -8,7 +8,7 @@
 	- [./] Support forward function declaration. "int main(int a);
 	- [./] Support other type char parameter.
 	- [./] Support pointer parameters.
-	- [] Support array parameters.
+	- [./] Support array parameters.
 	
 # C Parser and C converter - Stage 1
 

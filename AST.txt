@@ -69,6 +69,7 @@ parameter-list:
 parameter:
     type
     type pointer
+	type pointer array−specifier
     type ( pointer ) ( arglist )
     type declarator
     ...

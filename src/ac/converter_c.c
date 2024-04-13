@@ -15,6 +15,7 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr);
 static void print_identifier(struct ac_converter_c* c, struct ac_ast_identifier* identifier);
 static void print_type_specifier(struct ac_converter_c* c, struct ac_ast_type_specifier* type_specifier);
 static void print_pointers(struct ac_converter_c* c, int count);
+static void print_array_specifier(struct ac_converter_c* c, struct ac_ast_array_specifier* array_specifier);
 static void print_parameters(struct ac_converter_c* c, struct ac_ast_parameters* parameters);
 static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* parameter);
 static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaration* declaration);
@@ -77,6 +78,10 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
         CAST_TO(struct ac_ast_declaration*, declaration, expr);
         print_declaration(c, declaration);
     }
+    else if (expr->type == ac_ast_type_ARRAY_EMPTY_SIZE)
+    {
+        /* print nothing */
+    }
     else if (expr->type == ac_ast_type_DECLARATOR)
     {
         CAST_TO(struct ac_ast_declarator*, declarator, expr);
@@ -134,6 +139,13 @@ static void print_pointers(struct ac_converter_c* c, int count)
     }
 }
 
+static void print_array_specifier(struct ac_converter_c* c, struct ac_ast_array_specifier* array_specifier)
+{
+    print_str(c, "[");
+    print_expr(c, array_specifier->size_expression);
+    print_str(c, "]");
+}
+
 static void print_parameters(struct ac_converter_c* c, struct ac_ast_parameters* parameters)
 {
     print_str(c, "(");
@@ -159,10 +171,6 @@ static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* p
     if (parameter->is_var_args)
     {
         print_str(c, "...");
-    }
-    else if (parameter->pointer_depth)
-    {
-        print_pointers(c, parameter->pointer_depth);
     }
     else if (parameter->declarator)
     {
@@ -234,11 +242,17 @@ static void print_declarator(struct ac_converter_c* c, struct ac_ast_declarator*
         print_pointers(c, declarator->pointer_depth);
     }
 
-    print_identifier(c, declarator->ident);
+    /* True declarator contains an identifier, however we also use declarator to handle parameters.
+       Some parameters are nameless is some scenario. Example "void func(int);".
+    */
+    if (declarator->ident)
+    {
+        print_identifier(c, declarator->ident);
+    }
 
     if (declarator->array_specifier)
     {
-        assert(0 && "internal error: array specifier are not supported yet.");
+        print_array_specifier(c, declarator->array_specifier);
     }
 
     if (declarator->initializer)
