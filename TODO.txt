@@ -24,21 +24,42 @@
 
 # Augmented C
 	- find a good iterator implementation for array, lists etc.
-		- current idea:
+		- current idea for compile-time iterator:
+		```
+		yield(int) iter_range(int begin, int end)  {
+			for(int i = begin, i < end; i++)
+			{
+				yield i;
+			}
+		}
+		
+		for (i: iter_range(0, 10)) {
+			printf(i);
+		}
+		
+		yield(int) iter_is_even(yield(int) it)  {
+
+			for (i: it)
+				if (i % 2 == 0)
+					yield i;
+		}
+
+
+		for (i: iter_iseven(iter_range(0, 10)) {
+			printf(i);
+		}
+		```
+		-- run-time iterator?
 		```
 			iterator my_iterator(int begin, int end) { ... }
-			for my_iterator(0, 100) -> x   // if there is no parenthesis after for an iterator is assumed to be used.
-			for my_iterator(0, 100) -> y
+			for (int x: my_iterator(0, 100))   // if there is no parenthesis after for an iterator is assumed to be used.
+			for (int y: my_iterator(0, 100))
 			{ print(x, y); }
 			// You can iterate built-in values
 			int a[10];
-			for a -> i { print(i); };
+			for (i : a) { print(i); };
 			int b;
-			for b -> i { print(i); }; // even single values
-			
-			// You can also modify the context
-			int c[10];
-			foreach auto c = my_iterator() -> i { print(i); };
+			for (i : b) { print(i); }; // even single values
 		```
 	- add attributes.
 	  ```
