@@ -62,14 +62,16 @@ project "ac"
 	location(path.join(_location, "ac")) 
 	
 	dir_files("./src/cli")
-	dir_files("./src/external")
+	dir_files("./src/external/re.lib/c/")
 	dir_files("./src/ac")
 	
 	includedirs { "./src/" }
 	includedirs { "./src/external/re.lib/c/" }
 	
-	targetdir ( path.join(_location, "ac", "bin", "%{cfg.buildcfg}") ) -- location of binaries depending of configuration
-	objdir ( path.join(_location, "ac", "obj", "%{cfg.buildcfg}") )    -- location of intermediate files depending of configuration
+	-- location of binaries depending of configuration
+	targetdir ( path.join(_location, "%{prj.name}", "bin", "%{cfg.buildcfg}") )
+	-- location of intermediate files depending of configuration
+	objdir ( path.join(_location, "%{prj.name}", "obj", "%{cfg.buildcfg}") )    
 	
 	flags { "FatalWarnings"}
 	warnings "Extra"
@@ -91,6 +93,28 @@ project "ac"
 			"%{cfg.buildtarget.abspath}"
 		)
 	}
+	
+project "re_lib_tests"
+    kind "ConsoleApp"
+    language "C++"
+	location(path.join(_location, "ac")) 
+
+	files { "./src/external/re.lib/c_tests/all_c_tests_main.c"}
+	
+	includedirs { "./src/external/re.lib/c/" }
+	includedirs { "./src/external/re.lib/c_tests/" }
+	
+	-- location of binaries depending of configuration
+	targetdir ( path.join(_location, "%{prj.name}", "bin", "%{cfg.buildcfg}") ) 
+	-- location of intermediate files depending of configuration
+	objdir ( path.join(_location, "%{prj.name}", "obj", "%{cfg.buildcfg}") )    
+	
+	flags { "FatalWarnings"}
+	warnings "Extra"
+	
+	filter "system:windows"
+		defines { "WIN32"}
+	filter {}
 	
 -- =============================================================
 -- Clean
