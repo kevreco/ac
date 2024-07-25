@@ -4,6 +4,7 @@
 #include <inttypes.h> /* intmax_t */
 
 #include "re/dstr.h"
+#include "lexer.h"
 #include "location.h"
 
 #ifdef __cplusplus
@@ -59,7 +60,7 @@ void ac_expr_list_add(struct ac_expr_list* list, struct ac_ast_expr* next);
 struct ac_ast_literal {
     INCLUDE_AST_EXPR_BASE
     union {
-        dstr_view str;
+        strv str;
         intmax_t integer;
         double _float;
         bool boolean;
@@ -68,7 +69,7 @@ struct ac_ast_literal {
 
 struct ac_ast_identifier {
     INCLUDE_AST_EXPR_BASE
-    dstr_view name;
+    strv name;
 };
 
 /* Type specifier can be int, int* etc.

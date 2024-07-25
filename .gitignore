@@ -10,5 +10,10 @@
 # any file or folder that ends with ".tmp"
 *.tmp
 
+
+*.cb/
+cb
+cb.exe
+
 /src/external/re.lib/
 
