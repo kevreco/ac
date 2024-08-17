@@ -266,7 +266,7 @@ static inline re_path_bool_t re_path_is_absolute(const dstr_view path)
 	return (path.data[i] == '/' || path.data[i] == '\\');
 #else
 
-	return (path[0] == '/');
+	return (path.data[0] == '/');
 #endif
 }
 	static inline char re_path_system_slash()
