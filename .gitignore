@@ -1,58 +1,14 @@
-# where the builds are generated from premake
+# where the builds are generated from premake or cb.bat/cb.sh
 .build/
 
 # generated files
 *.generated
 
-# Prerequisites
-*.d
+# svn files
+.svn
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+# any file or folder that ends with ".tmp"
+*.tmp
 
-# Linker output
-*.ilk
-*.map
-*.exp
+/src/external/re.lib/
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
