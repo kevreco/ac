@@ -163,18 +163,25 @@ inline re_file_bool_t re_file_get_until(dstr* str, FILE *fp, re_file_predicate_t
 static inline FILE* re_file__create_temp_file(const char* text)
 {
 	FILE* file;
-	errno_t err = tmpfile_s(&file);
-	assert(err != 0 && "re_file__create_temp_file: error while creating a temp file.");
-	assert(file && "re_file__create_temp_file: file is null.");
+	if (!tmpfile_s(&file) || file == NULL)
+	{
+		fprintf(stderr, "could not create temp file\n");
+		return NULL;
+	}
 
 	int begin = ftell(file);
-	assert(!ferror(file));
+	if (ferror(file)) {
+		fprintf(stderr, "could not use 'ftell'\n");
+		return NULL;
+	}
 
 	fprintf(file, "%s", text);
-	assert(!ferror(file));
 
 	fseek(file, begin, SEEK_SET); // reset cursor to the beginning
-	assert(!ferror(file));
+	if (ferror(file)) {
+		fprintf(stderr, "could not use 'fseek'\n");
+		return NULL;
+	}
 	return file;
 }
 
