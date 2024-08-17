@@ -162,8 +162,8 @@ inline re_file_bool_t re_file_get_until(dstr* str, FILE *fp, re_file_predicate_t
 
 static inline FILE* re_file__create_temp_file(const char* text)
 {
-	FILE* file;
-	if (!tmpfile_s(&file) || file == NULL)
+	FILE* file = tmpfile();
+	if (file == NULL)
 	{
 		fprintf(stderr, "could not create temp file\n");
 		return NULL;
