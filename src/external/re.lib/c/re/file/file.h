@@ -34,7 +34,7 @@ static inline re_file_bool_t re_file__predicate_get_until_string_func(void* data
 }
 
 // until string 'sv' defined by user
-inline re_file_predicate_t re_file_make_get_until_string(dstr_view* sv)
+static inline re_file_predicate_t re_file_make_get_until_string(dstr_view* sv)
 {
 	re_file_predicate_t get_until;
 	get_until.data = sv;
@@ -52,7 +52,7 @@ static inline re_file_bool_t re_file__predicate_get_until_eol_func(void* data, d
 }
 
 // until end of line
-inline re_file_predicate_t re_file_make_get_until_eol()
+static inline re_file_predicate_t re_file_make_get_until_eol()
 {
 	re_file_predicate_t get_until;
 	get_until.data = 0;
@@ -69,7 +69,7 @@ static inline re_file_bool_t re_file__predicate_get_until_eof_func(void* data, d
 }
 
 // until end of file
-inline re_file_predicate_t re_file_make_get_until_eof()
+static inline re_file_predicate_t re_file_make_get_until_eof()
 {
 	re_file_predicate_t get_until;
 	get_until.data = 0;
