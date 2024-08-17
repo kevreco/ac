@@ -337,7 +337,7 @@ DSTR_API inline dstr_char_t* dstr_c_str     (dstr* s) { return s->data; }
 //If new_cap is less than the current size(), this is a non-binding shrink-to-fit request equivalent to shrink_to_fit() (since C++11). // @TODO Implement this
 // @TODO testsuite
 // 'new_string_capacity' is the string capacity, the effective memory allocated will be 'new_string_capacity + 1' for the null termination char '\0'
-DSTR_API inline void dstr_reserve(dstr* s, dstr_size_t new_string_capacity);
+DSTR_API void dstr_reserve(dstr* s, dstr_size_t new_string_capacity);
 
 // Append data from 'data' to 'data + size'
 DSTR_API void dstr_append        (dstr* s, const dstr_char_t* data, dstr_size_t size);
@@ -872,7 +872,7 @@ DSTR_API dstr_bool_t dstr_greater_than_str(const dstr* s, const dstr_char_t* str
 	return dstr_compare(s, str, strlen(str)) > 0;
 } // dstr_greater_than_str
 
-void dstr_reserve(dstr* s, dstr_size_t new_string_capacity)
+DSTR_API void dstr_reserve(dstr* s, dstr_size_t new_string_capacity)
 {
 	dstr_bool_t preserve_data = 1;
 	dstr__reserve_internal(s, new_string_capacity, preserve_data);
