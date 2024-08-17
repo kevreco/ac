@@ -3,6 +3,9 @@
 
 #include "../dstr_util.h"
 
+#include <stdio.h> /* tmpfile_s */
+#include <errno.h> /* errno_t *
+
 #ifdef __cplusplus
 extern "C" {
 #endif
