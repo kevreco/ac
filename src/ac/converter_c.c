@@ -3,7 +3,7 @@
 #include <stdio.h> /* FILE */
 #include <inttypes.h> /* PRIiMAX, PRIuMAX */
 
-#include <re/file/file.h>
+#include <re/file.h>
 
 #include "ast.h"
 #include "manager.h"
@@ -24,9 +24,9 @@ static void print_declarator(struct ac_converter_c* c, struct ac_ast_declarator*
 static void print_fv(struct ac_converter_c* c, const char* fmt, va_list args);
 static void print_f(struct ac_converter_c* c, const char* fmt, ...);
 static void print_str(struct ac_converter_c* c, const char* str);
-static void print_dstr_view(struct ac_converter_c* c, dstr_view view);
+static void print_strv(struct ac_converter_c* c, strv view);
 
-static size_t write_to_file(dstr_view str, FILE* f);
+static size_t write_to_file(strv str, FILE* f);
 static void push_indent(struct ac_converter_c* c);
 static void pop_indent(struct ac_converter_c* c);
 static void indent(struct ac_converter_c* c);
@@ -51,13 +51,11 @@ void ac_converter_c_destroy(struct ac_converter_c* c)
 
 void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath)
 {
-    (void)filepath;
-
     print_top_level(c);
 
-    FILE* f;
-    fopen_s(&f, filepath, "wb");
+    FILE* f = re_file_open_readwrite(filepath);
     write_to_file(dstr_to_view(&c->string_buffer), f);
+    re_file_close(f);
 }
 
 static void print_top_level(struct ac_converter_c* c)
@@ -121,7 +119,7 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
 
 static void print_identifier(struct ac_converter_c* c, struct ac_ast_identifier* identifier)
 {
-    print_dstr_view(c, identifier->name);
+    print_strv(c, identifier->name);
 }
 
 static void print_type_specifier(struct ac_converter_c* c, struct ac_ast_type_specifier* type_specifier)
@@ -285,12 +283,12 @@ static void print_str(struct ac_converter_c* c, const char* str)
     print_f(c, "%s", str);
 }
 
-static void print_dstr_view(struct ac_converter_c* c, dstr_view view)
+static void print_strv(struct ac_converter_c* c, strv view)
 {
     print_f(c, "%.*s", view.size, view.data);
 }
 
-static size_t write_to_file(dstr_view str, FILE* f)
+static size_t write_to_file(strv str, FILE* f)
 {
     return fwrite(str.data, str.size, 1, f);
 }

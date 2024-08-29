@@ -13,7 +13,7 @@ struct ac_ast_top_level;
 
 struct ac_source_file
 {
-    const char* filepath; /* using dstr instead of dstr_view fopen requires a c string at the end */
+    const char* filepath; /* using dstr instead of strv fopen requires a c string at the end */
     dstr content;
 };
 

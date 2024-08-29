@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-static inline int dstr_view_atoi(dstr_view sv)
+static inline int strv_atoi(strv sv)
 {
 	const dstr_char_t* str = sv.data;
 	dstr_size_t size = sv.size;
@@ -35,7 +35,7 @@ static inline int dstr_view_atoi(dstr_view sv)
 	return result;
 }
 
-static inline dstr_bool_t dstr_char_is_alphanum(char c)
+static inline dstr_bool dstr_char_is_alphanum(char c)
 {
 	return
 		(c >= 'a' && c <= 'z')
@@ -44,64 +44,64 @@ static inline dstr_bool_t dstr_char_is_alphanum(char c)
 		;
 }
 
-static inline dstr_bool_t dstr_view_contains_char(dstr_view sv, char c)
+static inline dstr_bool strv_contains_char(strv sv, char c)
 {
-	return dstr_view_find_char(sv, 0, c) != DSTR_NPOS;
+	return strv_find_char(sv, 0, c) != DSTR_NPOS;
 }
 
-static inline dstr_bool_t dstr_view_contains_chars(dstr_view sv, dstr_view chars)
+static inline dstr_bool strv_contains_chars(strv sv, strv chars)
 {
 	const dstr_char_t* end = chars.data + chars.size;
 	const dstr_char_t* cursor = chars.data;
 	while (cursor < end)
 	{
-		if (dstr_view_contains_char(sv, *cursor))
+		if (strv_contains_char(sv, *cursor))
 		{
-			return (dstr_bool_t)(1);
+			return (dstr_bool)(1);
 		}
 
 		++cursor;
 	}
 
-	return (dstr_bool_t)(0);
+	return (dstr_bool)(0);
 }
 
-static inline dstr_bool_t dstr_view_begins_with(dstr_view sv, dstr_view rhs)
+static inline dstr_bool strv_begins_with(strv sv, strv rhs)
 {
 	if (sv.size < rhs.size)
 	{
-		return (dstr_bool_t)(0);
+		return (dstr_bool)(0);
 	}
 
-	dstr_view sub = dstr_view_make_from(sv.data, rhs.size);
-	return dstr_view_equals(sub, rhs);
+	strv sub = strv_make_from(sv.data, rhs.size);
+	return strv_equals(sub, rhs);
 }
 
-static inline dstr_bool_t dstr_view_begins_with_str(dstr_view sv, const dstr_char_t* str)
+static inline dstr_bool strv_begins_with_str(strv sv, const dstr_char_t* str)
 {
-	dstr_view str_view = dstr_view_make_from_str(str);
-	return dstr_view_begins_with(sv, str_view);
+	strv str_view = strv_make_from_str(str);
+	return strv_begins_with(sv, str_view);
 }
 
-static inline dstr_bool_t dstr_view_ends_with(dstr_view sv, dstr_view rhs)
+static inline dstr_bool strv_ends_with(strv sv, strv rhs)
 {
 	if (sv.size < rhs.size)
 	{
-		return (dstr_bool_t)(0);
+		return (dstr_bool)(0);
 	}
 
-	dstr_view sub = dstr_view_make_from(sv.data + (sv.size - rhs.size), rhs.size);
-	return dstr_view_equals(sub, rhs);
+	strv sub = strv_make_from(sv.data + (sv.size - rhs.size), rhs.size);
+	return strv_equals(sub, rhs);
 }
 
-static inline dstr_bool_t dstr_view_ends_with_str(dstr_view sv, const dstr_char_t* str)
+static inline dstr_bool strv_ends_with_str(strv sv, const dstr_char_t* str)
 {
-	dstr_view str_view = dstr_view_make_from_str(str);
-	return dstr_view_ends_with(sv, str_view);
+	strv str_view = strv_make_from_str(str);
+	return strv_ends_with(sv, str_view);
 }
 
 // Will start at the end of the string if start_pos == DSTR_NPOS
-static inline dstr_size_t dstr_view_find_last_of_char(dstr_view sv, char c, dstr_size_t start_pos)
+static inline dstr_size_t strv_find_last_of_char(strv sv, char c, dstr_size_t start_pos)
 {
 	dstr_size_t index = DSTR_NPOS;
 
@@ -110,8 +110,8 @@ static inline dstr_size_t dstr_view_find_last_of_char(dstr_view sv, char c, dstr
 		return index;
 	}
 
-	const char* begin = dstr_view_begin(sv);
-	const char* cursor = dstr_view_end(sv) - 1;
+	const char* begin = strv_begin(sv);
+	const char* cursor = strv_end(sv) - 1;
 
 	if (start_pos != DSTR_NPOS)
 	{
@@ -129,8 +129,8 @@ static inline dstr_size_t dstr_view_find_last_of_char(dstr_view sv, char c, dstr
 	return index;
 }
 
-static inline dstr_size_t dstr_view_find_first_of_char(dstr_view str, char c);
-static inline dstr_size_t dstr_view_find_last_of_chars(dstr_view str, dstr_view chars)
+static inline dstr_size_t strv_find_first_of_char(strv str, char c);
+static inline dstr_size_t strv_find_last_of_chars(strv str, strv chars)
 {
 	dstr_size_t index = DSTR_NPOS;
 
@@ -145,7 +145,7 @@ static inline dstr_size_t dstr_view_find_last_of_chars(dstr_view str, dstr_view 
 
 	while (data < end)
 	{
-		if (dstr_view_find_first_of_char(chars, (*data)) != DSTR_NPOS)
+		if (strv_find_first_of_char(chars, (*data)) != DSTR_NPOS)
 		{
 			index = data - begin;
 			break;
@@ -156,7 +156,7 @@ static inline dstr_size_t dstr_view_find_last_of_chars(dstr_view str, dstr_view 
 	return index;
 }
 
-static inline dstr_view dstr_view_line_at(dstr_view sv, dstr_size_t pos)
+static inline strv strv_line_at(strv sv, dstr_size_t pos)
 {
 	DSTR_ASSERT(pos >= 0 && pos < sv.size);
 
@@ -165,7 +165,7 @@ static inline dstr_view dstr_view_line_at(dstr_view sv, dstr_size_t pos)
 
 	if (pos != 0) // if pos already equal to 0 no need to search for a previous char
 	{
-		dstr_size_t index = dstr_view_find_last_of_char(sv, '\n', pos - 1);
+		dstr_size_t index = strv_find_last_of_char(sv, '\n', pos - 1);
 
 		if (index == DSTR_NPOS) // if not found start is the first char of the string
 		{
@@ -178,7 +178,7 @@ static inline dstr_view dstr_view_line_at(dstr_view sv, dstr_size_t pos)
 	}
 	
 
-	dstr_size_t index = dstr_view_find_char(sv, pos, '\n');
+	dstr_size_t index = strv_find_char(sv, pos, '\n');
 
 	if (index == DSTR_NPOS) // if not found end is the last char of the string
 	{
@@ -190,43 +190,43 @@ static inline dstr_view dstr_view_line_at(dstr_view sv, dstr_size_t pos)
 	}
 
 	if (start_line_index == end_line_index)
-		return dstr_view_make();
+		return strv_make();
 
 
 	dstr_size_t new_size = (end_line_index - start_line_index) + 1;
-	return dstr_view_substr(sv, dstr_view_begin(sv) + start_line_index, new_size);
+	return strv_substr(sv, strv_begin(sv) + start_line_index, new_size);
 }
 
 // return first line "line" and remove the line from the source "sv"
-static inline dstr_bool_t dstr_view_pop_line(dstr_view* sv, dstr_view* line)
+static inline dstr_bool strv_pop_line(strv* sv, strv* line)
 {
 	if (sv->size == 0)
 	{
-		*line = dstr_view_make();
-		return (dstr_bool_t)(0);
+		*line = strv_make();
+		return (dstr_bool)(0);
 	}
 	else
 	{
-		dstr_size_t index = dstr_view_find_char(*sv, 0, '\n');
+		dstr_size_t index = strv_find_char(*sv, 0, '\n');
 		if (index == DSTR_NPOS)
 		{
-			*line = dstr_view_make();
-			dstr_view_swap(sv, line);
+			*line = strv_make();
+			strv_swap(sv, line);
 		}
 		else
 		{
 			dstr_size_t line_size = index + 1;
-			*line = dstr_view_make_from(sv->data, line_size);
+			*line = strv_make_from(sv->data, line_size);
 			sv->data += line_size;
 			sv->size -= line_size;
 		}
-		return (dstr_bool_t)(1);
+		return (dstr_bool)(1);
 	}
-} // dstr_view_pop_line
+} // strv_pop_line
 
 
 // given the source at position 'pos' this function returns the number of lines before et the number of line after.
-static inline void dstr_view_count_surrounding_lines(dstr_view sv, const char* pos, size_t* previous_line_count, size_t* next_line_count)
+static inline void strv_count_surrounding_lines(strv sv, const char* pos, size_t* previous_line_count, size_t* next_line_count)
 {
 	size_t before_count = 0;
 	size_t after_count = 0;
@@ -236,17 +236,17 @@ static inline void dstr_view_count_surrounding_lines(dstr_view sv, const char* p
 	if (sv.size == 0)
 		return;
 
-	assert(pos >= dstr_view_begin(sv) && pos < dstr_view_end(sv));
+	DSTR_ASSERT(pos >= strv_begin(sv) && pos < strv_end(sv));
 
 	if (sv.size == 1)
 		return;
 
-	const char* cursor = dstr_view_begin(sv);
-	const char* end = dstr_view_end(sv);
+	const char* cursor = strv_begin(sv);
+	const char* end = strv_end(sv);
 
 	// skip last line ending of the source its existence or not does not chance the line count
 	// maybe we should do this for any
-	if (dstr_view_ends_with_str(sv, "\n"))  
+	if (strv_ends_with_str(sv, "\n"))  
 	{
 		--end;
 	}
@@ -262,7 +262,7 @@ static inline void dstr_view_count_surrounding_lines(dstr_view sv, const char* p
 
 	*previous_line_count = before_count;
 	*next_line_count = after_count;
-} // dstr_view_count_surrounding_lines
+} // strv_count_surrounding_lines
 
   // find the n previous chars
   // return bound_left - 1 if the count has not been found.
@@ -310,9 +310,9 @@ static inline const char* dstr__mem_find_n(const char* data, const char* end, ch
 	return data;
 }
 
-static inline dstr_view dstr_view_get_surrounding_lines(dstr_view source, const dstr_char_t* pos, size_t extra_lines_required, size_t* previous_line_count, size_t* next_line_count)
+static inline strv strv_get_surrounding_lines(strv source, const dstr_char_t* pos, size_t extra_lines_required, size_t* previous_line_count, size_t* next_line_count)
 {
-	assert(extra_lines_required >= 0);
+	DSTR_ASSERT(extra_lines_required >= 0);
 
 	*previous_line_count = 0;
 	*next_line_count = 0;
@@ -320,21 +320,21 @@ static inline dstr_view dstr_view_get_surrounding_lines(dstr_view source, const 
 	if (source.size == 0)
 		return source;
 
-	assert(pos >= dstr_view_begin(source) && pos < dstr_view_end(source));
+	DSTR_ASSERT(pos >= strv_begin(source) && pos < strv_end(source));
 
 	const dstr_char_t* initial_cursor = pos;
 
 	// handle special case where source is only one char
 	if (source.size == 1)
 	{
-		return dstr_view_make_from(initial_cursor, 1);
+		return strv_make_from(initial_cursor, 1);
 	}
 
 	const dstr_char_t* begin_line = initial_cursor;
 	const dstr_char_t* end_line = initial_cursor;
 
-	const dstr_char_t* begin_source = dstr_view_begin(source);
-	const dstr_char_t* end_source = dstr_view_end(source);
+	const dstr_char_t* begin_source = strv_begin(source);
+	const dstr_char_t* end_source = strv_end(source);
 
 	size_t required = extra_lines_required + 1;
 
@@ -367,7 +367,7 @@ static inline dstr_view dstr_view_get_surrounding_lines(dstr_view source, const 
 
 	*next_line_count = found;
 
-	return dstr_view_substr(
+	return strv_substr(
 		source,
 		(const dstr_it)begin_line,
 		end_line - begin_line
@@ -390,7 +390,7 @@ static inline void dstr_get_timestamp_YYYY_MM_DD_HH_MM_SS(dstr* str)
 }
 */
 
-static inline size_t dstr_view_tok(dstr_view sv, dstr_view delims, dstr_view* tok)
+static inline size_t strv_tok(strv sv, strv delims, strv* tok)
 {
 	DSTR_ASSERT(tok);
 
@@ -405,7 +405,7 @@ static inline size_t dstr_view_tok(dstr_view sv, dstr_view delims, dstr_view* to
 
 	size_t i = 0;
 
-	while (dstr_view_contains_char(delims, start[i]) && i < sv.size)
+	while (strv_contains_char(delims, start[i]) && i < sv.size)
 	{
 		++start;
 		++i;
@@ -418,7 +418,7 @@ static inline size_t dstr_view_tok(dstr_view sv, dstr_view delims, dstr_view* to
 	tok->data = start;
 	tok->size = 0;
 	const char* end = sv.data + sv.size;
-	while (start < end && !dstr_view_contains_char(delims, *start))
+	while (start < end && !strv_contains_char(delims, *start))
 	{
 		start++;
 		tok->size += 1;
@@ -428,12 +428,12 @@ static inline size_t dstr_view_tok(dstr_view sv, dstr_view delims, dstr_view* to
 	return tok->size;
 }
 
-static inline dstr_bool_t dstr_view_is_identifier(dstr_view sv)
+static inline dstr_bool strv_is_identifier(strv sv)
 {
 	for (dstr_size_t i = 0; i < sv.size; ++i)
 	{
 		dstr_char_t c = sv.data[i];
-		dstr_bool_t valid_char = (c >= 'a' && c <= 'z')
+		dstr_bool valid_char = (c >= 'a' && c <= 'z')
 			|| (c >= 'A' && c <= 'Z')
 			|| (c >= '0' && c <= '9')
 			|| c == '_';
@@ -445,7 +445,7 @@ static inline dstr_bool_t dstr_view_is_identifier(dstr_view sv)
 	return 1;
 }
 
-static inline dstr_size_t dstr_view_find_first_of_char(dstr_view str, char c)
+static inline dstr_size_t strv_find_first_of_char(strv str, char c)
 {
 	dstr_size_t index = DSTR_NPOS;
 
@@ -471,7 +471,7 @@ static inline dstr_size_t dstr_view_find_first_of_char(dstr_view str, char c)
 	return index;
 }
 
-static inline dstr_bool_t dstr__char_is_alphanum(char c)
+static inline dstr_bool dstr__char_is_alphanum(char c)
 {
 	return
 		(c >= 'a' && c <= 'z')
@@ -480,7 +480,7 @@ static inline dstr_bool_t dstr__char_is_alphanum(char c)
 		;
 }
 
-static inline size_t dstr_view_find_first_of_chars(dstr_view str, dstr_view chars)
+static inline size_t strv_find_first_of_chars(strv str, strv chars)
 {
 	size_t index = DSTR_NPOS;
 
@@ -495,7 +495,7 @@ static inline size_t dstr_view_find_first_of_chars(dstr_view str, dstr_view char
 
 	while (data < end)
 	{
-		if (dstr_view_find_first_of_char(chars, (*data)) != DSTR_NPOS)
+		if (strv_find_first_of_char(chars, (*data)) != DSTR_NPOS)
 		{
 			index = data - begin;
 			break;
@@ -511,8 +511,8 @@ static inline void eat_email_suffix(const char** _cursor, const char* _end)
 	const char* cursor = *_cursor;
 	while (cursor < _end)
 	{
-		dstr_bool_t valid = !!(dstr__char_is_alphanum(*cursor)
-			|| dstr_view_contains_char(dstr_view_make_from_str(".!#$%&’*+/=?^_`{|}~-"), *cursor))
+		dstr_bool valid = !!(dstr__char_is_alphanum(*cursor)
+			|| strv_contains_char(strv_make_from_str(".!#$%&’*+/=?^_`{|}~-"), *cursor))
 			;
 
 		if (!valid) {
@@ -526,7 +526,7 @@ static inline void eat_email_suffix(const char** _cursor, const char* _end)
 }
 
 
-static inline dstr_view* dstr_view_trim(dstr_view* str, dstr_view chars)
+static inline strv* strv_trim(strv* str, strv chars)
 {
 	// String is empty
 	if (str->size == 0) {
@@ -542,7 +542,7 @@ static inline dstr_view* dstr_view_trim(dstr_view* str, dstr_view chars)
 
 	// Skip chars at left.
 	while (str->data < end_data) {
-		if (!dstr_view_contains_char(chars, (*str->data))) {
+		if (!strv_contains_char(chars, (*str->data))) {
 			break;
 		}
 		str->data++;
@@ -551,7 +551,7 @@ static inline dstr_view* dstr_view_trim(dstr_view* str, dstr_view chars)
 
 	// Skip chars at right.
 	while (str->size > 0) {
-		if (!dstr_view_contains_char(chars, str->data[str->size - 1])) {
+		if (!strv_contains_char(chars, str->data[str->size - 1])) {
 			break;
 		}
 		str->size--;
@@ -562,15 +562,15 @@ static inline dstr_view* dstr_view_trim(dstr_view* str, dstr_view chars)
 
 
 // return true if match regex [a-zA-Z0-9_]+
-static dstr_bool_t dstr__parse_email_subdomain(const char** _cursor, const char* _end)
+static dstr_bool dstr__parse_email_subdomain(const char** _cursor, const char* end)
 {
 	const char* cursor = *_cursor;
 
-	dstr_bool_t match = 0;
-	while (cursor < _end)
+	dstr_bool match = 0;
+	while (cursor < end)
 	{
-		dstr_bool_t valid = !!(dstr__char_is_alphanum(*cursor)
-			|| dstr_view_contains_char(dstr_view_make_from_str("-"), *cursor))
+		dstr_bool valid = !!(dstr__char_is_alphanum(*cursor)
+			|| strv_contains_char(strv_make_from_str("-"), *cursor))
 			;
 
 		if (!valid) {
@@ -586,21 +586,21 @@ static dstr_bool_t dstr__parse_email_subdomain(const char** _cursor, const char*
 }
 
 /* return true if match regex (.[a-zA-Z0-9_])+ */
-static dstr_bool_t dstr__parse_email_ending(const char** _cursor, const char* _end)
+static dstr_bool dstr__parse_email_ending(const char** _cursor, const char* _end)
 {
 	const char* cursor = *_cursor;
 
-	dstr_bool_t match = 0;
+	dstr_bool match = 0;
 	while (cursor < _end)
 	{
 		if (*cursor != '.') return 0; /* must contain '.' 
 		++cursor;  /* skip '.' */
 
-		dstr_bool_t found_char = 0;
+		dstr_bool found_char = 0;
 		while (cursor < _end)
 		{
-			dstr_bool_t valid = !!(dstr__char_is_alphanum(*cursor)
-				|| dstr_view_contains_char(dstr_view_make_from_str("-"), *cursor))
+			dstr_bool valid = !!(dstr__char_is_alphanum(*cursor)
+				|| strv_contains_char(strv_make_from_str("-"), *cursor))
 				;
 
 			if (!valid) {
@@ -625,7 +625,7 @@ static dstr_bool_t dstr__parse_email_ending(const char** _cursor, const char* _e
 
 // Should match W3C email regex:
 // /^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/
-static inline dstr_bool_t dstr_view_is_email(dstr_view _str)
+static inline dstr_bool strv_is_email(strv _str)
 {
 	const dstr_char_t* cursor = _str.data;
 	const dstr_char_t* end = _str.data + _str.size;
@@ -639,8 +639,8 @@ static inline dstr_bool_t dstr_view_is_email(dstr_view _str)
 
 	++cursor; /* skip '@' */
 
-	dstr_view view = dstr_view_make_from(cursor, end - cursor);
-	size_t first_dot = dstr_view_find_first_of_char(view, '.');
+	strv view = strv_make_from(cursor, end - cursor);
+	size_t first_dot = strv_find_first_of_char(view, '.');
 
 	if (first_dot == DSTR_NPOS) return 0; /* does not contains any dots */
 
@@ -658,14 +658,14 @@ static inline dstr_bool_t dstr_view_is_email(dstr_view _str)
 }
 
 
-static inline void dstr_replace(dstr* s, size_t index, size_t count, dstr_view replacing) {
+static inline void dstr_replace(dstr* s, size_t index, size_t count, strv replacing) {
 
 	assert(index <= s->size);
 	assert(count <= s->size);
 	assert(index + count <= s->size);
 
 	// Just an alias to make it shorter
-	dstr_view r = replacing;
+	strv r = replacing;
 
 	if (r.size < count) { // mem replacing <  mem to replace
 
@@ -676,10 +676,10 @@ static inline void dstr_replace(dstr* s, size_t index, size_t count, dstr_view r
 		size_t count_removed = count - r.size;
 
 		if (count_to_move) {
-			memmove(last - count_removed, last, count_to_move * sizeof(dstr_char_t));
+			DSTR_MEMMOVE(last - count_removed, last, count_to_move * sizeof(dstr_char_t));
 		}
 		if (s->size) {
-			memcpy(first, r.data, r.size * sizeof(dstr_char_t));
+			DSTR_MEMCPY(first, r.data, r.size * sizeof(dstr_char_t));
 		}
 
 		dstr_resize(s, s->size - count_removed);
@@ -717,46 +717,44 @@ static inline void dstr_replace(dstr* s, size_t index, size_t count, dstr_view r
 	}
 }
 
-/*
--------------------------------------------------------------------------
-dstr_spliter
--------------------------------------------------------------------------
-*/
+/*-----------------------------------------------------------------------*/
+/* dstr_spliter */
+/*-----------------------------------------------------------------------*/
 
-typedef struct dstr_spliter_t
-{
-	dstr_view str;
-	dstr_view delims;
-} dstr_spliter;
+typedef struct dstr_spliter dstr_spliter;
+struct dstr_spliter {
+	strv str;
+	strv delims;
+};
 
-static inline void dstr_spliter_init(dstr_spliter* s, dstr_view sv, dstr_view delims)
+static inline void dstr_spliter_init(dstr_spliter* s, strv sv, strv delims)
 {
 	s->str = sv;
 	s->delims = delims;
 }
 
-static inline void dstr_spliter_init_str(dstr_spliter* s, dstr_view sv, const char* delims)
+static inline void dstr_spliter_init_str(dstr_spliter* s, strv sv, const char* delims)
 {
 	s->str = sv;
-	s->delims = dstr_view_make_from_str(delims);
+	s->delims = strv_make_from_str(delims);
 }
 
-static inline dstr_spliter dstr_spliter_make(dstr_view sv, dstr_view delims)
+static inline dstr_spliter dstr_spliter_make(strv sv, strv delims)
 {
 	dstr_spliter s;
 	dstr_spliter_init(&s, sv, delims);
 	return s;
 }
 
-static inline dstr_spliter dstr_spliter_make_str(dstr_view sv, const char* delims)
+static inline dstr_spliter dstr_spliter_make_str(strv sv, const char* delims)
 {
-	dstr_view delims_v = dstr_view_make_from_str(delims);
+	strv delims_v = strv_make_from_str(delims);
 	return dstr_spliter_make(sv, delims_v);
 }
 
-static inline dstr_bool_t dstr_spliter_get_next(dstr_spliter* s, dstr_view* res) {
+static inline dstr_bool dstr_spliter_get_next(dstr_spliter* s, strv* res) {
 
-	if (dstr_view_tok(s->str, s->delims, res))
+	if (strv_tok(s->str, s->delims, res))
 	{
 		s->str.size -= (res->data - s->str.data) + res->size;
 		s->str.data = res->data + res->size;

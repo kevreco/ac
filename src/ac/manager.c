@@ -2,8 +2,8 @@
 
 #include "stdbool.h"
 
-#include "re/file/file.h"
-#include "re/file/path.h"
+#include "re/file.h"
+#include "re/path.h"
 
 #include "global.h"
 
@@ -26,11 +26,11 @@ struct ac_source_file* ac_manager_load_content(struct ac_manager* m, const char*
 {
     if (m->source_file.content.data != 0)
     {
-        ac_report_error("w_manager_load_content: Cannot load multiple content.");
+        ac_report_error("Internal error: @TEMP we can only load a single file per manager instance.");
         return 0;
     }
 
-    if (!re_file_exists(filepath))
+    if (!re_file_exists_str(filepath))
     {
         ac_report_error("w_manager_load_content: file '%s' does not exist.", filepath);
         return 0;
@@ -48,7 +48,7 @@ struct ac_source_file* ac_manager_load_content(struct ac_manager* m, const char*
     }
     else
     {
-        ac_report_error("w_manager_load_content: Cannot load file into memory.");
+        ac_report_error("Could not load file into memory.");
         return 0;
     }
 }
@@ -56,40 +56,27 @@ struct ac_source_file* ac_manager_load_content(struct ac_manager* m, const char*
 bool try_get_file_content(const char* filepath, dstr* content)
 {
     if (!re_path_is_absolute_str(filepath)) {
-        ac_report_error("try_get_file_content: filepath must be an absolute path.\n");
+        /* @FIXME check if it's a limitation or a temporary constraints
+        * and document this
+        */
+        ac_report_error("Filepath must be an absolute path.\n");
         return false;
     }
 
-    if (!re_file_exists(filepath)) {
-        ac_report_error("try_get_file_content: file does not exist.\n");
+    if (!re_file_exists_str(filepath)) {
+        ac_report_error("File does not exist '%s'.\n", filepath);
         return false;
     }
 
-    // [Windows] "rb" is need to avoid some translation/encoding platform dependent stuff
-    // \r\n are handled in the lexer
-    FILE* file;
-    errno_t error = fopen_s(&file, filepath, "rb");
-
-    if (error != 0) {
-        ac_report_error("try_get_file_content: can't open '%s'.\n", filepath);
+    if (!re_file_open_and_read(content, filepath))
+    {
+        ac_report_error("Could not open '%s'\n", filepath);
         return false;
     }
-
-    // TODO: move this into a function in re/file.h ?
-    fseek(file, 0, SEEK_END);
-    long fsize = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    if (!fsize) {
-        ac_report_warning("try_get_file_content: empty file '%s'\n", filepath);
+   
+    if (content->size == 0) {
+        ac_report_warning("Empty file '%s'.\n", filepath);
         return true;
-    }
-
-    re_file_read_all(content, file);
-
-    if (dstr_empty(content)) {
-        ac_report_error("try_get_file_content: can't read file content'%s'\n", filepath);
-        return false;
     }
 
     return true;

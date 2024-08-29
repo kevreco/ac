@@ -66,7 +66,7 @@ void ac_lex_set_source(struct ac_lex* l, const char* source_content, size_t sour
 {
     l->filepath = filepath;
 
-    dstr_view content = dstr_view_make_from(source_content, source_len);
+    strv content = strv_make_from(source_content, source_len);
     ac_location_init_with_file(&l->location, filepath, content);
 
     if (source_content && source_len) {
@@ -261,12 +261,12 @@ const struct ac_token* ac_lex_goto_next(struct ac_lex* l)
 
             set_token_value(l, start, n);
 
-            if (dstr_view_equals_str(l->token.text, "true"))
+            if (strv_equals_str(l->token.text, "true"))
             {
                 l->token.type = ac_token_type_LITERAL_BOOL;
                 l->token.u.b.value = true;
             }
-            else if (dstr_view_equals_str(l->token.text, "false"))
+            else if (strv_equals_str(l->token.text, "false"))
             {
                 l->token.type = ac_token_type_LITERAL_BOOL;
                 l->token.u.b.value = false;
@@ -733,7 +733,7 @@ ac_token
 */
 
 struct keyword_item {
-    enum ac_token_type_ type;
+    enum ac_token_type type;
     const char* name;
     size_t size;
 };
@@ -813,10 +813,10 @@ const char* ac_token_type_to_str(enum ac_token_type type) {
     return keyword_items[type].name;
 }
 
-dstr_view ac_token_type_to_strv(enum ac_token_type type) {
+strv ac_token_type_to_strv(enum ac_token_type type) {
 
     const struct keyword_item keyword = keyword_items[type];
-    return dstr_view_make_from(keyword.name, keyword.size);
+    return strv_make_from(keyword.name, keyword.size);
 }
 
 const char* ac_token_to_str(struct ac_token token) {
@@ -829,11 +829,11 @@ const char* ac_token_to_str(struct ac_token token) {
     return ac_token_type_to_str(token.type);
 }
 
-dstr_view ac_token_to_strv(struct ac_token token) {
+strv ac_token_to_strv(struct ac_token token) {
 
     if (token.type == ac_token_type_IDENTIFIER)
     {
-        return (dstr_view){ token.text.size, token.text.data };
+        return (strv){ token.text.size, token.text.data };
     }
 
     return ac_token_type_to_strv(token.type);

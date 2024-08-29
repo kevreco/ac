@@ -389,7 +389,7 @@ static struct ac_ast_expr* parse_unary(struct ac_parser_c* p) {
 
 static struct ac_ast_type_specifier* try_parse_type(struct ac_parser_c* p, struct ac_ast_identifier* identifier)
 {
-    if (!dstr_view_equals_str(identifier->name, "int"))
+    if (!strv_equals_str(identifier->name, "int"))
     {
         ac_report_error_loc(location(p), "This parser can only handle 'int' as type.");
     }
@@ -626,7 +626,7 @@ static struct ac_ast_parameter* parse_parameter(struct ac_parser_c* p)
     param->type_name = type_name;
 
 
-    if (dstr_view_equals_str(param->type_name->name, "void"))
+    if (strv_equals_str(param->type_name->name, "void"))
     {
         goto_next_token(p);
         /* we return early because void parameter function cannot contains other parameters */
@@ -775,8 +775,8 @@ static bool expect(const struct ac_parser_c* p, enum ac_token_type type) {
     struct ac_token current = p->lex.token;
     if (current.type != type)
     {
-        dstr_view expected = ac_token_type_to_strv(type);
-        dstr_view actual = ac_token_to_strv(current);
+        strv expected = ac_token_type_to_strv(type);
+        strv actual = ac_token_to_strv(current);
 
         ac_report_error_loc(current_location, "Syntax error: expected '%.*s', actual '%.*s'\n"
             , expected.size, expected.data
@@ -798,7 +798,7 @@ static bool expect_and_consume(struct ac_parser_c* p, enum ac_token_type type)
         if (token_is(p, ac_token_type_EOF)
             && (!token_equal_type(current, ac_token_type_SEMI_COLON) && !token_equal_type(current, ac_token_type_BRACE_R)))
         {
-            dstr_view current_string = ac_token_to_strv(current);
+            strv current_string = ac_token_to_strv(current);
 
             ac_report_error_loc(current_location, "Syntax error: unexpected end-of-file after: '%.*s'\n"
                 , current_string.size, current_string.data

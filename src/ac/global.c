@@ -25,7 +25,7 @@ static void display_message_v(FILE* file, enum message_type type, struct ac_loca
 static const char* get_message_prefix(enum message_type type);
 
 static bool location_has_row_and_column(struct ac_location l);
-static void print_underline_cursor(FILE* file, dstr_view line, size_t pos);
+static void print_underline_cursor(FILE* file, strv line, size_t pos);
 
 static bool os_std_console_setup();
 static bool os_std_console_color_enabled();
@@ -136,7 +136,7 @@ static void display_message_v(FILE* file, enum message_type type, struct ac_loca
     {
         size_t previous_line_count;
         size_t next_line_count;
-        dstr_view partial_source = dstr_view_get_surrounding_lines(
+        strv partial_source = strv_get_surrounding_lines(
             location.content,
             location.content.data + location.pos - 1,
             surrounding_lines,
@@ -153,15 +153,15 @@ static void display_message_v(FILE* file, enum message_type type, struct ac_loca
         int line_counter = location.row - previous_line_count;
 
         fprintf(file, "\n");
-        dstr_view current_line;
+        strv current_line;
 
-        while (dstr_view_pop_line(&partial_source, &current_line))
+        while (strv_pop_line(&partial_source, &current_line))
         {
             fprintf(file, margin_format, line_counter, current_line.size, current_line.data);
 
             if (location.row == line_counter)
             {
-                if (!dstr_view_ends_with_str(current_line, "\n")) printf("\n");  /* print end of line if necessary before the '^' */
+                if (!strv_ends_with_str(current_line, "\n")) printf("\n");  /* print end of line if necessary before the '^' */
 
                 int margin_char_count = margin_text_size;
 
@@ -173,13 +173,13 @@ static void display_message_v(FILE* file, enum message_type type, struct ac_loca
             ++line_counter;
         }
 
-        if (!dstr_view_ends_with_str(current_line, "\n")) printf("\n"); /* print end of line if necessary after last line */
+        if (!strv_ends_with_str(current_line, "\n")) printf("\n"); /* print end of line if necessary after last line */
 
         fprintf(file, "\n");
     }
     else
     {
-        if (!dstr_view_ends_with_str(dstr_to_view(&message.dstr), "\n")) printf("\n"); /* print end of line if necessary after last line */
+        if (!strv_ends_with_str(dstr_to_view(&message.dstr), "\n")) printf("\n"); /* print end of line if necessary after last line */
     }
 
     dstr256_destroy(&message);
@@ -203,7 +203,7 @@ static inline bool _is_whitespace(char c) {
         || c == '\f' || c == '\v');
 }
 
-static void print_underline_cursor(FILE* file, dstr_view line, size_t pos)
+static void print_underline_cursor(FILE* file, strv line, size_t pos)
 {
     const char* cursor = line.data;
     const char* end = cursor + pos;;

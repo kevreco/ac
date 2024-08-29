@@ -13,7 +13,7 @@ struct ac_location
     const char* filepath;
     int row, col, pos;
     
-    dstr_view content; /* view to the whole content of the file for convenience */
+    strv content; /* view to the whole content of the file for convenience */
 };
 
 static struct ac_location ac_location_empty() {
@@ -22,11 +22,11 @@ static struct ac_location ac_location_empty() {
     l.row = -1;
     l.col = -1;
     l.pos = -1;
-    l.content = dstr_view_make();
+    l.content = strv_make();
     return l;
 }
 
-static void ac_location_init_with_file(struct ac_location* l, const char* filepath, dstr_view content) {
+static void ac_location_init_with_file(struct ac_location* l, const char* filepath, strv content) {
     l->filepath = filepath;
     l->row = 1;
     l->col = 0;
