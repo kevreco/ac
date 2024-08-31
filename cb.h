@@ -58,33 +58,49 @@ typedef unsigned int cb_id; /* hashed key */
 typedef unsigned int cb_bool;
 
 RE_CB_API void cb_init();
-/* Set or create current project. Returns true if the project was just created. */
-RE_CB_API cb_bool cb_project(const char* name); 
+RE_CB_API void cb_destroy();
+
+typedef struct cb_project_t cb_project_t;
+/* Set or create current project.  */
+RE_CB_API cb_project_t* cb_project(const char* name); 
+
 /* Add value for the specific key. */
 RE_CB_API void cb_add(const char* key, const char* value);
+/* Wrapper of cb_set with string formatting */
+RE_CB_API void cb_add_f(const char* key, const char* fmt, ...);
+
 /* Remove all previous values according to the key and set the new one. */
 RE_CB_API void cb_set(const char* key, const char* value);
+/* Wrapper around cb_set with string formatting */
+RE_CB_API void cb_set_f(const char* key, const char* fmt, ...);
+
 /* Remove all values associated with the key. Returns number of removed values */
 RE_CB_API int cb_remove_all(const char* key);
+/* Wrapper around cb_remove_all with string formatting */
+RE_CB_API int cb_remove_all_f(const char* key, const char* fmt, ...);
+
 /* Remove item with the exact key and value. */
 RE_CB_API cb_bool cb_remove_one(const char* key, const char* value);
-     
+/* Wrapper around cb_remove_one with string formatting */
+RE_CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
+
 /* @FIXME: This should be equivalent to use cb_add("file", XXX); in a loop. */
 RE_CB_API void cb_add_files(const char* pattern);
 
-struct cb_toolchain_t;
-typedef cb_bool (*cb_toolchain_bake_t)(struct cb_toolchain_t* tc, const char*);
+typedef struct cb_toolchain cb_toolchain;
+typedef cb_bool (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
 
-typedef struct cb_toolchain_t {
+typedef struct cb_toolchain cb_toolchain;
+struct cb_toolchain {
 	cb_toolchain_bake_t bake;
 	const char* name;
 	const char* default_directory_base;
-} cb_toolchain_t;
+};
 
-RE_CB_API cb_toolchain_t cb_toolchain_msvc();
+RE_CB_API cb_toolchain cb_toolchain_msvc();
 
-RE_CB_API void cb_bake(cb_toolchain_t toolchain, const char* project_name);
-RE_CB_API cb_bool cb_bake_and_run(cb_toolchain_t toolchain, const char* project_name);
+RE_CB_API void cb_bake(cb_toolchain toolchain, const char* project_name);
+RE_CB_API cb_bool cb_bake_and_run(cb_toolchain toolchain, const char* project_name);
 
 /** wildcard matching, supporting * ** ? [] */
 static cb_bool cb_wildmatch(const char* pattern, const char* str); /* forward declaration */
@@ -95,10 +111,11 @@ RE_CB_API cb_bool cb_subprocess(const char* cmd);
 
 /* keys */
 extern const char* cbk_BINARY_TYPE;
+extern const char* cbk_DEFINES;
 extern const char* cbk_INCLUDE_DIR;
 extern const char* cbk_LINK_PROJECT;
 extern const char* cbk_OUTPUT_DIR;
-extern const char* cbk_DEFINES;
+extern const char* cbk_TARGET_NAME;
 /* values */
 extern const char* cbk_exe;
 extern const char* cbk_shared_lib;
@@ -127,20 +144,20 @@ extern const char* cbk_static_lib;
 * 
 * # Structures
 *   - @TODO
-* # functions of internal structures
+* # Functions of internal structures
 *   - cb_log     - write some logs
 *   - cb_darr    - dynamic array
 *   - cb_dstr    - dynamic string
-*   - cb_kv      - key value for map adn multimap
-*   - cb_map     - hash map containg key/value strings
-*   - cb_mmap    - multi map containg key/value strings
-* # functions of the cb library
+*   - cb_kv      - key value for the multimap
+*   - cb_mmap    - multimap containg key/value strings
+* # Functions of the cb library
 *   - cb_project(...) - @TODO explanation
 *   - cb_set(...)     - @TODO explanation
 *   - cb_add(...)     - @TODO explanation
 *   - cb_bake(...)    - @TODO explanation
-* # Drivers
-*   - msvc driver
+* # Toolchain
+*   - msvc
+*   - gcc
 * # External libraries 
 *   - Wildmatch library
 */
@@ -151,7 +168,7 @@ const char* cbk_DEFINES = "defines";
 const char* cbk_INCLUDE_DIR = "include_dir";
 const char* cbk_LINK_PROJECT = "link_project";
 const char* cbk_OUTPUT_DIR = "output_dir";
-
+const char* cbk_TARGET_NAME = "target_name";
 /* values */
 const char* cbk_exe = "exe";
 const char* cbk_shared_lib = "shared_library";
@@ -160,24 +177,22 @@ const char* cbk_static_lib = "static_library";
 #define CB_NULL NULL
 
 /* string view */
-typedef struct cb_strv_t {
+typedef struct cb_strv cb_strv;
+struct cb_strv {
+	int size;
 	const char* data;
-	int size;
-} cb_strv;
+};
 
-/* @TODO remove this if not used */
-/* same as string view but can be modified */
-typedef struct cb_str_span_t {
-	char* data;
+/* dynamic array
+ * NOTE: cb_darr needs to start with the same component as cb_strv
+ * because we need to compare them in the same way in cb_kv 
+ */
+typedef struct cb_darr cb_darr;
+struct cb_darr {
 	int size;
-} cb_str_span;
-
-/* dynamic array */
-typedef struct cb_darr_t {
-	int size;
-    int capacity;
     char* data;
-} cb_darr;
+	int capacity;
+};
 
 /* type safe dynamic array */
 #define cb_darrT(type)    \
@@ -185,8 +200,8 @@ typedef struct cb_darr_t {
         cb_darr base;     \
         struct  {         \
             int size;     \
+			type* data;   \
             int capacity; \
-            type* data;   \
         } darr;           \
     }
 
@@ -237,15 +252,20 @@ typedef cb_darr cb_dstr;
 typedef char* cb_darr_it;
 
 /* key/value data used in the map and mmap struct */
-typedef struct cb_kv_t
+typedef struct cb_kv cb_kv;
+struct cb_kv
 {
 	cb_id hash; /* hash of the key */
 	cb_strv key; /* key */
-	union { int _int; float _float; const void* ptr;  cb_strv strv; } u; /* value */
-} cb_kv;
-
-/* map */
-typedef cb_darrT(cb_kv) cb_map;
+	cb_bool is_dynamic_string;
+	union {
+		int _int;
+		float _float;
+		const void* ptr;
+		cb_strv strv;
+		cb_dstr dstr;
+	} u; /* value */
+};
 
 /* multimap */
 typedef cb_darrT(cb_kv) cb_mmap;
@@ -264,20 +284,22 @@ typedef struct cb_file_command_t {
 	const char* pattern; /* could be a pattern (if glob is set to true) or a regular file path. */
 } cb_file_command;
 
-typedef struct cb_context_t cb_context; /* forward declaration */
+typedef struct cb_context cb_context; /* forward declaration */
 
-typedef struct cb_project_t {
+typedef struct cb_project_t cb_project_t;
+struct cb_project_t {
 	cb_context* context;
 	cb_id id;
 	cb_strv name;
 	cb_darrT(cb_file_command) file_commands;
 
 	cb_mmap mmap; /* multi map of strings - when you want to have multiple values per key */
-} cb_project_t;
+};
 
+typedef struct cb_context cb_context;
 /* context, the root which hold everything */
-struct cb_context_t {
-	cb_map projects;
+struct cb_context {
+	cb_mmap projects;
 	cb_project_t* current_project;
 	cb_darr string_pool; /* to allocate user strings, allow easy allocation of concatenated strings with cb_str */
 };
@@ -340,11 +362,12 @@ cb_darr_ptr(const cb_darr* arr, int index, int sizeof_vlaue)
 	return arr->data + (index * sizeof_vlaue);
 }
 
-static char* cb_darr_end(const cb_darr* arr, int sizeof_value) { return arr->data + (arr->size * sizeof_value); }
+CB_INTERNAL char* cb_darr_end(const cb_darr* arr, int sizeof_value) { return arr->data + (arr->size * sizeof_value); }
 
 static int cb_darr__get_new_capacity(const cb_darr* arr, int sz) { int new_capacity = arr->capacity ? (arr->capacity + arr->capacity / 2) : 8; return new_capacity > sz ? new_capacity : sz; }
 
-static void cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
+static void
+cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 {
 	if (new_capacity <= arr->capacity)
 	{
@@ -368,7 +391,7 @@ cb_darr__grow_if_needed(cb_darr* arr, int needed, int sizeof_value)
 		cb_darr_reserve(arr, cb_darr__get_new_capacity(arr, needed), sizeof_value);
 }
 
-void
+static void
 cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
 {
 	int count_to_move = arr->size - index;
@@ -391,13 +414,13 @@ cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
 	arr->size += count;
 }
 
-void
+static void
 cb_darr_insert_one_space(cb_darr* arr, int index, int sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, 1, sizeof_value);
 }
 
-void
+static void
 cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, count, sizeof_value);
@@ -405,7 +428,7 @@ cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int s
 	memcpy(cb_darr_ptr(arr, index, sizeof_value), value, count * sizeof_value);
 }
 
-void
+static void
 cb_darr_insert_one(cb_darr* arr, int index, const void* value, int sizeof_value)
 {
 	cb_darr_insert_many(arr, index, value, 1, sizeof_value);
@@ -446,33 +469,8 @@ cb_darr_remove_one(cb_darr* arr, int index, int sizeof_value)
 }
 
 typedef cb_bool(*cb_predicate_t)(const void* left, const void* right);
-typedef int (*cb_comp_t)(const void* left, const void* right);
 
-int
-cb_lower_bound_comp(const void* void_ptr, int left, int right, const void* value, int sizeof_value, cb_comp_t comp)
-{
-	const char* ptr = (const char*)void_ptr;
-	int count = right - left;
-	int step;
-	int mid; /* index of the found value */
-
-	while (count > 0) {
-		step = count >> 1; /* count divide by two using bit shift */
-
-		mid = left + step;
-
-		if (comp(ptr + (mid * sizeof_value), value) < 0) {
-			left = mid + 1;
-			count -= step + 1;
-		}
-		else {
-			count = step;
-		}
-	}
-	return left;
-}
-
-int
+static int
 cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* value, int sizeof_value, cb_predicate_t pred)
 {
 	const char* ptr = (const char*)void_ptr;
@@ -485,7 +483,7 @@ cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* 
 
 		mid = left + step;
 
-		if (pred(ptr + (mid * sizeof_value), value) != cb_false) {
+		if (pred(ptr + (mid * sizeof_value), value)) {
 			left = mid + 1;
 			count -= step + 1;
 		}
@@ -495,15 +493,11 @@ cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* 
 	}
 	return left;
 }
-/* @FIXME maybe we can directly create an overload for cb_map and cb_mmap, not sure we want to use raw array with lower_bound */
-static int cb_darr_lower_bound_predicate(const cb_darr* arr, const void* value, int sizeof_value, cb_predicate_t less)
+/* @FIXME maybe we can directly create an overload for cb_mmap, not sure we want to use raw array with lower_bound */
+static int
+cb_darr_lower_bound_predicate(const cb_darr* arr, const void* value, int sizeof_value, cb_predicate_t less)
 {
 	return cb_lower_bound_predicate(arr->data, 0, arr->size, value, sizeof_value, less);
-}
-
-static int cb_darr_lower_bound_comp(const cb_darr* arr, const void* value, int sizeof_value, cb_comp_t comp)
-{
-	return cb_lower_bound_comp(arr->data, 0, arr->size, value, sizeof_value, comp);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -667,35 +661,48 @@ static cb_id cb_hash_strv(cb_strv sv) { return djb2_strv(sv.data, sv.size); }
 /*-----------------------------------------------------------------------*/
 
 static void
-cb_kv__set_key(cb_kv* p, cb_strv sv)
+cb_kv_init(cb_kv* kv, cb_strv sv)
 {
-	p->hash = cb_hash_strv(sv);
-	p->key = sv;
+	memset(kv, 0, sizeof(cb_kv));
+	kv->hash = cb_hash_strv(sv);
+	kv->key = sv;
 }
 
 static cb_kv
 cb_kv_make_with_str(cb_strv sv, const char* value)
 {
-	cb_kv pair;
-	cb_kv__set_key(&pair, sv);
-	pair.u.strv = cb_strv_make_str(value);
-	return pair;
+	cb_kv kv;
+	cb_kv_init(&kv, sv);
+	kv.is_dynamic_string = 0;
+	kv.u.strv = cb_strv_make_str(value);
+	return kv;
 }
 
 static cb_kv
 cb_kv_make_with_ptr(cb_strv sv, const void* ptr)
 {
-	cb_kv pair;
-	cb_kv__set_key(&pair, sv);
-	pair.u.ptr = ptr;
-	return pair;
+	cb_kv kv;
+	cb_kv_init(&kv, sv);
+	kv.is_dynamic_string = 0;
+	kv.u.ptr = ptr;
+	return kv;
+}
+
+static cb_kv
+cb_kv_make_with_dstr(cb_strv sv, cb_dstr value)
+{
+	cb_kv kv;
+	cb_kv_init(&kv, sv);
+	kv.is_dynamic_string = 1;
+	kv.u.dstr = value;
+	return kv;
 }
 
 static int
 cb_kv_comp(const cb_kv* left, const cb_kv* right)
 {
 	return left->hash != right->hash
-		? right->hash - left->hash
+		? (right->hash < left->hash ? -1 : 1)
 		: cb_strv_compare_strv(left->key, right->key);
 }
 
@@ -703,90 +710,6 @@ static cb_bool
 cb_kv_less(const cb_kv* left, const cb_kv* right)
 {
 	return cb_kv_comp(left, right) < 0;
-}
-
-/*-----------------------------------------------------------------------*/
-/* cb_map */
-/*-----------------------------------------------------------------------*/
-
-static void cb_map_init(cb_map* map) { cb_darrT_init(map); }
-static void cb_map_destroy(cb_map* map) { cb_darrT_destroy(map); }
-
-static void cb_map_set(cb_map* map, cb_kv kv)
-{
-	int index = cb_darr_lower_bound_predicate(&map->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
-
-    cb_darrT_insert(map, index, kv);
-}
-
-static int
-cb_map_find(const cb_map* map, const cb_kv* kv)
-{
-    int index = cb_darr_lower_bound_predicate(&map->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
-
-    if (index == map->base.size || cb_kv_less(kv, cb_darrT_ptr(map, index)))
-    {
-		index = map->base.size; /* not found */
-    }
-
-    return index;
-}
-
-static cb_bool cb_map_get_from_kv(cb_map* map, const cb_kv* item, cb_kv* result)
-{
-	int index = cb_map_find(map, item);
-	if (index != map->base.size)
-	{
-		*result = cb_darrT_at(map, index);
-		return cb_true;
-	}
-
-	return cb_false;
-}
-
-static void cb_map_set_ptr(cb_map* map, cb_strv key, const void* value_ptr)
-{
-	cb_map_set(map, cb_kv_make_with_ptr(key, value_ptr));
-}
-
-static const void* cb_map_get_ptr(cb_map* map, cb_strv key, const void* default_value)
-{
-	cb_kv key_item;
-	cb_kv__set_key(&key_item, key);
-	cb_kv result;
-
-	return cb_map_get_from_kv(map, &key_item, &result) ? result.u.ptr : default_value;
-}
-
-static cb_strv cb_map_get_strv(cb_map* map, cb_strv key, cb_strv default_value)
-{
-	cb_kv key_item;
-	cb_kv__set_key(&key_item, key);
-	cb_kv result;
-
-	return cb_map_get_from_kv(map, &key_item, &result) ? result.u.strv : default_value;
-}
-
-static void
-cb_map_insert(cb_map* map, cb_kv kv)
-{
-	/* we don't need to check if something was found or not, if value is not found the new value will be added at the end of the array */
-	int index = cb_darr_lower_bound_predicate(&map->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
-
-	cb_darrT_insert(map, index, kv);
-}
-
-static cb_bool
-cb_map_remove(cb_map* m, cb_kv kv)
-{
-	int index = cb_map_find(m, &kv);
-	if (index != m->darr.size)
-	{
-		cb_darrT_remove(m, index);
-		return cb_true;
-	}
-
-	return cb_false;
 }
 
 /*-----------------------------------------------------------------------*/
@@ -798,20 +721,20 @@ static void cb_mmap_destroy(cb_mmap* m) { cb_darrT_destroy(m); }
 
 static void cb_mmap_insert(cb_mmap* m, cb_kv kv)
 {
-	int index = cb_darr_lower_bound_comp(&m->base, &kv, sizeof(cb_kv), (cb_comp_t)cb_kv_comp);
+	int index = cb_darr_lower_bound_predicate(&m->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
 
 	cb_darrT_insert(m, index, kv);
 }
 
 /* cb_mmap_find does the same as cb_map_find, we should probably remove cb_map implementation if it's not used anymore */
 static int
-cb_mmap_find(const cb_mmap* map, const cb_kv* kv)
+cb_mmap_find(const cb_mmap* m, const cb_kv* kv)
 {
-	int index = cb_darr_lower_bound_predicate(&map->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
+	int index = cb_darr_lower_bound_predicate(&m->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
 
-	if (index == map->base.size || cb_kv_less(kv, cb_darrT_ptr(map, index)))
+	if (index == m->base.size || cb_kv_less(kv, cb_darrT_ptr(m, index)))
 	{
-		index = map->base.size; /* not found */
+		index = m->base.size; /* not found */
 	}
 
 	return index;
@@ -835,8 +758,6 @@ cb_mmap_try_get_first(const cb_mmap* m, cb_strv key, cb_kv* kv)
 CB_INTERNAL cb_kv_range
 cb_mmap_get_range(const cb_mmap* m, cb_strv key)
 {
-	cb_comp_t comp = (cb_comp_t)cb_kv_comp;
-
 	cb_kv_range result = { 0, 0, 0 };
 
 	cb_kv key_item = cb_kv_make_with_str(key, "");
@@ -855,7 +776,8 @@ cb_mmap_get_range(const cb_mmap* m, cb_strv key)
 	result.count++;
 
 	/* Check for other items */
-	while (index != m->base.size && comp(cb_darrT_ptr(m, index), &key_item) == 0)
+	while (index != m->base.size
+		&& cb_kv_comp(cb_darrT_ptr(m, index), &key_item) == 0)
 	{
 		index += 1;
 
@@ -886,9 +808,23 @@ cb_bool cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 
 	return cb_false;
 }
+static void
+cb_mmap_remove_one(cb_mmap* m, int index)
+{
+	/* destroy dynamic string if needed */
+	{
+		cb_kv* kv = cb_darrT_ptr(m, index);
+		if (kv->is_dynamic_string)
+		{
+			cb_dstr_destroy(&kv->u.dstr);
+		}
+	}
+	cb_darrT_remove(m, index);
+}
 
-/* Remove all values found in keys*/
-static int cb_mmap_remove(cb_mmap* m, cb_kv kv)
+/* Remove all values found in keys, if the value was a dynamic string the dynamic string is destroyed */
+static int
+cb_mmap_remove(cb_mmap* m, cb_kv kv)
 {
 	cb_kv_range range = cb_mmap_get_range(m, kv.key);
 
@@ -899,24 +835,65 @@ static int cb_mmap_remove(cb_mmap* m, cb_kv kv)
 	{
 		while (current_index < count_to_remove)
 		{
-			cb_darrT_remove(m, current_index);
+			cb_mmap_remove_one(m, current_index);
 			current_index += 1;
 		}
 	}
 	return count_to_remove;
 }
 
+
+static cb_bool cb_mmap_get_from_kv(cb_mmap* map, const cb_kv* item, cb_kv* result)
+{
+	int index = cb_mmap_find(map, item);
+	if (index != map->base.size)
+	{
+		*result = cb_darrT_at(map, index);
+		return cb_true;
+	}
+
+	return cb_false;
+}
+
+static void cb_mmap_insert_ptr(cb_mmap* map, cb_strv key, const void* value_ptr)
+{
+	cb_mmap_insert(map, cb_kv_make_with_ptr(key, value_ptr));
+}
+
+static const void* cb_mmap_get_ptr(cb_mmap* map, cb_strv key, const void* default_value)
+{
+	cb_kv key_item;
+	cb_kv_init(&key_item, key);
+	cb_kv result;
+
+	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.ptr : default_value;
+}
+
+static cb_strv cb_mmap_get_strv(cb_mmap* map, cb_strv key, cb_strv default_value)
+{
+	cb_kv key_item;
+	cb_kv_init(&key_item, key);
+	cb_kv result;
+
+	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.strv : default_value;
+}
+
 static void cb_context_init(cb_context* ctx)
 {
 	memset(ctx, 0, sizeof(cb_context));
-	cb_map_init(&ctx->projects);
+	cb_mmap_init(&ctx->projects);
 	ctx->current_project = 0;
+}
+static void cb_context_destroy(cb_context* ctx)
+{
+	cb_mmap_destroy(&ctx->projects);
+	cb_context_init(ctx);
 }
 
 static cb_project_t* cb_find_project_by_name(cb_strv sv)
 {
 	void* default_value = CB_NULL;
-	return (cb_project_t*)cb_map_get_ptr(&current_ctx->projects, sv, default_value);
+	return (cb_project_t*)cb_mmap_get_ptr(&current_ctx->projects, sv, default_value);
 }
 
 static cb_project_t* cb_find_project_by_name_str(const char* name) { return cb_find_project_by_name(cb_strv_make_str(name)); }
@@ -946,25 +923,82 @@ static cb_project_t* cb_create_project(const char* name)
 	project->name.data = name;
 	project->name.size = strlen(name);
 	
-	cb_map_set_ptr(&current_ctx->projects, cb_strv_make_str(name), project);
+	cb_mmap_insert_ptr(&current_ctx->projects, cb_strv_make_str(name), project);
 	
     return project;
 }
+
+static cb_project_t*
+cb__current_project()
+{
+	CB_ASSERT(current_ctx->current_project);
+	cb_project_t* p = current_ctx->current_project;
+	CB_ASSERT(p);
+	return p;
+};
 
 /* API */
 
 #ifdef _WIN32
 /* Any error would silently crash any application, this handler is just there to display a message and exit the application with a specific value */
- __declspec(noinline) static LONG WINAPI exit_on_exception_handler(EXCEPTION_POINTERS* ex_ptr)
- {
-    (void)ex_ptr;
+__declspec(noinline) static LONG WINAPI exit_on_exception_handler(EXCEPTION_POINTERS* ex_ptr)
+{
+	(void)ex_ptr;
 	int exit_code=1;
 	printf("[CB] Error: unexpected error. exited with code %d\n", exit_code);
 	exit(exit_code);
 }
 #endif
+static void cb__add(cb_kv kv);
+static void cb__set(cb_kv kv);
+static int cb__remove_all(cb_kv kv);
+static cb_bool cb__remove_one(cb_kv kv);
 
-RE_CB_API void cb_init()
+static void
+cb__add(cb_kv kv)
+{
+	cb_project_t* p = cb__current_project();
+	cb_mmap_insert(&p->mmap, kv);
+}
+
+static void
+cb__set(cb_kv kv)
+{
+	/* @FIXME this can easily be optimized, but we don't care about that right now. */
+	cb__remove_all(kv);
+	cb__add(kv);
+}
+
+static cb_bool
+cb__remove_one(cb_kv kv)
+{
+	cb_project_t* p = cb__current_project();
+
+	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
+
+	while (range.begin < range.begin)
+	{
+		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
+		{
+			int index = p->mmap.darr.data - range.begin;
+			cb_mmap_remove_one(&p->mmap, index);
+			return cb_true;
+		}
+		range.begin++;
+	}
+	return cb_false;
+}
+
+static int
+cb__remove_all(cb_kv kv)
+{
+	 cb_project_t* p = cb__current_project();
+	 return cb_mmap_remove(&p->mmap, kv);
+}
+
+
+RE_CB_API void
+cb_init()
 {
 	cb_context_init(&default_ctx);
 	current_ctx = &default_ctx;
@@ -979,7 +1013,15 @@ RE_CB_API void cb_init()
 #endif
 }
 
-RE_CB_API cb_bool cb_project(const char* name)
+RE_CB_API void
+cb_destroy()
+{
+	/* @TODO remove all projects from current context */
+	cb_context_destroy(&default_ctx);
+}
+
+
+RE_CB_API cb_project_t* cb_project(const char* name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(name);
 	cb_bool is_new_project = project == CB_NULL;
@@ -989,46 +1031,32 @@ RE_CB_API cb_bool cb_project(const char* name)
 	}
 	
 	current_ctx->current_project = project;
-	return is_new_project;
+	return project;
 }
-
-RE_CB_API void cb_add_files(const char* pattern)
-{
-	CB_ASSERT(current_ctx->current_project);
-	
-	cb_project_t* p = current_ctx->current_project;
-	
-	cb_file_command cmd;
-	cmd.glob = 1; 
-	cmd.pattern = pattern;
-
-	cb_darrT_push_back(&p->file_commands, cmd);
-}
-
-RE_CB_API void cb_add_file(const char* file)
-{
-	CB_ASSERT(current_ctx->current_project);
-	
-	cb_project_t* p = current_ctx->current_project;
-	
-	cb_file_command cmd;
-	cmd.glob = 0; 
-	cmd.pattern = file;
-
-	cb_darrT_push_back(&p->file_commands, cmd);
-}
-
 
 RE_CB_API void
 cb_add(const char* key, const char* value)
 {
-	CB_ASSERT(current_ctx->current_project);
-
-	cb_project_t* p = current_ctx->current_project;
+	cb_project_t* p = cb__current_project();
 
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
 
 	cb_mmap_insert(&p->mmap, kv);
+}
+
+RE_CB_API void
+cb_add_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
 }
 
 RE_CB_API void
@@ -1039,34 +1067,89 @@ cb_set(const char* key, const char* value)
 	cb_add(key, value);
 }
 
+RE_CB_API void
+cb_set_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	cb__set(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+}
+
 RE_CB_API int
 cb_remove_all(const char* key)
 {
-	cb_project_t* p = current_ctx->current_project;
-
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
-	return cb_mmap_remove(&p->mmap, kv);
+	return cb__remove_all(kv);
+}
+
+RE_CB_API int
+cb_remove_all_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	int count;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	count = cb__remove_all(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+	return count;
 }
 
 RE_CB_API cb_bool
 cb_remove_one(const char* key, const char* value)
 {
-	cb_project_t* p = current_ctx->current_project;
-
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
-	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
+	return cb__remove_one(kv);
+}
 
-	while (range.begin < range.begin)
-	{
-		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
-		{
-			int index = p->mmap.darr.data - range.begin;
-			cb_darrT_remove(&p->mmap, index);
-			return cb_true;
-		}
-		range.begin++;
-	}
-	return cb_false;
+RE_CB_API cb_bool
+cb_remove_one_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	cb_bool was_removed;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	was_removed = cb__remove_one(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+	return was_removed;
+}
+
+RE_CB_API void
+cb_add_files(const char* pattern)
+{
+	cb_file_command cmd;
+	cmd.glob = 1;
+	cmd.pattern = pattern;
+
+	cb_project_t* p = cb__current_project();
+	cb_darrT_push_back(&p->file_commands, cmd);
+}
+
+RE_CB_API void
+cb_add_file(const char* file)
+{
+	cb_file_command cmd;
+	cmd.glob = 0;
+	cmd.pattern = file;
+
+	cb_project_t* p = cb__current_project();
+	cb_darrT_push_back(&p->file_commands, cmd);
 }
 
 /* #file utils */
@@ -1126,7 +1209,9 @@ static cb_strv cb_path_basename(cb_strv s)
 #define CB_MAX_PATH 1024 /* this is an arbitrary limit */
 
 /* file iterator (can be recursive) */
-typedef struct cb_file_it_t {
+typedef struct cb_file_it cb_file_it;
+struct cb_file_it {
+	cb_bool recursive;
 	cb_bool has_next;
 
     /* stack used for recursion */
@@ -1147,8 +1232,7 @@ typedef struct cb_file_it_t {
 	DIR* handle_stack[CB_MAX_DIR_DEPTH];
 	struct dirent* find_data;
 #endif
-
-} cb_file_it;
+};
 
 #define cb_safe_strcpy(dst, src, index, max) cb_safe_strcpy_internal(dst, src, index, max, __FILE__, __LINE__)
 static int cb_safe_strcpy_internal(char* dst, const char* src, int index, int max, const char* file, int line)
@@ -1299,6 +1383,12 @@ static void cb_file_it_init(cb_file_it* it, const char* base_directory)
 	cb_file_it__push_dir(it, base_directory);
 }
 
+static void cb_file_it_init_recursive(cb_file_it* it, const char* base_directory)
+{
+	cb_file_it_init(it, base_directory);
+	it->recursive = cb_true;;
+}
+
 static void cb_file_it_destroy(cb_file_it* it)
 {
 	while(it->stack_size > 0)
@@ -1349,7 +1439,7 @@ static cb_bool cb_file_it_get_next(cb_file_it* it)
 	/* build path with current file found */
 	cb_safe_combine_path(it->current_file, found, it->dir_len_stack[it->stack_size]);
 
-	if (is_directory)
+	if (is_directory && it->recursive)
 	{
 		cb_file_it__push_dir(it, found);
 	}
@@ -1514,14 +1604,14 @@ static cb_bool cb_copy_file(const char* src_path, const char* dest_path)
 }
 
 /* recursively copy the content of the directory in another one, empty directory will be omitted */
-static cb_bool cb_copy_directory(const char* source_dir, const char* target_dir)
+static cb_bool
+cb_copy_directory(const char* source_dir, const char* target_dir)
 {
-	/* only use to copy a directory */
 	char dest_buffer[CB_MAX_PATH];
 	memset(dest_buffer, 0, sizeof(dest_buffer));
 
 	cb_file_it it;
-	cb_file_it_init(&it, source_dir);
+	cb_file_it_init_recursive(&it, source_dir);
 
 	while (cb_file_it_get_next(&it))
 	{
@@ -1536,7 +1626,6 @@ static cb_bool cb_copy_directory(const char* source_dir, const char* target_dir)
 	}
 	return cb_true;
 }
-
 
 static cb_bool
 cb_delete_file(const char* src_path)
@@ -1569,7 +1658,6 @@ cb_move_file(const char* src_path, const char* dest_path)
 static cb_bool
 cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)(cb_strv path))
 {
-	/* only use to copy a directory */
 	char dest_buffer[CB_MAX_PATH];
 	memset(dest_buffer, 0, sizeof(dest_buffer));
 
@@ -1578,7 +1666,7 @@ cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)
 
 	while (cb_file_it_get_next(&it))
 	{
-		/* copy current directory*/
+		/* copy current directory */
 		const char* source_relative_path = it.current_file + it.dir_len_stack[0];
 
 		int n = snprintf(dest_buffer, CB_MAX_PATH, "%s", target_dir);
@@ -1617,7 +1705,7 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 }
 
 RE_CB_API void
-cb_bake(cb_toolchain_t toolchain, const char* project_name)
+cb_bake(cb_toolchain toolchain, const char* project_name)
 {
 	toolchain.bake(&toolchain, project_name);
 }
@@ -1641,7 +1729,7 @@ cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_o
 }
 
 RE_CB_API cb_bool
-cb_bake_and_run(cb_toolchain_t toolchain, const char* project_name)
+cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 {
 	cb_bake(toolchain, project_name);
 	
@@ -2017,7 +2105,7 @@ cb_subprocess(const char* str)
 /* #msvc #toolchain */
 
 RE_CB_API cb_bool
-cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
+cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
@@ -2107,7 +2195,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 
 		if (cmd.glob)
 		{
-			cb_file_it_init(&it, ".");
+			cb_file_it_init_recursive(&it, ".");
 
 			while(cb_file_it_get_next_glob(&it, cmd.pattern))
 			{
@@ -2201,10 +2289,10 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	return cb_true;
 }
 
-RE_CB_API cb_toolchain_t
+RE_CB_API cb_toolchain
 cb_toolchain_msvc()
 {
-	cb_toolchain_t tc;
+	cb_toolchain tc;
 	tc.bake = cb_toolchain_msvc_bake;
 	tc.name = "msvc";
 	tc.default_directory_base = ".cb\\msvc";
@@ -2224,7 +2312,7 @@ cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 {
 	if (sv.size < rhs.size)
 	{
-		return (cb_bool)(0);
+		return cb_false;
 	}
 
 	cb_strv sub = cb_strv_make(sv.data + (sv.size - rhs.size), rhs.size);
@@ -2234,16 +2322,16 @@ cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 static cb_bool
 is_created_by_gcc(cb_strv file)
 {
-	static cb_strv o_ext = { ".o" , 2 };
-	static cb_strv so_ext = { ".so" , 3 };
-	static cb_strv a_ext = { ".a" , 3 };
+	static cb_strv o_ext = { 2, ".o" };
+	static cb_strv so_ext = { 3, ".so" };
+	static cb_strv a_ext = { 2, ".a" };
 	return cb_strv_ends_with(file, o_ext)
 		|| cb_strv_ends_with(file, so_ext)
 		|| cb_strv_ends_with(file, a_ext);
 }
 
 RE_CB_API cb_bool
-cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
+cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
@@ -2279,7 +2367,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	CB_ASSERT(is_exe || is_shared_library || is_static_library && "Unknown library type");
 
 	const char* ext = "";
-	ext = is_exe ? "" : ext;
+	ext = is_exe ? "" : ext; /* do not provide extension to executables on linux */
 	ext = is_static_library ? ".a" : ext;
 	ext = is_shared_library ? ".so" : ext;
 
@@ -2332,7 +2420,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 
 		if (cmd.glob)
 		{
-			cb_file_it_init(&it, ".");
+			cb_file_it_init_recursive(&it, ".");
 
 			while (cb_file_it_get_next_glob(&it, cmd.pattern))
 			{
@@ -2458,10 +2546,10 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	return cb_true;
 }
 
-RE_CB_API cb_toolchain_t
+RE_CB_API cb_toolchain
 cb_toolchain_gcc()
 {
-	cb_toolchain_t tc;
+	cb_toolchain tc;
 	tc.bake = cb_toolchain_gcc_bake;
 	tc.name = "gcc";
 	tc.default_directory_base = ".cb/gcc";
@@ -2470,7 +2558,7 @@ cb_toolchain_gcc()
 
 #endif /* #else of _WIN32 */
 
-RE_CB_API cb_toolchain_t
+RE_CB_API cb_toolchain
 cb_toolchain_default()
 {
 #ifdef _WIN32
