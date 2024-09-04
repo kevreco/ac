@@ -4,19 +4,18 @@
 #define RE_CB_IMPLEMENTATION
 #include "cb.h"
 
-void build_static_library();
-void build_shared_libraries();
-void build_exe_with_dependencies();
-void build_with_configs();
+int build_static_library();
+int build_shared_libraries();
+int build_exe_with_dependencies();
+int build_with_configs();
+int build_with_platform_specific_flags();
 
 int main()
 {
-	build_with_configs();
-	
-	return 0;
+	return build_with_platform_specific_flags();
 }
 
-void build_static_library()
+int build_static_library()
 {
 	cb_init();
 
@@ -31,12 +30,17 @@ void build_static_library()
 		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/cpp");
 	}
 
-	cb_bake(cb_toolchain_default(), "ac");
+	if (!cb_bake(cb_toolchain_default(), "ac"))
+	{
+		return -1;
+	}
 
 	cb_destroy();
+
+	return 0;
 }
 
-void build_shared_libraries()
+int build_shared_libraries()
 {
 	cb_init();
 
@@ -60,13 +64,18 @@ void build_shared_libraries()
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
 
-	cb_bake(cb_toolchain_default(), "dyn_lib_a");
-	cb_bake(cb_toolchain_default(), "dyn_lib_b");
+	if (!cb_bake(cb_toolchain_default(), "dyn_lib_a")
+		|| !cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+	{
+		return -1;
+	}
 
 	cb_destroy();
+
+	return 0;
 }
 
-void build_exe_with_dependencies()
+int build_exe_with_dependencies()
 {
 	cb_init();
 
@@ -119,15 +128,32 @@ void build_exe_with_dependencies()
 	}
 
 
-	cb_bake(cb_toolchain_default(), "ac");
-	cb_bake(cb_toolchain_default(), "dyn_lib_a");
-	cb_bake(cb_toolchain_default(), "dyn_lib_b");
-	cb_bake_and_run(cb_toolchain_default(), "ac_tester");
+	if (!cb_bake(cb_toolchain_default(), "ac"))
+	{
+		return -1;
+	}
+
+	if (!cb_bake(cb_toolchain_default(), "dyn_lib_a"))
+	{
+		return -1;
+	}
+
+	if (!cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+	{
+		return -1;
+	}
+
+	if (!cb_bake_and_run(cb_toolchain_default(), "ac_tester"))
+	{
+		return -1;
+	}
 
 	cb_destroy();
+
+	return 0;
 }
 
-void build_ex(const char* arch, const char* config)
+int build_ex(const char* arch, const char* config)
 {
 	cb_init();
 	
@@ -188,15 +214,29 @@ void build_ex(const char* arch, const char* config)
 		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/c");
 	}
 	
-	cb_bake(cb_toolchain_default(), "ac");
-	cb_bake(cb_toolchain_default(), "dyn_lib_a");
-	cb_bake(cb_toolchain_default(), "dyn_lib_b");
-	cb_bake_and_run(cb_toolchain_default(), "ac_tester");
+	if (!cb_bake(cb_toolchain_default(), "ac"))
+	{
+		return -1;
+	}
+	if (!cb_bake(cb_toolchain_default(), "dyn_lib_a"))
+	{
+		return -1;
+	}
+	if (!cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+	{
+		return -1;
+	}
+	if (cb_bake_and_run(cb_toolchain_default(), "ac_tester"))
+	{
+		return -1;
+	}
 	
 	cb_destroy();
+
+	return 0;
 }
 
-void build_with_configs()
+int build_with_configs()
 {
 	const char* end = 0;
 	const char* arch[] = { "x86",  "x64", end };
@@ -206,7 +246,149 @@ void build_with_configs()
 	{
 		for (const char** c = config; *c != end; c++)
 		{
-			build_ex(*a, *c);
+			if (build_ex(*a, *c) != 0)
+			{
+				return -1;
+			}
 		}
 	}
+
+	return 0;
+}
+
+/* shortcut to create a project with default config flags */
+void my_project(const char* project_name, const char* toolchain, const char* arch, const char* config)
+{
+	cb_project(project_name);
+	cb_set_f(cbk_OUTPUT_DIR, ".build/%s_%s_%s/%s/", toolchain, arch, config, project_name);
+
+	/* Defines the MESSAGE constant define which is used for the dynamic library samples */
+	cb_add_f(cbk_DEFINES, "MESSAGE=%s_%s_%s", toolchain, arch, config);
+
+	cb_bool is_debug = cb_str_equals(config, "Debug");
+	if (cb_str_equals(toolchain, "msvc"))
+	{
+		if (is_debug)
+		{
+			cb_add_f(cbk_CXFLAGS, "/Zi", project_name); /* Produce debugging information (.pdb) */
+			cb_add(cbk_CXFLAGS, "-Od");    /* Disable optimization */
+			cb_add(cbk_DEFINES, "DEBUG");  /* Add DEBUG constant define */
+		}
+		else
+		{
+			cb_add(cbk_CXFLAGS, "-O2");   /* Optimization level 2 */
+		}
+	}
+	else if (cb_str_equals(toolchain, "gcc"))
+	{
+		if (is_debug)
+		{
+			cb_add(cbk_CXFLAGS, "-g");    /* Produce debugging information  */
+			cb_add(cbk_CXFLAGS, "-p");    /* Profile compilation (in case of performance analysis)  */
+			cb_add(cbk_CXFLAGS, "-O0");   /* Disable optimization */
+			cb_add(cbk_DEFINES, "DEBUG"); /* Add DEBUG constant define */
+		}
+		else
+		{
+			cb_add(cbk_CXFLAGS, "-O2");   /* Optimization level 2 */
+		}
+	}
+}
+
+int build_ex_with_platform_specific_flags(const char* arch, const char* config)
+{
+	cb_init();
+
+	const char* toolchain_name = cb_toolchain_default().name;
+	const char* project_name;
+
+	{
+		my_project("ac", toolchain_name, arch, config);
+
+		cb_add_files("*/src/ac/*.c");
+
+		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
+		cb_add(cbk_INCLUDE_DIR, "./src/ac");
+		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/c");
+		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/cpp");
+	}
+
+	{
+		my_project("dyn_lib_a", toolchain_name, arch, config);
+
+		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
+
+		cb_add_files("*/src/dyn_lib_a/*.c");
+
+		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
+	}
+	{
+		my_project("dyn_lib_b", toolchain_name, arch, config);
+
+		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
+
+		cb_add_files("*/src/dyn_lib_b/*.c");
+
+		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
+	}
+
+	/* build an exe that use a static library and two dynamic libraries */
+	{
+		my_project("ac_tester", toolchain_name, arch, config);
+
+		cb_add(cbk_LINK_PROJECT, "ac");
+		cb_add(cbk_LINK_PROJECT, "dyn_lib_a");
+		cb_add(cbk_LINK_PROJECT, "dyn_lib_b");
+
+		cb_add_files("*/src/tester/*.c");
+		cb_set(cbk_BINARY_TYPE, cbk_exe);
+
+		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_a");
+		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_b");
+		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/c");
+	}
+
+	if (!cb_bake(cb_toolchain_default(), "ac"))
+	{
+		return -1;
+	}
+
+	if (!cb_bake(cb_toolchain_default(), "dyn_lib_a"))
+	{
+		return -1;
+	}
+
+	if (!cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+	{
+		return -1;
+	}
+
+	if (!cb_bake_and_run(cb_toolchain_default(), "ac_tester"))
+	{
+		return -1;
+	}
+
+	cb_destroy();
+	return 0;
+
+}
+
+int build_with_platform_specific_flags()
+{
+	const char* end = 0;
+	const char* arch[] = { "x86", "x64", end };
+	const char* config[] = { "Release", "Debug", end };
+
+	for (const char** a = arch; *a != end; a++)
+	{
+		for (const char** c = config; *c != end; c++)
+		{
+			if (build_ex_with_platform_specific_flags(*a, *c) != 0)
+			{
+				return -1;
+			}
+		}
+	}
+
+	return 0;
 }

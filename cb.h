@@ -99,7 +99,7 @@ struct cb_toolchain {
 
 RE_CB_API cb_toolchain cb_toolchain_msvc();
 
-RE_CB_API void cb_bake(cb_toolchain toolchain, const char* project_name);
+RE_CB_API cb_bool cb_bake(cb_toolchain toolchain, const char* project_name);
 RE_CB_API cb_bool cb_bake_and_run(cb_toolchain toolchain, const char* project_name);
 
 /** wildcard matching, supporting * ** ? [] */
@@ -110,7 +110,8 @@ RE_CB_API cb_bool cb_subprocess(const char* cmd);
 /* commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
-extern const char* cbk_BINARY_TYPE;
+extern const char* cbk_BINARY_TYPE;   /* exe, shared_lib or static_lib */
+extern const char* cbk_CXFLAGS;       /* extra flags to give to the C/C++ compiler */
 extern const char* cbk_DEFINES;
 extern const char* cbk_INCLUDE_DIR;
 extern const char* cbk_LINK_PROJECT;
@@ -164,6 +165,7 @@ extern const char* cbk_static_lib;
 
 /* keys */
 const char* cbk_BINARY_TYPE = "binary_type";
+const char* cbk_CXFLAGS = "cxflags";
 const char* cbk_DEFINES = "defines";
 const char* cbk_INCLUDE_DIR = "include_dir";
 const char* cbk_LINK_PROJECT = "link_project";
@@ -528,6 +530,12 @@ int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv
 cb_bool cb_strv_equals(cb_strv sv, const char* data, int size) { return cb_strv_compare(sv, data, size) == 0; }
 cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
 cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
+
+/*-----------------------------------------------------------------------*/
+/* cb_str - c string utilities */
+/*-----------------------------------------------------------------------*/
+
+cb_bool cb_str_equals(const char* left, const char* right) { return cb_strv_equals_strv(cb_strv_make_str(left), cb_strv_make_str(right)); }
 
 /*-----------------------------------------------------------------------*/
 /* cb_dstr - dynamic string */
@@ -995,7 +1003,6 @@ cb__remove_all(cb_kv kv)
 	 cb_project_t* p = cb__current_project();
 	 return cb_mmap_remove(&p->mmap, kv);
 }
-
 
 RE_CB_API void
 cb_init()
@@ -1704,10 +1711,10 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 		&& cb_strv_equals_str(result, comparison_value);
 }
 
-RE_CB_API void
+RE_CB_API cb_bool
 cb_bake(cb_toolchain toolchain, const char* project_name)
 {
-	toolchain.bake(&toolchain, project_name);
+	return toolchain.bake(&toolchain, project_name);
 }
 
 static void
@@ -1731,7 +1738,10 @@ cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_o
 RE_CB_API cb_bool
 cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 {
-	cb_bake(toolchain, project_name);
+	if (!cb_bake(toolchain, project_name))
+	{
+		return cb_false;
+	}
 	
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
@@ -2130,7 +2140,10 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* Format output directory */
 	cb_dstr_add_output_path(&str_ouput_path, project, tc->default_directory_base);
 
+	/* Create output directory if it does not exist yet. */
 	cb_create_directory_recursively(str_ouput_path.data, str_ouput_path.size);
+
+
 	cb_dstr_append_v(&str, "cl.exe", _);
 
 	/* Handle binary type */
@@ -2160,6 +2173,17 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	if (is_exe || is_shared_library)
 	{
 		cb_dstr_append_v(&str, "/Fe", str_ouput_path.data, "\\", project_name, ext, _);
+	}
+
+	/* Append flags */
+	{
+		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
+		cb_kv current;
+		while (cb_mmap_range_get_next(&range, &current))
+		{
+			cb_dstr_append_strv(&str, current.u.strv);
+			cb_dstr_append_str(&str,  _);
+		}
 	}
 
 	/* Append include directories */
@@ -2211,10 +2235,6 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 			cb_file_it_destroy(&it);
 		}
-		else
-		{
-			CB_ASSERT("Not Implemented Yet");
-		}
 	}
 
 	/* for each linked project we add the link information to the cl.exe command */
@@ -2264,6 +2284,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* execute cl.exe */
 	if (!cb_subprocess(str.data))
 	{
+		/* @FIXME: Release all allocated objects here. */
 		return cb_false;
 	}
 	
@@ -2277,6 +2298,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	
 		if (!cb_subprocess(str.data))
 		{
+			/* @FIXME: Release all allocated objects here. */
 			cb_log_error("Could not execute command to build static library\n");
 			return cb_false;
 		}
@@ -2356,7 +2378,10 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	/* Format output directory */
 	cb_dstr_add_output_path(&str_ouput_path, project, tc->default_directory_base);
 
+	/* Create output directory if it does not exist yet. */
 	cb_create_directory_recursively(str_ouput_path.data, str_ouput_path.size);
+
+	/* Start command */
 	cb_dstr_append_v(&str, "cc ", _);
 
 	/* Handle binary type */
@@ -2438,10 +2463,6 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 			cb_file_it_destroy(&it);
 		}
-		else
-		{
-			CB_ASSERT("Not Implemented Yet");
-		}
 	}
 
 	/* for each linked project we add the link information to the gcc command */
@@ -2492,6 +2513,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	/* Example: gcc <includes> -c  <c source files> */
 	if (!cb_subprocess(str.data))
 	{
+		/* @FIXME: Release all allocated objects here. */
 		return cb_false;
 	}
 
@@ -2504,6 +2526,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		if (chmod(project_name, mode) < 0)
 		{
 			cb_log_error("Could not give executable permission to '%s'.", project_name);
+			/* @FIXME: Release all allocated objects here. */
 			return cb_false;
 		}
 		/* move executable to the output directory */
@@ -2517,6 +2540,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		if (!cb_move_files("./", str_ouput_path.data, is_created_by_gcc))
 		{
 			cb_log_error("Could not move files from './' to '%s'.", str_ouput_path.data);
+			/* @FIXME: Release all allocated objects here. */
 			return cb_false;
 		}
 
@@ -2527,6 +2551,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			cb_dstr_assign_f(&str, "ar -crs %slib%s%s %s", str_ouput_path.data, project_name, ext, str_obj.data);
 			if (!cb_subprocess(str.data))
 			{
+				/* @FIXME: Release all allocated objects here. */
 				return cb_false;
 			}
 			cb_log_important("Created static library: %slib%s%s", str_ouput_path.data, project_name, ext);
