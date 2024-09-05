@@ -29,10 +29,10 @@ if [ -v gcc ]; then
 fi
 
 # exit code not equal to 0
-if [ $? -ne 0 ]; then echo "ERROR: Could not run the compiler command properly."; fi
+if [ $? -ne 0 ]; then echo "ERROR: Could not run the compiler command properly."; exit 1; fi
 
 if [ -v run ]; then
    exec $output
 fi
 
-if [ $? -ne 0 ]; then echo "ERROR: Could not run the builder properly."; fi
+if [ $? -ne 0 ]; then echo "ERROR: Could not run the builder properly."; exit 1; fi
