@@ -54,6 +54,7 @@
 extern "C" {
 #endif
 
+/* @TODO rename cb_id to cb_hash? */
 typedef unsigned int cb_id; /* hashed key */
 typedef unsigned int cb_bool;
 
@@ -176,8 +177,6 @@ const char* cbk_exe = "exe";
 const char* cbk_shared_lib = "shared_library";
 const char* cbk_static_lib = "static_library";
 
-#define CB_NULL NULL
-
 /* string view */
 typedef struct cb_strv cb_strv;
 struct cb_strv {
@@ -225,7 +224,6 @@ struct cb_darr {
         cb_darr_insert_one_space(&(a)->base, (index), sizeof(*(a)->darr.data)); \
 		(a)->darr.data[(index)] = value; \
 	} while (0)
-
 
 #define cb_darrT_remove(a, index) \
     do {  \
@@ -313,7 +311,8 @@ static cb_context* current_ctx;
 /* cb_log */
 /*-----------------------------------------------------------------------*/
 
-void cb_log(FILE* file, const char* prefix, const char* fmt, ...)
+CB_INTERNAL void
+cb_log(FILE* file, const char* prefix, const char* fmt, ...)
 {
 	fprintf(file, prefix);
 
@@ -334,21 +333,23 @@ void cb_log(FILE* file, const char* prefix, const char* fmt, ...)
 /* cb_darr - dynamic array */
 /*-----------------------------------------------------------------------*/
 
-static void cb_darr_init(cb_darr* arr)
+CB_INTERNAL void
+cb_darr_init(cb_darr* arr)
 {
 	arr->size = 0;
 	arr->capacity = 0;
-	arr->data = CB_NULL;
+	arr->data = NULL;
 }
 
-static void cb_darr_destroy(cb_darr* arr)
+CB_INTERNAL void
+cb_darr_destroy(cb_darr* arr)
 {
-	if (arr->data != CB_NULL)
+	if (arr->data != NULL)
 	{
 		arr->size = 0;
 		arr->capacity = 0;
 		CB_FREE(arr->data);
-		arr->data = CB_NULL;
+		arr->data = NULL;
 	} 
 }
 
@@ -366,9 +367,14 @@ cb_darr_ptr(const cb_darr* arr, int index, int sizeof_vlaue)
 
 CB_INTERNAL char* cb_darr_end(const cb_darr* arr, int sizeof_value) { return arr->data + (arr->size * sizeof_value); }
 
-static int cb_darr__get_new_capacity(const cb_darr* arr, int sz) { int new_capacity = arr->capacity ? (arr->capacity + arr->capacity / 2) : 8; return new_capacity > sz ? new_capacity : sz; }
+CB_INTERNAL int
+cb_darr__get_new_capacity(const cb_darr* arr, int sz)
+{
+	int new_capacity = arr->capacity ? (arr->capacity + arr->capacity / 2) : 8;
+	return new_capacity > sz ? new_capacity : sz;
+}
 
-static void
+CB_INTERNAL void
 cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 {
 	if (new_capacity <= arr->capacity)
@@ -378,7 +384,7 @@ cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 
 	char* new_data = (char*)CB_MALLOC((size_t)new_capacity * sizeof_value);
 	CB_ASSERT(new_data);
-	if (arr->data != CB_NULL) {
+	if (arr->data != NULL) {
 		memcpy(new_data, arr->data, (size_t)arr->size * sizeof_value);
 		CB_FREE(arr->data);
 	}
@@ -393,7 +399,7 @@ cb_darr__grow_if_needed(cb_darr* arr, int needed, int sizeof_value)
 		cb_darr_reserve(arr, cb_darr__get_new_capacity(arr, needed), sizeof_value);
 }
 
-static void
+CB_INTERNAL void
 cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
 {
 	int count_to_move = arr->size - index;
@@ -416,13 +422,13 @@ cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
 	arr->size += count;
 }
 
-static void
+CB_INTERNAL void
 cb_darr_insert_one_space(cb_darr* arr, int index, int sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, 1, sizeof_value);
 }
 
-static void
+CB_INTERNAL void
 cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, count, sizeof_value);
@@ -430,19 +436,19 @@ cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int s
 	memcpy(cb_darr_ptr(arr, index, sizeof_value), value, count * sizeof_value);
 }
 
-static void
+CB_INTERNAL void
 cb_darr_insert_one(cb_darr* arr, int index, const void* value, int sizeof_value)
 {
 	cb_darr_insert_many(arr, index, value, 1, sizeof_value);
 }
 
-static void
+CB_INTERNAL void
 cb_darr_push_back_many(cb_darr* arr, const void* values_ptr, int count, int sizeof_value)
 {
 	cb_darr_insert_many(arr, arr->size, values_ptr, count, sizeof_value);
 }
 
-static void
+CB_INTERNAL void
 cb_darr_remove_many(cb_darr* arr, int index, int count, int sizeof_value)
 {
 	CB_ASSERT(arr);
@@ -464,7 +470,7 @@ cb_darr_remove_many(cb_darr* arr, int index, int count, int sizeof_value)
 	arr->size -= count;
 }
 
-static void
+CB_INTERNAL void
 cb_darr_remove_one(cb_darr* arr, int index, int sizeof_value)
 {
 	cb_darr_remove_many(arr, index, 1, sizeof_value);
@@ -472,7 +478,7 @@ cb_darr_remove_one(cb_darr* arr, int index, int sizeof_value)
 
 typedef cb_bool(*cb_predicate_t)(const void* left, const void* right);
 
-static int
+CB_INTERNAL int
 cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* value, int sizeof_value, cb_predicate_t pred)
 {
 	const char* ptr = (const char*)void_ptr;
@@ -495,8 +501,9 @@ cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* 
 	}
 	return left;
 }
+
 /* @FIXME maybe we can directly create an overload for cb_mmap, not sure we want to use raw array with lower_bound */
-static int
+CB_INTERNAL int
 cb_darr_lower_bound_predicate(const cb_darr* arr, const void* value, int sizeof_value, cb_predicate_t less)
 {
 	return cb_lower_bound_predicate(arr->data, 0, arr->size, value, sizeof_value, less);
@@ -506,10 +513,23 @@ cb_darr_lower_bound_predicate(const cb_darr* arr, const void* value, int sizeof_
 /* cb_strv - string view */
 /*-----------------------------------------------------------------------*/
 
-static cb_strv cb_strv_make(const char* data, int size) { cb_strv s; s.data = data; s.size = size; return s; }
-static cb_strv cb_strv_make_str(const char* str) { return cb_strv_make(str, strlen(str)); }
+CB_INTERNAL cb_strv
+cb_strv_make(const char* data, int size)
+{
+	cb_strv s;
+	s.data = data;
+	s.size = size; 
+	return s;
+}
 
-static int cb_lexicagraphical_cmp(const char* left, size_t left_count, const char* right, size_t right_count)
+CB_INTERNAL cb_strv
+cb_strv_make_str(const char* str)
+{
+	return cb_strv_make(str, strlen(str));
+}
+
+CB_INTERNAL int
+cb_lexicagraphical_cmp(const char* left, size_t left_count, const char* right, size_t right_count)
 {
 	char c1, c2;
 	size_t min_size = left_count < right_count ? left_count : right_count;
@@ -524,18 +544,18 @@ static int cb_lexicagraphical_cmp(const char* left, size_t left_count, const cha
 	return left_count - right_count;
 }
 
-int cb_strv_compare(cb_strv sv, const char* data, int size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
-int cb_strv_compare_strv(cb_strv sv, cb_strv other) { return cb_strv_compare(sv, other.data, other.size); }
-int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv, str, strlen(str)); }
-cb_bool cb_strv_equals(cb_strv sv, const char* data, int size) { return cb_strv_compare(sv, data, size) == 0; }
-cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
-cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
+CB_INTERNAL int cb_strv_compare(cb_strv sv, const char* data, int size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
+CB_INTERNAL int cb_strv_compare_strv(cb_strv sv, cb_strv other) { return cb_strv_compare(sv, other.data, other.size); }
+CB_INTERNAL int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv, str, strlen(str)); }
+CB_INTERNAL cb_bool cb_strv_equals(cb_strv sv, const char* data, int size) { return cb_strv_compare(sv, data, size) == 0; }
+CB_INTERNAL cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
+CB_INTERNAL cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
 
 /*-----------------------------------------------------------------------*/
 /* cb_str - c string utilities */
 /*-----------------------------------------------------------------------*/
 
-cb_bool cb_str_equals(const char* left, const char* right) { return cb_strv_equals_strv(cb_strv_make_str(left), cb_strv_make_str(right)); }
+CB_INTERNAL cb_bool cb_str_equals(const char* left, const char* right) { return cb_strv_equals_strv(cb_strv_make_str(left), cb_strv_make_str(right)); }
 
 /*-----------------------------------------------------------------------*/
 /* cb_dstr - dynamic string */
@@ -546,13 +566,14 @@ cb_bool cb_str_equals(const char* left, const char* right) { return cb_strv_equa
     , (const char* []) { __VA_ARGS__ } \
 	, (sizeof((const char* []) { __VA_ARGS__ }) / sizeof(const char*)))
 
-static const char* cb_empty_string() { return "\0EMPTY_STRING"; }
-static void cb_dstr_init(cb_dstr* dstr) { cb_darr_init(dstr); dstr->data = (char*)cb_empty_string(); }
-static void cb_dstr_destroy(cb_dstr* dstr) { if (dstr->data == cb_empty_string()) { dstr->data = CB_NULL; } cb_darr_destroy(dstr); }
+CB_INTERNAL const char* cb_empty_string() { return "\0EMPTY_STRING"; }
+CB_INTERNAL void cb_dstr_init(cb_dstr* dstr) { cb_darr_init(dstr); dstr->data = (char*)cb_empty_string(); }
+CB_INTERNAL void cb_dstr_destroy(cb_dstr* dstr) { if (dstr->data == cb_empty_string()) { dstr->data = NULL; } cb_darr_destroy(dstr); }
 /* does not free anything, just reset the size to 0 */
-static void cb_dstr_clear(cb_dstr* dstr) { if (dstr->data != cb_empty_string()) { dstr->size = 0; dstr->data[dstr->size] = '\0'; } }
+CB_INTERNAL void cb_dstr_clear(cb_dstr* dstr) { if (dstr->data != cb_empty_string()) { dstr->size = 0; dstr->data[dstr->size] = '\0'; } }
 
-static void cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
+CB_INTERNAL void
+cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
 {
 	assert(new_string_capacity > s->capacity && "You should request more capacity, not less."); /* ideally we should ensure this before this call. */
 	
@@ -571,14 +592,16 @@ static void cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
 	s->capacity = new_string_capacity;
 }
 
-static void cb_dstr__grow_if_needed(cb_dstr* s, int needed)
+CB_INTERNAL void
+cb_dstr__grow_if_needed(cb_dstr* s, int needed)
 {
 	if (needed > s->capacity) { 
 		cb_dstr_reserve(s, cb_darr__get_new_capacity(s, needed));
 	}
 }
 
-static void cb_dstr_append_from(cb_dstr* s, int index, const char* data, int size)
+CB_INTERNAL void
+cb_dstr_append_from(cb_dstr* s, int index, const char* data, int size)
 {
 	cb_dstr__grow_if_needed(s, index + size);
 
@@ -587,7 +610,8 @@ static void cb_dstr_append_from(cb_dstr* s, int index, const char* data, int siz
 	s->data[s->size] = '\0';
 }
 
-static int cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_list args)
+CB_INTERNAL int
+cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_list args)
 {
 	va_list args_copy;
 	va_copy(args_copy, args);
@@ -603,10 +627,21 @@ static int cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_lis
 	s->size = index + add_len;
 	return add_len;
 }
-static void cb_dstr_assign(cb_dstr* s, const char* data, int size) { cb_dstr_append_from(s, 0, data, size); }
-static void cb_dstr_assign_str(cb_dstr* s, const char* str) { cb_dstr_assign(s, str, strlen(str)); }
 
-static void cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
+CB_INTERNAL void
+cb_dstr_assign(cb_dstr* s, const char* data, int size)
+{
+	cb_dstr_append_from(s, 0, data, size);
+}
+
+CB_INTERNAL void
+cb_dstr_assign_str(cb_dstr* s, const char* str)
+{
+	cb_dstr_assign(s, str, strlen(str));
+}
+
+CB_INTERNAL void
+cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -614,7 +649,8 @@ static void cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
 	va_end(args);
 }
 
-static void cb_dstr_append_many(cb_dstr* s, const char* strings[], int count)
+CB_INTERNAL void
+cb_dstr_append_many(cb_dstr* s, const char* strings[], int count)
 {
 	for (int i = 0; i < count; ++i)
 	{
@@ -622,9 +658,20 @@ static void cb_dstr_append_many(cb_dstr* s, const char* strings[], int count)
 	}
 }
 
-static void cb_dstr_append_str(cb_dstr* s, const char* str) { cb_dstr_append_from(s, s->size, str, strlen(str)); }
-static void cb_dstr_append_strv(cb_dstr* s, cb_strv sv) { cb_dstr_append_from(s, s->size, sv.data, sv.size); }
-static int  cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
+CB_INTERNAL void
+cb_dstr_append_str(cb_dstr* s, const char* str)
+{
+	cb_dstr_append_from(s, s->size, str, strlen(str));
+}
+
+CB_INTERNAL void
+cb_dstr_append_strv(cb_dstr* s, cb_strv sv)
+{
+	cb_dstr_append_from(s, s->size, sv.data, sv.size);
+}
+
+CB_INTERNAL int
+cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -637,18 +684,8 @@ static int  cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 /* cb_hash */
 /*-----------------------------------------------------------------------*/
 
-static unsigned long djb2(const char* s)
-{
-	unsigned long hash = 5381;
-	int c;
-
-	while ((c = *s++))
-		hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-	return hash;
-}
-
-static unsigned long djb2_strv(const char* str, int count)
+CB_INTERNAL unsigned long
+djb2_strv(const char* str, int count)
 {
 	unsigned long hash = 5381;
 	int i = 0;
@@ -661,14 +698,17 @@ static unsigned long djb2_strv(const char* str, int count)
 	return hash;
 }
 
-static cb_id cb_hash(const char* str) { return djb2(str); }
-static cb_id cb_hash_strv(cb_strv sv) { return djb2_strv(sv.data, sv.size); }
+CB_INTERNAL cb_id
+cb_hash_strv(cb_strv sv)
+{
+	return djb2_strv(sv.data, sv.size);
+}
 
 /*-----------------------------------------------------------------------*/
 /* cb_kv */
 /*-----------------------------------------------------------------------*/
 
-static void
+CB_INTERNAL void
 cb_kv_init(cb_kv* kv, cb_strv sv)
 {
 	memset(kv, 0, sizeof(cb_kv));
@@ -676,7 +716,7 @@ cb_kv_init(cb_kv* kv, cb_strv sv)
 	kv->key = sv;
 }
 
-static cb_kv
+CB_INTERNAL cb_kv
 cb_kv_make_with_str(cb_strv sv, const char* value)
 {
 	cb_kv kv;
@@ -686,7 +726,7 @@ cb_kv_make_with_str(cb_strv sv, const char* value)
 	return kv;
 }
 
-static cb_kv
+CB_INTERNAL cb_kv
 cb_kv_make_with_ptr(cb_strv sv, const void* ptr)
 {
 	cb_kv kv;
@@ -696,7 +736,7 @@ cb_kv_make_with_ptr(cb_strv sv, const void* ptr)
 	return kv;
 }
 
-static cb_kv
+CB_INTERNAL cb_kv
 cb_kv_make_with_dstr(cb_strv sv, cb_dstr value)
 {
 	cb_kv kv;
@@ -706,7 +746,7 @@ cb_kv_make_with_dstr(cb_strv sv, cb_dstr value)
 	return kv;
 }
 
-static int
+CB_INTERNAL int
 cb_kv_comp(const cb_kv* left, const cb_kv* right)
 {
 	return left->hash != right->hash
@@ -714,7 +754,7 @@ cb_kv_comp(const cb_kv* left, const cb_kv* right)
 		: cb_strv_compare_strv(left->key, right->key);
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_kv_less(const cb_kv* left, const cb_kv* right)
 {
 	return cb_kv_comp(left, right) < 0;
@@ -724,10 +764,11 @@ cb_kv_less(const cb_kv* left, const cb_kv* right)
 /* cb_mmap - a multimap */
 /*-----------------------------------------------------------------------*/
 
-static void cb_mmap_init(cb_mmap* m) { cb_darrT_init(m); }
-static void cb_mmap_destroy(cb_mmap* m) { cb_darrT_destroy(m); }
+CB_INTERNAL void cb_mmap_init(cb_mmap* m) { cb_darrT_init(m); }
+CB_INTERNAL void cb_mmap_destroy(cb_mmap* m) { cb_darrT_destroy(m); }
 
-static void cb_mmap_insert(cb_mmap* m, cb_kv kv)
+CB_INTERNAL void
+cb_mmap_insert(cb_mmap* m, cb_kv kv)
 {
 	int index = cb_darr_lower_bound_predicate(&m->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
 
@@ -735,7 +776,7 @@ static void cb_mmap_insert(cb_mmap* m, cb_kv kv)
 }
 
 /* cb_mmap_find does the same as cb_map_find, we should probably remove cb_map implementation if it's not used anymore */
-static int
+CB_INTERNAL int
 cb_mmap_find(const cb_mmap* m, const cb_kv* kv)
 {
 	int index = cb_darr_lower_bound_predicate(&m->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
@@ -802,7 +843,8 @@ cb_mmap_get_range_str(const cb_mmap* m, const char* key)
 	return cb_mmap_get_range(m, cb_strv_make_str(key));
 }
 
-cb_bool cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
+CB_INTERNAL cb_bool
+cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 {
 	CB_ASSERT(range->begin <= range->end);
 
@@ -816,7 +858,8 @@ cb_bool cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 
 	return cb_false;
 }
-static void
+
+CB_INTERNAL void
 cb_mmap_remove_one(cb_mmap* m, int index)
 {
 	/* destroy dynamic string if needed */
@@ -831,7 +874,7 @@ cb_mmap_remove_one(cb_mmap* m, int index)
 }
 
 /* Remove all values found in keys, if the value was a dynamic string the dynamic string is destroyed */
-static int
+CB_INTERNAL int
 cb_mmap_remove(cb_mmap* m, cb_kv kv)
 {
 	cb_kv_range range = cb_mmap_get_range(m, kv.key);
@@ -851,7 +894,8 @@ cb_mmap_remove(cb_mmap* m, cb_kv kv)
 }
 
 
-static cb_bool cb_mmap_get_from_kv(cb_mmap* map, const cb_kv* item, cb_kv* result)
+CB_INTERNAL cb_bool
+cb_mmap_get_from_kv(cb_mmap* map, const cb_kv* item, cb_kv* result)
 {
 	int index = cb_mmap_find(map, item);
 	if (index != map->base.size)
@@ -863,12 +907,14 @@ static cb_bool cb_mmap_get_from_kv(cb_mmap* map, const cb_kv* item, cb_kv* resul
 	return cb_false;
 }
 
-static void cb_mmap_insert_ptr(cb_mmap* map, cb_strv key, const void* value_ptr)
+CB_INTERNAL void
+cb_mmap_insert_ptr(cb_mmap* map, cb_strv key, const void* value_ptr)
 {
 	cb_mmap_insert(map, cb_kv_make_with_ptr(key, value_ptr));
 }
 
-static const void* cb_mmap_get_ptr(cb_mmap* map, cb_strv key, const void* default_value)
+CB_INTERNAL const void*
+cb_mmap_get_ptr(cb_mmap* map, cb_strv key, const void* default_value)
 {
 	cb_kv key_item;
 	cb_kv_init(&key_item, key);
@@ -877,7 +923,8 @@ static const void* cb_mmap_get_ptr(cb_mmap* map, cb_strv key, const void* defaul
 	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.ptr : default_value;
 }
 
-static cb_strv cb_mmap_get_strv(cb_mmap* map, cb_strv key, cb_strv default_value)
+CB_INTERNAL cb_strv
+cb_mmap_get_strv(cb_mmap* map, cb_strv key, cb_strv default_value)
 {
 	cb_kv key_item;
 	cb_kv_init(&key_item, key);
@@ -886,27 +933,32 @@ static cb_strv cb_mmap_get_strv(cb_mmap* map, cb_strv key, cb_strv default_value
 	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.strv : default_value;
 }
 
-static void cb_context_init(cb_context* ctx)
+CB_INTERNAL void
+cb_context_init(cb_context* ctx)
 {
 	memset(ctx, 0, sizeof(cb_context));
 	cb_mmap_init(&ctx->projects);
 	ctx->current_project = 0;
 }
-static void cb_context_destroy(cb_context* ctx)
+
+CB_INTERNAL void
+cb_context_destroy(cb_context* ctx)
 {
 	cb_mmap_destroy(&ctx->projects);
 	cb_context_init(ctx);
 }
 
-static cb_project_t* cb_find_project_by_name(cb_strv sv)
+CB_INTERNAL cb_project_t*
+cb_find_project_by_name(cb_strv sv)
 {
-	void* default_value = CB_NULL;
+	void* default_value = NULL;
 	return (cb_project_t*)cb_mmap_get_ptr(&current_ctx->projects, sv, default_value);
 }
 
-static cb_project_t* cb_find_project_by_name_str(const char* name) { return cb_find_project_by_name(cb_strv_make_str(name)); }
+CB_INTERNAL cb_project_t* cb_find_project_by_name_str(const char* name) { return cb_find_project_by_name(cb_strv_make_str(name)); }
 
-static void cb_project_init(cb_project_t* project)
+CB_INTERNAL void
+cb_project_init(cb_project_t* project)
 {
 	memset(project, 0, sizeof(cb_project_t));
 
@@ -914,29 +966,31 @@ static void cb_project_init(cb_project_t* project)
 	cb_mmap_init(&project->mmap);
 }
 
-static void cb_project_destroy(cb_project_t* project)
+CB_INTERNAL void
+cb_project_destroy(cb_project_t* project)
 {
 	cb_darrT_destroy(&project->file_commands);
 	cb_mmap_destroy(&project->mmap);
 }
 
-static cb_project_t* cb_create_project(const char* name)
+CB_INTERNAL cb_project_t*
+cb_create_project(const char* name)
 {
-    cb_id id = cb_hash(name);
+	cb_strv n = cb_strv_make_str(name);
+    cb_id id = cb_hash_strv(n);
 	
 	cb_project_t* project = (cb_project_t*)CB_MALLOC(sizeof(cb_project_t));
 	cb_project_init(project);
 	project->context = current_ctx;
 	project->id = id;
-	project->name.data = name;
-	project->name.size = strlen(name);
+	project->name = n;
 	
-	cb_mmap_insert_ptr(&current_ctx->projects, cb_strv_make_str(name), project);
+	cb_mmap_insert_ptr(&current_ctx->projects, n, project);
 	
     return project;
 }
 
-static cb_project_t*
+CB_INTERNAL cb_project_t*
 cb__current_project()
 {
 	CB_ASSERT(current_ctx->current_project);
@@ -957,19 +1011,19 @@ __declspec(noinline) static LONG WINAPI exit_on_exception_handler(EXCEPTION_POIN
 	exit(exit_code);
 }
 #endif
-static void cb__add(cb_kv kv);
-static void cb__set(cb_kv kv);
-static int cb__remove_all(cb_kv kv);
-static cb_bool cb__remove_one(cb_kv kv);
+CB_INTERNAL void cb__add(cb_kv kv);
+CB_INTERNAL void cb__set(cb_kv kv);
+CB_INTERNAL int cb__remove_all(cb_kv kv);
+CB_INTERNAL cb_bool cb__remove_one(cb_kv kv);
 
-static void
+CB_INTERNAL void
 cb__add(cb_kv kv)
 {
 	cb_project_t* p = cb__current_project();
 	cb_mmap_insert(&p->mmap, kv);
 }
 
-static void
+CB_INTERNAL void
 cb__set(cb_kv kv)
 {
 	/* @FIXME this can easily be optimized, but we don't care about that right now. */
@@ -977,7 +1031,7 @@ cb__set(cb_kv kv)
 	cb__add(kv);
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb__remove_one(cb_kv kv)
 {
 	cb_project_t* p = cb__current_project();
@@ -997,7 +1051,7 @@ cb__remove_one(cb_kv kv)
 	return cb_false;
 }
 
-static int
+CB_INTERNAL int
 cb__remove_all(cb_kv kv)
 {
 	 cb_project_t* p = cb__current_project();
@@ -1031,7 +1085,7 @@ cb_destroy()
 RE_CB_API cb_project_t* cb_project(const char* name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(name);
-	cb_bool is_new_project = project == CB_NULL;
+	cb_bool is_new_project = project == NULL;
 	if (is_new_project)
 	{
 		project = cb_create_project(name);
@@ -1161,10 +1215,12 @@ cb_add_file(const char* file)
 
 /* #file utils */
 
-static inline cb_bool cb_is_directory_separator(char c) { return (c == '/' || c == '\\'); }
+CB_INTERNAL inline cb_bool cb_is_directory_separator(char c) { return (c == '/' || c == '\\'); }
 
 #define CB_NPOS (-1)
-static int cb_rfind(cb_strv s, char c)
+
+CB_INTERNAL int
+cb_rfind(cb_strv s, char c)
 {
 	if (s.size == 0) return CB_NPOS;
 
@@ -1176,7 +1232,9 @@ static int cb_rfind(cb_strv s, char c)
 	}
 	return end < begin ? CB_NPOS : (end - begin);
 }
-static int cb_rfind2(cb_strv s, char c1, char c2)
+
+CB_INTERNAL int
+cb_rfind2(cb_strv s, char c1, char c2)
 {
 	if (s.size == 0) return CB_NPOS;
 
@@ -1188,7 +1246,9 @@ static int cb_rfind2(cb_strv s, char c1, char c2)
 	}
 	return end < begin ? CB_NPOS : (end - begin);
 }
-static cb_strv cb_path_filename(cb_strv path)
+
+CB_INTERNAL cb_strv
+cb_path_filename(cb_strv path)
 {
 	int pos = cb_rfind2(path, '/', '\\');
 	if (pos != CB_NPOS && pos > 0) {
@@ -1198,7 +1258,8 @@ static cb_strv cb_path_filename(cb_strv path)
 	return path;
 }
 
-static cb_strv cb_path_basename(cb_strv s)
+CB_INTERNAL cb_strv
+cb_path_basename(cb_strv s)
 {
 	cb_strv filename = cb_path_filename(s);
 
@@ -1242,7 +1303,9 @@ struct cb_file_it {
 };
 
 #define cb_safe_strcpy(dst, src, index, max) cb_safe_strcpy_internal(dst, src, index, max, __FILE__, __LINE__)
-static int cb_safe_strcpy_internal(char* dst, const char* src, int index, int max, const char* file, int line)
+
+CB_INTERNAL int
+cb_safe_strcpy_internal(char* dst, const char* src, int index, int max, const char* file, int line)
 {
 	char c;
 	const char* original = src;
@@ -1262,14 +1325,16 @@ static int cb_safe_strcpy_internal(char* dst, const char* src, int index, int ma
 	return index;
 }
 
-static void cb_file_it_destroy(cb_file_it* it);
+CB_INTERNAL void cb_file_it_destroy(cb_file_it* it);
 
-static int cb_safe_combine_path(char* dst, const char* path, int index)
+CB_INTERNAL int
+cb_safe_combine_path(char* dst, const char* path, int index)
 {
 	return cb_safe_strcpy(dst, path, index, CB_MAX_PATH);
 }
 
-static void cb_file_it__push_dir(cb_file_it* it, const char* directory)
+CB_INTERNAL void
+cb_file_it__push_dir(cb_file_it* it, const char* directory)
 {
 	int current_dir_len = it->stack_size >= 0 ? it->dir_len_stack[it->stack_size] : 0;
 	int n = cb_safe_combine_path(it->current_file, directory, current_dir_len);
@@ -1319,7 +1384,8 @@ static void cb_file_it__push_dir(cb_file_it* it, const char* directory)
 	it->has_next = 1;
 }
 
-void cb_file_it_close_current_handle(cb_file_it* it)
+CB_INTERNAL void
+cb_file_it_close_current_handle(cb_file_it* it)
 {
 	if (it->handle_stack[it->stack_size] != CB_INVALID_FILE_HANDLE)
 	{
@@ -1332,7 +1398,7 @@ void cb_file_it_close_current_handle(cb_file_it* it)
 	}
 }
 
-static const char*
+CB_INTERNAL const char*
 cb_file_it__get_next_entry(cb_file_it* it)
 {
 #if defined(_WIN32)
@@ -1354,7 +1420,7 @@ cb_file_it__get_next_entry(cb_file_it* it)
 #endif
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_file_it__current_entry_is_directory(cb_file_it* it)
 {
 #if defined(_WIN32)
@@ -1364,7 +1430,8 @@ cb_file_it__current_entry_is_directory(cb_file_it* it)
 #endif
 }
 
-void cb_file_it__pop_dir(cb_file_it* it)
+CB_INTERNAL void
+cb_file_it__pop_dir(cb_file_it* it)
 {
 	if (it->stack_size > 0)
 	{
@@ -1382,7 +1449,8 @@ void cb_file_it__pop_dir(cb_file_it* it)
 	}
 }
 	
-static void cb_file_it_init(cb_file_it* it, const char* base_directory)
+CB_INTERNAL void
+cb_file_it_init(cb_file_it* it, const char* base_directory)
 {
 	memset(it, 0, sizeof(cb_file_it));
 	it->stack_size = -1;
@@ -1390,13 +1458,15 @@ static void cb_file_it_init(cb_file_it* it, const char* base_directory)
 	cb_file_it__push_dir(it, base_directory);
 }
 
-static void cb_file_it_init_recursive(cb_file_it* it, const char* base_directory)
+CB_INTERNAL void
+cb_file_it_init_recursive(cb_file_it* it, const char* base_directory)
 {
 	cb_file_it_init(it, base_directory);
 	it->recursive = cb_true;;
 }
 
-static void cb_file_it_destroy(cb_file_it* it)
+CB_INTERNAL void
+cb_file_it_destroy(cb_file_it* it)
 {
 	while(it->stack_size > 0)
 	{
@@ -1408,9 +1478,10 @@ static void cb_file_it_destroy(cb_file_it* it)
 	it->has_next = 0;
 }
 
-static const char* cb_file_it_current_file(cb_file_it* it) { return it->current_file; }
+CB_INTERNAL const char* cb_file_it_current_file(cb_file_it* it) { return it->current_file; }
 
-static cb_bool cb_file_it_get_next(cb_file_it* it)
+CB_INTERNAL cb_bool
+cb_file_it_get_next(cb_file_it* it)
 {
 	CB_ASSERT(it->has_next);
 
@@ -1453,7 +1524,8 @@ static cb_bool cb_file_it_get_next(cb_file_it* it)
 	return cb_true;
 }
 
-static cb_bool cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
+CB_INTERNAL cb_bool
+cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
 {
 	while (cb_file_it_get_next(it))
 	{
@@ -1466,7 +1538,8 @@ static cb_bool cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
 }
 
 /* return cb_true if separator has been added */
-static cb_bool cb_add_trailing_dir_separator(char* path, int path_len)
+CB_INTERNAL cb_bool
+cb_add_trailing_dir_separator(char* path, int path_len)
 {
 	if (!path || path_len >= CB_MAX_PATH) return cb_false;
 
@@ -1484,23 +1557,25 @@ static cb_bool cb_add_trailing_dir_separator(char* path, int path_len)
 }
 #ifdef WIN32
 /* @TODO rename everything related to file into cp_path_XXX */
-static cb_bool cb_path_exists(const char* path) {
+CB_INTERNAL cb_bool
+cb_path_exists(const char* path) {
 
 	DWORD attr = GetFileAttributesA(path);
 	return attr != INVALID_FILE_ATTRIBUTES;
 }
-static cb_bool cb_create_directory(const char* path) { return CreateDirectoryA(path, NULL); }
+CB_INTERNAL cb_bool cb_create_directory(const char* path) { return CreateDirectoryA(path, NULL); }
 #else
 
-static cb_bool cb_path_exists(const char* path) { return access(path, F_OK) == 0; }
+CB_INTERNAL cb_bool cb_path_exists(const char* path) { return access(path, F_OK) == 0; }
 
-static cb_bool cb_create_directory(const char* path) { return mkdir(path, 0777) == 0; }
+CB_INTERNAL cb_bool cb_create_directory(const char* path) { return mkdir(path, 0777) == 0; }
 
 #endif
 
-static void cb_create_directory_recursively(const char* path, int size)
+CB_INTERNAL void
+cb_create_directory_recursively(const char* path, int size)
 {
-	if (path == CB_NULL || size <= 0) {
+	if (path == NULL || size <= 0) {
 		cb_log_error("Could not create directory. Path is empty.");
 		return;
 	}
@@ -1543,7 +1618,8 @@ static void cb_create_directory_recursively(const char* path, int size)
 	}
 }
 
-static cb_bool cb_copy_file(const char* src_path, const char* dest_path)
+CB_INTERNAL cb_bool
+cb_copy_file(const char* src_path, const char* dest_path)
 {
 	/* create target directory if it does not exists */
 	cb_create_directory_recursively(dest_path, strlen(dest_path));
@@ -1611,7 +1687,7 @@ static cb_bool cb_copy_file(const char* src_path, const char* dest_path)
 }
 
 /* recursively copy the content of the directory in another one, empty directory will be omitted */
-static cb_bool
+CB_INTERNAL cb_bool
 cb_copy_directory(const char* source_dir, const char* target_dir)
 {
 	char dest_buffer[CB_MAX_PATH];
@@ -1634,7 +1710,7 @@ cb_copy_directory(const char* source_dir, const char* target_dir)
 	return cb_true;
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_delete_file(const char* src_path)
 {
 	cb_bool result = 0;
@@ -1650,7 +1726,7 @@ cb_delete_file(const char* src_path)
 	return result;
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_move_file(const char* src_path, const char* dest_path)
 {
 	if (cb_copy_file(src_path, dest_path))
@@ -1662,7 +1738,7 @@ cb_move_file(const char* src_path, const char* dest_path)
 }
 
 /* recursively copy the content of the directory in another one, empty directory will be omitted */
-static cb_bool
+CB_INTERNAL cb_bool
 cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)(cb_strv path))
 {
 	char dest_buffer[CB_MAX_PATH];
@@ -1692,7 +1768,8 @@ cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)
 }
 
 /* Properties are just (strv) values from the map of a project. */
-static cb_bool try_get_property(cb_project_t* project, const char* key, cb_strv* result)
+CB_INTERNAL cb_bool
+try_get_property(cb_project_t* project, const char* key, cb_strv* result)
 {
 	cb_kv kv_result;
 	if (cb_mmap_try_get_first(&project->mmap, cb_strv_make_str(key), &kv_result))
@@ -1703,7 +1780,7 @@ static cb_bool try_get_property(cb_project_t* project, const char* key, cb_strv*
 	return cb_false;
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_property_equals(cb_project_t* project, const char* key, const char* comparison_value)
 {
 	cb_strv result;
@@ -1783,7 +1860,7 @@ cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 static cb_bool cb_wildcad_debug = 0;
 
 /** return nbytes, 0 on end, -1 on error */
-static int
+CB_INTERNAL int
 cb_decode_utf8(const void* p, int* pc)
 {
 	const int replacement = 0xFFFD;
@@ -1820,10 +1897,10 @@ cb_decode_utf8(const void* p, int* pc)
 }
 
 /* backslash and slash are assumed to be the same */
-static cb_bool
+CB_INTERNAL cb_bool
 cb_path_char_is_different(int left, int right) { return cb_is_directory_separator((char)left) ? !cb_is_directory_separator((char)right) : left != right; }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_wildmatch(const char* pat, const char* str)
 {
 	const char* p, * s;
@@ -1929,8 +2006,10 @@ cb_subprocess(const char* str)
 	
 
 /* space or tab */
-static cb_bool cb_is_space(char c) { return c == ' ' || c == '\t'; }
-static cb_bool cb_is_end_of_quote(const char* str, char quote_type)
+CB_INTERNAL cb_bool cb_is_space(char c) { return c == ' ' || c == '\t'; }
+
+CB_INTERNAL cb_bool
+cb_is_end_of_quote(const char* str, char quote_type)
 {
 	return *str != '\0'
 		&& *str == quote_type
@@ -1945,12 +2024,13 @@ a "b" c => 3 arguments a b c;
 a"b"c   => 1 argument a"b"c
 "a"b"c" => 1 argument a"b"c
 */
-static const char* cb_get_next_arg(const char* str, cb_strv* sv)
+CB_INTERNAL const char*
+cb_get_next_arg(const char* str, cb_strv* sv)
 {
 	sv->data = str;
 	sv->size = 0;
 	if (str == NULL || *str == '\0')
-		return CB_NULL;
+		return NULL;
 		
 	while (*str != '\0')
 	{
@@ -1960,7 +2040,7 @@ static const char* cb_get_next_arg(const char* str, cb_strv* sv)
 
 		/* Return early if end of string */
 		if (*str == '\0') 
-			return sv->size > 0 ? str: CB_NULL;
+			return sv->size > 0 ? str: NULL;
 
 		/* Handle quotes */
 		if (*str == '\'' || *str == '\"')
@@ -1970,7 +2050,7 @@ static const char* cb_get_next_arg(const char* str, cb_strv* sv)
 			
 			/* Return early if end of string */
 			if (*str == '\0')
-				return sv->size > 0 ? str : CB_NULL;
+				return sv->size > 0 ? str : NULL;
 
 			/* Quote next the previous one so it's an empty content, we look for another item */
 			if (cb_is_end_of_quote(str, *quote))
@@ -2004,12 +2084,13 @@ static const char* cb_get_next_arg(const char* str, cb_strv* sv)
 			return str;
 		}
 	}
-	return CB_NULL;
+	return NULL;
 }
 
 #define CB_INVALID_PROCESS (-1)
 
-pid_t cb_fork_process(char* args[])
+CB_INTERNAL pid_t
+cb_fork_process(char* args[])
 {
 	pid_t pid = fork();
 	if (pid < 0) {
@@ -2329,7 +2410,7 @@ cb_toolchain_msvc()
 
 /* #gcc #toolchain */
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 {
 	if (sv.size < rhs.size)
@@ -2341,7 +2422,7 @@ cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 	return cb_strv_equals_strv(sub, rhs);
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 is_created_by_gcc(cb_strv file)
 {
 	static cb_strv o_ext = { 2, ".o" };
