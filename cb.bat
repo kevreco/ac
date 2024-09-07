@@ -115,4 +115,4 @@ set "output="
 set "basename="
 set "SCRIPT="
 
-Exit /B 1
+Exit /B 0
