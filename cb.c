@@ -242,9 +242,11 @@ int build_with_configs()
 	const char* arch[] = { "x86",  "x64", end };
 	const char* config[] = { "Release", "Debug", end };
 
-	for (const char** a = arch; *a != end; a++)
+	const char** a;
+	for (a = arch; *a != end; a++)
 	{
-		for (const char** c = config; *c != end; c++)
+		const char** c;
+		for (c = config; *c != end; c++)
 		{
 			if (build_ex(*a, *c) != 0)
 			{
@@ -379,9 +381,11 @@ int build_with_platform_specific_flags()
 	const char* arch[] = { "x86", "x64", end };
 	const char* config[] = { "Release", "Debug", end };
 
-	for (const char** a = arch; *a != end; a++)
+	const char** a;
+	for (a = arch; *a != end; a++)
 	{
-		for (const char** c = config; *c != end; c++)
+		const char** c;
+		for (c = config; *c != end; c++)
 		{
 			if (build_ex_with_platform_specific_flags(*a, *c) != 0)
 			{

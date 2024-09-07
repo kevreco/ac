@@ -25,7 +25,7 @@ done
 
 
 if [ -v gcc ]; then
-   $compiler -g -o $output -O0 ./cb.c 
+   $compiler -std=c89 -g -o $output -O0 ./cb.c 
 fi
 
 # exit code not equal to 0

@@ -20,6 +20,13 @@
 
 #include <stdarg.h> /* va_start, va_end */
 
+/* in c89 va_copy does not exist */
+#if defined(__GNUC__) || defined(__clang__)
+#ifndef va_copy
+#define va_copy(dest, src) (__builtin_va_copy(dest, src))
+#endif
+#endif
+
 #ifndef RE_CB_API
 #define RE_CB_API
 #endif
@@ -54,7 +61,6 @@
 extern "C" {
 #endif
 
-/* @TODO rename cb_id to cb_hash? */
 typedef unsigned int cb_id; /* hashed key */
 typedef unsigned int cb_bool;
 
@@ -652,9 +658,11 @@ cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
 CB_INTERNAL void
 cb_dstr_append_many(cb_dstr* s, const char* strings[], int count)
 {
-	for (int i = 0; i < count; ++i)
+	int i;
+
+	for (i = 0; i < count; ++i)
 	{
-		cb_dstr_append_from( s, s->size, strings[i], strlen(strings[i]));
+		cb_dstr_append_from(s, s->size, strings[i], strlen(strings[i]));
 	}
 }
 
@@ -1215,7 +1223,7 @@ cb_add_file(const char* file)
 
 /* #file utils */
 
-CB_INTERNAL inline cb_bool cb_is_directory_separator(char c) { return (c == '/' || c == '\\'); }
+CB_INTERNAL cb_bool cb_is_directory_separator(char c) { return (c == '/' || c == '\\'); }
 
 #define CB_NPOS (-1)
 
@@ -1426,6 +1434,10 @@ cb_file_it__current_entry_is_directory(cb_file_it* it)
 #if defined(_WIN32)
 	return !!(it->find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
 #else
+/* @FIXME: in c89 DT_DIR is not defined so we explicitely define it, this is not portable though. */
+#ifndef DT_DIR
+#define DT_DIR 4
+#endif 
 	return it->find_data->d_type == DT_DIR;
 #endif
 }
@@ -1977,17 +1989,17 @@ cb_subprocess(const char* str)
 	si.cb = sizeof(si);
 	ZeroMemory(&pi, sizeof(pi));
 
-	// Start the child process. 
-	if (!CreateProcessA(NULL,   // No module name (use command line)
-		cmd.data,       // Command line
-		NULL,           // Process handle not inheritable
-		NULL,           // Thread handle not inheritable
-		FALSE,          // Set handle inheritance to FALSE
-		0,              // No creation flags
-		NULL,           // Use parent's environment block
-		NULL,           // Use parent's starting directory 
-		&si,            // Pointer to STARTUPINFO structure
-		&pi)            // Pointer to PROCESS_INFORMATION structure
+	/* Start the child process. */
+	if (!CreateProcessA(NULL, /* No module name (use command line) */
+		cmd.data,       /* Command line */
+		NULL,           /* Process handle not inheritable */
+		NULL,           /* Thread handle not inheritable */ 
+		FALSE,          /* Set handle inheritance to FALSE */
+		0,              /* No creation flags */
+		NULL,           /* Use parent's environment block */
+		NULL,           /* Use parent's starting directory */
+		&si,            /* Pointer to STARTUPINFO structure */
+		&pi)            /* Pointer to PROCESS_INFORMATION structure */
 		)
 	{
 		cb_log_error("CreateProcessA failed (%d).", GetLastError());
@@ -1996,7 +2008,7 @@ cb_subprocess(const char* str)
 
 	WaitForSingleObject(pi.hProcess, INFINITE);
 
-	// Close process and thread handles. 
+	/* Close process and thread handles. */
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
 
@@ -2294,7 +2306,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	cb_file_it it;
-	for (int i = 0; i < project->file_commands.darr.size; ++i)
+	int i;
+	for (i = 0; i < project->file_commands.darr.size; ++i)
 	{
 		cb_file_command cmd = cb_darrT_at(&project->file_commands, i);
 
@@ -2520,7 +2533,8 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	cb_file_it it;
-	for (int i = 0; i < project->file_commands.darr.size; ++i)
+	int i;
+	for (i = 0; i < project->file_commands.darr.size; ++i)
 	{
 		cb_file_command cmd = cb_darrT_at(&project->file_commands, i);
 
