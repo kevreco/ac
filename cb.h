@@ -117,13 +117,14 @@ RE_CB_API cb_bool cb_subprocess(const char* cmd);
 /* commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
-extern const char* cbk_BINARY_TYPE;   /* exe, shared_lib or static_lib */
-extern const char* cbk_CXFLAGS;       /* extra flags to give to the C/C++ compiler */
-extern const char* cbk_DEFINES;
-extern const char* cbk_INCLUDE_DIR;
-extern const char* cbk_LINK_PROJECT;
-extern const char* cbk_OUTPUT_DIR;
-extern const char* cbk_TARGET_NAME;
+extern const char* cbk_BINARY_TYPE;   /* Exe, shared_lib or static_lib */
+extern const char* cbk_CXFLAGS;       /* Extra flags to give to the C/C++ compiler */
+extern const char* cbk_DEFINES;       /* Define preprocessing symbol */
+extern const char* cbk_INCLUDE_DIR;   /* Include directories */
+extern const char* cbk_LINK_PROJECT;  /* Other project to link */
+extern const char* cbk_LFLAGS;        /* Extra flags to give to the linker */
+extern const char* cbk_OUTPUT_DIR;    /* Ouput directory for the generated files */
+extern const char* cbk_TARGET_NAME;   /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.) */
 /* values */
 extern const char* cbk_exe;
 extern const char* cbk_shared_lib;
@@ -176,6 +177,7 @@ const char* cbk_CXFLAGS = "cxflags";
 const char* cbk_DEFINES = "defines";
 const char* cbk_INCLUDE_DIR = "include_dir";
 const char* cbk_LINK_PROJECT = "link_project";
+const char* cbk_LFLAGS = "lflags";
 const char* cbk_OUTPUT_DIR = "output_dir";
 const char* cbk_TARGET_NAME = "target_name";
 /* values */
@@ -2268,7 +2270,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		cb_dstr_append_v(&str, "/Fe", str_ouput_path.data, "\\", project_name, ext, _);
 	}
 
-	/* Append flags */
+	/* Append compiler flags */
 	{
 		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
 		cb_kv current;
@@ -2339,6 +2341,16 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		cb_dstr_init(&linked_output_dir);
 
 		cb_dstr_append_v(&str, "/link", _);
+		/* Add linker flags */
+		{
+			cb_kv_range lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			cb_kv lflag;
+			while (cb_mmap_range_get_next(&lflag_range, &lflag))
+			{
+				cb_dstr_append_strv(&str, lflag.u.strv);
+				cb_dstr_append_str(&str, _);
+			}
+		}
 		cb_kv current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
@@ -2490,6 +2502,17 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	ext = is_static_library ? ".a" : ext;
 	ext = is_shared_library ? ".so" : ext;
 
+	/* Append compiler flags */
+	{
+		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
+		cb_kv current;
+		while (cb_mmap_range_get_next(&range, &current))
+		{
+			cb_dstr_append_strv(&str, current.u.strv);
+			cb_dstr_append_str(&str, _);
+		}
+	}
+
 	/* Append include directories */
 	{
 		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
@@ -2564,6 +2587,17 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
 	if (range.count > 0)
 	{
+		/* Add linker flags */
+		{
+			cb_kv_range lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			cb_kv lflag;
+			while (cb_mmap_range_get_next(&lflag_range, &lflag))
+			{
+				cb_dstr_append_strv(&str, lflag.u.strv);
+				cb_dstr_append_str(&str, _);
+			}
+		}
+
 		/* Give some parameters to the linker to  look for the shared library next to the binary being built */
 		cb_dstr_append_str(&str, " -Wl,-rpath,$ORIGIN ");
 

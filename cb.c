@@ -268,13 +268,26 @@ void my_project(const char* project_name, const char* toolchain, const char* arc
 	cb_add_f(cbk_DEFINES, "MESSAGE=%s_%s_%s", toolchain, arch, config);
 
 	cb_bool is_debug = cb_str_equals(config, "Debug");
+
+	if (is_debug)
+	{
+		cb_add(cbk_CXFLAGS, "-fsanitize=address"); /* Address sanitizer, same flag for gcc and msvc. */
+	}
+
 	if (cb_str_equals(toolchain, "msvc"))
 	{
+		/* Don't use full path of the .pdb, only use the filename with the .pdb extension.
+		*  The reason is to make the build more deterministic.
+		*/
+		cb_add(cbk_LFLAGS, "/pdbaltpath:%_PDB%"); 
+		cb_add(cbk_LFLAGS, "/MANIFEST:EMBED");
+		cb_add(cbk_LFLAGS, "/INCREMENTAL:NO"); /* No incremental linking */
+		
 		if (is_debug)
 		{
-			cb_add_f(cbk_CXFLAGS, "/Zi", project_name); /* Produce debugging information (.pdb) */
-			cb_add(cbk_CXFLAGS, "-Od");    /* Disable optimization */
-			cb_add(cbk_DEFINES, "DEBUG");  /* Add DEBUG constant define */
+			cb_add(cbk_CXFLAGS, "/Zi");   /* Produce debugging information (.pdb) */
+			cb_add(cbk_CXFLAGS, "-Od");   /* Disable optimization */
+			cb_add(cbk_DEFINES, "DEBUG"); /* Add DEBUG constant define */
 		}
 		else
 		{
