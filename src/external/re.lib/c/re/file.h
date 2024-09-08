@@ -167,23 +167,25 @@ re_file_read_all(dstr* str, FILE* file)
 
 	fseek(file, 0, SEEK_END);
 
-	if (feof(file)) return 0;
+	if (feof(file)) return (re_file_bool)0;
 
 	long file_size = ftell(file);
 
-	if (feof(file)) return 0;
+	if (feof(file)) return (re_file_bool)0;
 
-	fseek(file, 0, SEEK_SET);  // rewind(file) can also be used.
+	fseek(file, 0, SEEK_SET);  /* rewind(file) can also be used. */
 
 	dstr_resize(str, file_size);
 
-	if (feof(file)) return 0;
+	if (feof(file)) return (re_file_bool)0;
 
-	fread(str->data, 1, file_size, file);
+	size_t read_count = fread(str->data, file_size, 1 , file);
 
-	if (feof(file)) return 0;
+	if (read_count != 1) return (re_file_bool)0;
 
-	return 1;
+	if (feof(file)) return (re_file_bool)0;
+
+	return (re_file_bool)1;
 }
 
 RE_FILE_API re_file_bool
@@ -427,7 +429,7 @@ re_file_copy(const char* src_path, const char* dest_path)
 
 	int src_fd = -1;
 	int dst_fd = -1;
-	src_fd = open(src_path, O_RDONLY);
+	src_fd = open(src_path, O_RDONLY, 0755);
 	if (src_fd < 0) {
 		fprintf(stderr, "Could not open file '%s': '%s'", src_path, strerror(errno));
 		return (re_file_bool)0;
@@ -440,7 +442,7 @@ re_file_copy(const char* src_path, const char* dest_path)
 		return (re_file_bool)0;
 	}
 
-	dst_fd = open(src_path, O_CREAT | O_TRUNC | O_WRONLY);
+	dst_fd = open(src_path, O_CREAT | O_TRUNC | O_WRONLY, 0755);
 
 	if (src_fd < 0) {
 		fprintf(stderr, "Could not open file %s: %s", src_path, strerror(errno));

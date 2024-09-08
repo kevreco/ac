@@ -20,6 +20,13 @@
 
 #include <stdarg.h> /* va_start, va_end */
 
+/* in c89 va_copy does not exist */
+#if defined(__GNUC__) || defined(__clang__)
+#ifndef va_copy
+#define va_copy(dest, src) (__builtin_va_copy(dest, src))
+#endif
+#endif
+
 #ifndef RE_CB_API
 #define RE_CB_API
 #endif
@@ -58,33 +65,49 @@ typedef unsigned int cb_id; /* hashed key */
 typedef unsigned int cb_bool;
 
 RE_CB_API void cb_init();
-/* Set or create current project. Returns true if the project was just created. */
-RE_CB_API cb_bool cb_project(const char* name); 
+RE_CB_API void cb_destroy();
+
+typedef struct cb_project_t cb_project_t;
+/* Set or create current project.  */
+RE_CB_API cb_project_t* cb_project(const char* name); 
+
 /* Add value for the specific key. */
 RE_CB_API void cb_add(const char* key, const char* value);
+/* Wrapper of cb_set with string formatting */
+RE_CB_API void cb_add_f(const char* key, const char* fmt, ...);
+
 /* Remove all previous values according to the key and set the new one. */
 RE_CB_API void cb_set(const char* key, const char* value);
+/* Wrapper around cb_set with string formatting */
+RE_CB_API void cb_set_f(const char* key, const char* fmt, ...);
+
 /* Remove all values associated with the key. Returns number of removed values */
 RE_CB_API int cb_remove_all(const char* key);
+/* Wrapper around cb_remove_all with string formatting */
+RE_CB_API int cb_remove_all_f(const char* key, const char* fmt, ...);
+
 /* Remove item with the exact key and value. */
 RE_CB_API cb_bool cb_remove_one(const char* key, const char* value);
-     
+/* Wrapper around cb_remove_one with string formatting */
+RE_CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
+
 /* @FIXME: This should be equivalent to use cb_add("file", XXX); in a loop. */
 RE_CB_API void cb_add_files(const char* pattern);
 
-struct cb_toolchain_t;
-typedef cb_bool (*cb_toolchain_bake_t)(struct cb_toolchain_t* tc, const char*);
+typedef struct cb_toolchain cb_toolchain;
+typedef cb_bool (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
 
-typedef struct cb_toolchain_t {
+typedef struct cb_toolchain cb_toolchain;
+struct cb_toolchain {
 	cb_toolchain_bake_t bake;
 	const char* name;
 	const char* default_directory_base;
-} cb_toolchain_t;
+};
 
-RE_CB_API cb_toolchain_t cb_toolchain_msvc();
+RE_CB_API cb_toolchain cb_toolchain_msvc();
 
-RE_CB_API void cb_bake(cb_toolchain_t toolchain, const char* project_name);
-RE_CB_API cb_bool cb_bake_and_run(cb_toolchain_t toolchain, const char* project_name);
+RE_CB_API cb_bool cb_bake(cb_toolchain toolchain, const char* project_name);
+RE_CB_API cb_bool cb_bake_and_run(cb_toolchain toolchain, const char* project_name);
 
 /** wildcard matching, supporting * ** ? [] */
 static cb_bool cb_wildmatch(const char* pattern, const char* str); /* forward declaration */
@@ -94,11 +117,14 @@ RE_CB_API cb_bool cb_subprocess(const char* cmd);
 /* commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
-extern const char* cbk_BINARY_TYPE;
-extern const char* cbk_INCLUDE_DIR;
-extern const char* cbk_LINK_PROJECT;
-extern const char* cbk_OUTPUT_DIR;
-extern const char* cbk_DEFINES;
+extern const char* cbk_BINARY_TYPE;   /* Exe, shared_lib or static_lib */
+extern const char* cbk_CXFLAGS;       /* Extra flags to give to the C/C++ compiler */
+extern const char* cbk_DEFINES;       /* Define preprocessing symbol */
+extern const char* cbk_INCLUDE_DIR;   /* Include directories */
+extern const char* cbk_LINK_PROJECT;  /* Other project to link */
+extern const char* cbk_LFLAGS;        /* Extra flags to give to the linker */
+extern const char* cbk_OUTPUT_DIR;    /* Ouput directory for the generated files */
+extern const char* cbk_TARGET_NAME;   /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.) */
 /* values */
 extern const char* cbk_exe;
 extern const char* cbk_shared_lib;
@@ -127,57 +153,55 @@ extern const char* cbk_static_lib;
 * 
 * # Structures
 *   - @TODO
-* # functions of internal structures
+* # Functions of internal structures
 *   - cb_log     - write some logs
 *   - cb_darr    - dynamic array
 *   - cb_dstr    - dynamic string
-*   - cb_kv      - key value for map adn multimap
-*   - cb_map     - hash map containg key/value strings
-*   - cb_mmap    - multi map containg key/value strings
-* # functions of the cb library
+*   - cb_kv      - key value for the multimap
+*   - cb_mmap    - multimap containg key/value strings
+* # Functions of the cb library
 *   - cb_project(...) - @TODO explanation
 *   - cb_set(...)     - @TODO explanation
 *   - cb_add(...)     - @TODO explanation
 *   - cb_bake(...)    - @TODO explanation
-* # Drivers
-*   - msvc driver
+* # Toolchain
+*   - msvc
+*   - gcc
 * # External libraries 
 *   - Wildmatch library
 */
 
 /* keys */
 const char* cbk_BINARY_TYPE = "binary_type";
+const char* cbk_CXFLAGS = "cxflags";
 const char* cbk_DEFINES = "defines";
 const char* cbk_INCLUDE_DIR = "include_dir";
 const char* cbk_LINK_PROJECT = "link_project";
+const char* cbk_LFLAGS = "lflags";
 const char* cbk_OUTPUT_DIR = "output_dir";
-
+const char* cbk_TARGET_NAME = "target_name";
 /* values */
 const char* cbk_exe = "exe";
 const char* cbk_shared_lib = "shared_library";
 const char* cbk_static_lib = "static_library";
 
-#define CB_NULL NULL
-
 /* string view */
-typedef struct cb_strv_t {
+typedef struct cb_strv cb_strv;
+struct cb_strv {
+	int size;
 	const char* data;
-	int size;
-} cb_strv;
+};
 
-/* @TODO remove this if not used */
-/* same as string view but can be modified */
-typedef struct cb_str_span_t {
-	char* data;
+/* dynamic array
+ * NOTE: cb_darr needs to start with the same component as cb_strv
+ * because we need to compare them in the same way in cb_kv 
+ */
+typedef struct cb_darr cb_darr;
+struct cb_darr {
 	int size;
-} cb_str_span;
-
-/* dynamic array */
-typedef struct cb_darr_t {
-	int size;
-    int capacity;
     char* data;
-} cb_darr;
+	int capacity;
+};
 
 /* type safe dynamic array */
 #define cb_darrT(type)    \
@@ -185,8 +209,8 @@ typedef struct cb_darr_t {
         cb_darr base;     \
         struct  {         \
             int size;     \
+			type* data;   \
             int capacity; \
-            type* data;   \
         } darr;           \
     }
 
@@ -208,7 +232,6 @@ typedef struct cb_darr_t {
         cb_darr_insert_one_space(&(a)->base, (index), sizeof(*(a)->darr.data)); \
 		(a)->darr.data[(index)] = value; \
 	} while (0)
-
 
 #define cb_darrT_remove(a, index) \
     do {  \
@@ -237,15 +260,20 @@ typedef cb_darr cb_dstr;
 typedef char* cb_darr_it;
 
 /* key/value data used in the map and mmap struct */
-typedef struct cb_kv_t
+typedef struct cb_kv cb_kv;
+struct cb_kv
 {
 	cb_id hash; /* hash of the key */
 	cb_strv key; /* key */
-	union { int _int; float _float; const void* ptr;  cb_strv strv; } u; /* value */
-} cb_kv;
-
-/* map */
-typedef cb_darrT(cb_kv) cb_map;
+	cb_bool is_dynamic_string;
+	union {
+		int _int;
+		float _float;
+		const void* ptr;
+		cb_strv strv;
+		cb_dstr dstr;
+	} u; /* value */
+};
 
 /* multimap */
 typedef cb_darrT(cb_kv) cb_mmap;
@@ -264,20 +292,22 @@ typedef struct cb_file_command_t {
 	const char* pattern; /* could be a pattern (if glob is set to true) or a regular file path. */
 } cb_file_command;
 
-typedef struct cb_context_t cb_context; /* forward declaration */
+typedef struct cb_context cb_context; /* forward declaration */
 
-typedef struct cb_project_t {
+typedef struct cb_project_t cb_project_t;
+struct cb_project_t {
 	cb_context* context;
 	cb_id id;
 	cb_strv name;
 	cb_darrT(cb_file_command) file_commands;
 
 	cb_mmap mmap; /* multi map of strings - when you want to have multiple values per key */
-} cb_project_t;
+};
 
+typedef struct cb_context cb_context;
 /* context, the root which hold everything */
-struct cb_context_t {
-	cb_map projects;
+struct cb_context {
+	cb_mmap projects;
 	cb_project_t* current_project;
 	cb_darr string_pool; /* to allocate user strings, allow easy allocation of concatenated strings with cb_str */
 };
@@ -289,9 +319,10 @@ static cb_context* current_ctx;
 /* cb_log */
 /*-----------------------------------------------------------------------*/
 
-void cb_log(FILE* file, const char* prefix, const char* fmt, ...)
+CB_INTERNAL void
+cb_log(FILE* file, const char* prefix, const char* fmt, ...)
 {
-	fprintf(file, prefix);
+	fprintf(file, "%s", prefix);
 
 	va_list args;
 	va_start(args, fmt);
@@ -310,21 +341,23 @@ void cb_log(FILE* file, const char* prefix, const char* fmt, ...)
 /* cb_darr - dynamic array */
 /*-----------------------------------------------------------------------*/
 
-static void cb_darr_init(cb_darr* arr)
+CB_INTERNAL void
+cb_darr_init(cb_darr* arr)
 {
 	arr->size = 0;
 	arr->capacity = 0;
-	arr->data = CB_NULL;
+	arr->data = NULL;
 }
 
-static void cb_darr_destroy(cb_darr* arr)
+CB_INTERNAL void
+cb_darr_destroy(cb_darr* arr)
 {
-	if (arr->data != CB_NULL)
+	if (arr->data != NULL)
 	{
 		arr->size = 0;
 		arr->capacity = 0;
 		CB_FREE(arr->data);
-		arr->data = CB_NULL;
+		arr->data = NULL;
 	} 
 }
 
@@ -340,11 +373,17 @@ cb_darr_ptr(const cb_darr* arr, int index, int sizeof_vlaue)
 	return arr->data + (index * sizeof_vlaue);
 }
 
-static char* cb_darr_end(const cb_darr* arr, int sizeof_value) { return arr->data + (arr->size * sizeof_value); }
+CB_INTERNAL char* cb_darr_end(const cb_darr* arr, int sizeof_value) { return arr->data + (arr->size * sizeof_value); }
 
-static int cb_darr__get_new_capacity(const cb_darr* arr, int sz) { int new_capacity = arr->capacity ? (arr->capacity + arr->capacity / 2) : 8; return new_capacity > sz ? new_capacity : sz; }
+CB_INTERNAL int
+cb_darr__get_new_capacity(const cb_darr* arr, int sz)
+{
+	int new_capacity = arr->capacity ? (arr->capacity + arr->capacity / 2) : 8;
+	return new_capacity > sz ? new_capacity : sz;
+}
 
-static void cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
+CB_INTERNAL void
+cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 {
 	if (new_capacity <= arr->capacity)
 	{
@@ -353,7 +392,7 @@ static void cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 
 	char* new_data = (char*)CB_MALLOC((size_t)new_capacity * sizeof_value);
 	CB_ASSERT(new_data);
-	if (arr->data != CB_NULL) {
+	if (arr->data != NULL) {
 		memcpy(new_data, arr->data, (size_t)arr->size * sizeof_value);
 		CB_FREE(arr->data);
 	}
@@ -368,7 +407,7 @@ cb_darr__grow_if_needed(cb_darr* arr, int needed, int sizeof_value)
 		cb_darr_reserve(arr, cb_darr__get_new_capacity(arr, needed), sizeof_value);
 }
 
-void
+CB_INTERNAL void
 cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
 {
 	int count_to_move = arr->size - index;
@@ -391,13 +430,13 @@ cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
 	arr->size += count;
 }
 
-void
+CB_INTERNAL void
 cb_darr_insert_one_space(cb_darr* arr, int index, int sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, 1, sizeof_value);
 }
 
-void
+CB_INTERNAL void
 cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, count, sizeof_value);
@@ -405,19 +444,19 @@ cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int s
 	memcpy(cb_darr_ptr(arr, index, sizeof_value), value, count * sizeof_value);
 }
 
-void
+CB_INTERNAL void
 cb_darr_insert_one(cb_darr* arr, int index, const void* value, int sizeof_value)
 {
 	cb_darr_insert_many(arr, index, value, 1, sizeof_value);
 }
 
-static void
+CB_INTERNAL void
 cb_darr_push_back_many(cb_darr* arr, const void* values_ptr, int count, int sizeof_value)
 {
 	cb_darr_insert_many(arr, arr->size, values_ptr, count, sizeof_value);
 }
 
-static void
+CB_INTERNAL void
 cb_darr_remove_many(cb_darr* arr, int index, int count, int sizeof_value)
 {
 	CB_ASSERT(arr);
@@ -439,40 +478,15 @@ cb_darr_remove_many(cb_darr* arr, int index, int count, int sizeof_value)
 	arr->size -= count;
 }
 
-static void
+CB_INTERNAL void
 cb_darr_remove_one(cb_darr* arr, int index, int sizeof_value)
 {
 	cb_darr_remove_many(arr, index, 1, sizeof_value);
 }
 
 typedef cb_bool(*cb_predicate_t)(const void* left, const void* right);
-typedef int (*cb_comp_t)(const void* left, const void* right);
 
-int
-cb_lower_bound_comp(const void* void_ptr, int left, int right, const void* value, int sizeof_value, cb_comp_t comp)
-{
-	const char* ptr = (const char*)void_ptr;
-	int count = right - left;
-	int step;
-	int mid; /* index of the found value */
-
-	while (count > 0) {
-		step = count >> 1; /* count divide by two using bit shift */
-
-		mid = left + step;
-
-		if (comp(ptr + (mid * sizeof_value), value) < 0) {
-			left = mid + 1;
-			count -= step + 1;
-		}
-		else {
-			count = step;
-		}
-	}
-	return left;
-}
-
-int
+CB_INTERNAL int
 cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* value, int sizeof_value, cb_predicate_t pred)
 {
 	const char* ptr = (const char*)void_ptr;
@@ -485,7 +499,7 @@ cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* 
 
 		mid = left + step;
 
-		if (pred(ptr + (mid * sizeof_value), value) != cb_false) {
+		if (pred(ptr + (mid * sizeof_value), value)) {
 			left = mid + 1;
 			count -= step + 1;
 		}
@@ -495,25 +509,35 @@ cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* 
 	}
 	return left;
 }
-/* @FIXME maybe we can directly create an overload for cb_map and cb_mmap, not sure we want to use raw array with lower_bound */
-static int cb_darr_lower_bound_predicate(const cb_darr* arr, const void* value, int sizeof_value, cb_predicate_t less)
+
+/* @FIXME maybe we can directly create an overload for cb_mmap, not sure we want to use raw array with lower_bound */
+CB_INTERNAL int
+cb_darr_lower_bound_predicate(const cb_darr* arr, const void* value, int sizeof_value, cb_predicate_t less)
 {
 	return cb_lower_bound_predicate(arr->data, 0, arr->size, value, sizeof_value, less);
-}
-
-static int cb_darr_lower_bound_comp(const cb_darr* arr, const void* value, int sizeof_value, cb_comp_t comp)
-{
-	return cb_lower_bound_comp(arr->data, 0, arr->size, value, sizeof_value, comp);
 }
 
 /*-----------------------------------------------------------------------*/
 /* cb_strv - string view */
 /*-----------------------------------------------------------------------*/
 
-static cb_strv cb_strv_make(const char* data, int size) { cb_strv s; s.data = data; s.size = size; return s; }
-static cb_strv cb_strv_make_str(const char* str) { return cb_strv_make(str, strlen(str)); }
+CB_INTERNAL cb_strv
+cb_strv_make(const char* data, int size)
+{
+	cb_strv s;
+	s.data = data;
+	s.size = size; 
+	return s;
+}
 
-static int cb_lexicagraphical_cmp(const char* left, size_t left_count, const char* right, size_t right_count)
+CB_INTERNAL cb_strv
+cb_strv_make_str(const char* str)
+{
+	return cb_strv_make(str, strlen(str));
+}
+
+CB_INTERNAL int
+cb_lexicagraphical_cmp(const char* left, size_t left_count, const char* right, size_t right_count)
 {
 	char c1, c2;
 	size_t min_size = left_count < right_count ? left_count : right_count;
@@ -528,12 +552,18 @@ static int cb_lexicagraphical_cmp(const char* left, size_t left_count, const cha
 	return left_count - right_count;
 }
 
-int cb_strv_compare(cb_strv sv, const char* data, int size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
-int cb_strv_compare_strv(cb_strv sv, cb_strv other) { return cb_strv_compare(sv, other.data, other.size); }
-int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv, str, strlen(str)); }
-cb_bool cb_strv_equals(cb_strv sv, const char* data, int size) { return cb_strv_compare(sv, data, size) == 0; }
-cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
-cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
+CB_INTERNAL int cb_strv_compare(cb_strv sv, const char* data, int size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
+CB_INTERNAL int cb_strv_compare_strv(cb_strv sv, cb_strv other) { return cb_strv_compare(sv, other.data, other.size); }
+CB_INTERNAL int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv, str, strlen(str)); }
+CB_INTERNAL cb_bool cb_strv_equals(cb_strv sv, const char* data, int size) { return cb_strv_compare(sv, data, size) == 0; }
+CB_INTERNAL cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
+CB_INTERNAL cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
+
+/*-----------------------------------------------------------------------*/
+/* cb_str - c string utilities */
+/*-----------------------------------------------------------------------*/
+
+CB_INTERNAL cb_bool cb_str_equals(const char* left, const char* right) { return cb_strv_equals_strv(cb_strv_make_str(left), cb_strv_make_str(right)); }
 
 /*-----------------------------------------------------------------------*/
 /* cb_dstr - dynamic string */
@@ -544,13 +574,14 @@ cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compa
     , (const char* []) { __VA_ARGS__ } \
 	, (sizeof((const char* []) { __VA_ARGS__ }) / sizeof(const char*)))
 
-static const char* cb_empty_string() { return "\0EMPTY_STRING"; }
-static void cb_dstr_init(cb_dstr* dstr) { cb_darr_init(dstr); dstr->data = (char*)cb_empty_string(); }
-static void cb_dstr_destroy(cb_dstr* dstr) { if (dstr->data == cb_empty_string()) { dstr->data = CB_NULL; } cb_darr_destroy(dstr); }
+CB_INTERNAL const char* cb_empty_string() { return "\0EMPTY_STRING"; }
+CB_INTERNAL void cb_dstr_init(cb_dstr* dstr) { cb_darr_init(dstr); dstr->data = (char*)cb_empty_string(); }
+CB_INTERNAL void cb_dstr_destroy(cb_dstr* dstr) { if (dstr->data == cb_empty_string()) { dstr->data = NULL; } cb_darr_destroy(dstr); }
 /* does not free anything, just reset the size to 0 */
-static void cb_dstr_clear(cb_dstr* dstr) { if (dstr->data != cb_empty_string()) { dstr->size = 0; dstr->data[dstr->size] = '\0'; } }
+CB_INTERNAL void cb_dstr_clear(cb_dstr* dstr) { if (dstr->data != cb_empty_string()) { dstr->size = 0; dstr->data[dstr->size] = '\0'; } }
 
-static void cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
+CB_INTERNAL void
+cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
 {
 	assert(new_string_capacity > s->capacity && "You should request more capacity, not less."); /* ideally we should ensure this before this call. */
 	
@@ -569,14 +600,16 @@ static void cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
 	s->capacity = new_string_capacity;
 }
 
-static void cb_dstr__grow_if_needed(cb_dstr* s, int needed)
+CB_INTERNAL void
+cb_dstr__grow_if_needed(cb_dstr* s, int needed)
 {
 	if (needed > s->capacity) { 
 		cb_dstr_reserve(s, cb_darr__get_new_capacity(s, needed));
 	}
 }
 
-static void cb_dstr_append_from(cb_dstr* s, int index, const char* data, int size)
+CB_INTERNAL void
+cb_dstr_append_from(cb_dstr* s, int index, const char* data, int size)
 {
 	cb_dstr__grow_if_needed(s, index + size);
 
@@ -585,7 +618,8 @@ static void cb_dstr_append_from(cb_dstr* s, int index, const char* data, int siz
 	s->data[s->size] = '\0';
 }
 
-static int cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_list args)
+CB_INTERNAL int
+cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_list args)
 {
 	va_list args_copy;
 	va_copy(args_copy, args);
@@ -601,10 +635,21 @@ static int cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_lis
 	s->size = index + add_len;
 	return add_len;
 }
-static void cb_dstr_assign(cb_dstr* s, const char* data, int size) { cb_dstr_append_from(s, 0, data, size); }
-static void cb_dstr_assign_str(cb_dstr* s, const char* str) { cb_dstr_assign(s, str, strlen(str)); }
 
-static void cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
+CB_INTERNAL void
+cb_dstr_assign(cb_dstr* s, const char* data, int size)
+{
+	cb_dstr_append_from(s, 0, data, size);
+}
+
+CB_INTERNAL void
+cb_dstr_assign_str(cb_dstr* s, const char* str)
+{
+	cb_dstr_assign(s, str, strlen(str));
+}
+
+CB_INTERNAL void
+cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -612,17 +657,31 @@ static void cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
 	va_end(args);
 }
 
-static void cb_dstr_append_many(cb_dstr* s, const char* strings[], int count)
+CB_INTERNAL void
+cb_dstr_append_many(cb_dstr* s, const char* strings[], int count)
 {
-	for (int i = 0; i < count; ++i)
+	int i;
+
+	for (i = 0; i < count; ++i)
 	{
-		cb_dstr_append_from( s, s->size, strings[i], strlen(strings[i]));
+		cb_dstr_append_from(s, s->size, strings[i], strlen(strings[i]));
 	}
 }
 
-static void cb_dstr_append_str(cb_dstr* s, const char* str) { cb_dstr_append_from(s, s->size, str, strlen(str)); }
-static void cb_dstr_append_strv(cb_dstr* s, cb_strv sv) { cb_dstr_append_from(s, s->size, sv.data, sv.size); }
-static int  cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
+CB_INTERNAL void
+cb_dstr_append_str(cb_dstr* s, const char* str)
+{
+	cb_dstr_append_from(s, s->size, str, strlen(str));
+}
+
+CB_INTERNAL void
+cb_dstr_append_strv(cb_dstr* s, cb_strv sv)
+{
+	cb_dstr_append_from(s, s->size, sv.data, sv.size);
+}
+
+CB_INTERNAL int
+cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -635,18 +694,8 @@ static int  cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 /* cb_hash */
 /*-----------------------------------------------------------------------*/
 
-static unsigned long djb2(const char* s)
-{
-	unsigned long hash = 5381;
-	int c;
-
-	while ((c = *s++))
-		hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-	return hash;
-}
-
-static unsigned long djb2_strv(const char* str, int count)
+CB_INTERNAL unsigned long
+djb2_strv(const char* str, int count)
 {
 	unsigned long hash = 5381;
 	int i = 0;
@@ -659,159 +708,92 @@ static unsigned long djb2_strv(const char* str, int count)
 	return hash;
 }
 
-static cb_id cb_hash(const char* str) { return djb2(str); }
-static cb_id cb_hash_strv(cb_strv sv) { return djb2_strv(sv.data, sv.size); }
+CB_INTERNAL cb_id
+cb_hash_strv(cb_strv sv)
+{
+	return djb2_strv(sv.data, sv.size);
+}
 
 /*-----------------------------------------------------------------------*/
 /* cb_kv */
 /*-----------------------------------------------------------------------*/
 
-static void
-cb_kv__set_key(cb_kv* p, cb_strv sv)
+CB_INTERNAL void
+cb_kv_init(cb_kv* kv, cb_strv sv)
 {
-	p->hash = cb_hash_strv(sv);
-	p->key = sv;
+	memset(kv, 0, sizeof(cb_kv));
+	kv->hash = cb_hash_strv(sv);
+	kv->key = sv;
 }
 
-static cb_kv
+CB_INTERNAL cb_kv
 cb_kv_make_with_str(cb_strv sv, const char* value)
 {
-	cb_kv pair;
-	cb_kv__set_key(&pair, sv);
-	pair.u.strv = cb_strv_make_str(value);
-	return pair;
+	cb_kv kv;
+	cb_kv_init(&kv, sv);
+	kv.is_dynamic_string = 0;
+	kv.u.strv = cb_strv_make_str(value);
+	return kv;
 }
 
-static cb_kv
+CB_INTERNAL cb_kv
 cb_kv_make_with_ptr(cb_strv sv, const void* ptr)
 {
-	cb_kv pair;
-	cb_kv__set_key(&pair, sv);
-	pair.u.ptr = ptr;
-	return pair;
+	cb_kv kv;
+	cb_kv_init(&kv, sv);
+	kv.is_dynamic_string = 0;
+	kv.u.ptr = ptr;
+	return kv;
 }
 
-static int
+CB_INTERNAL cb_kv
+cb_kv_make_with_dstr(cb_strv sv, cb_dstr value)
+{
+	cb_kv kv;
+	cb_kv_init(&kv, sv);
+	kv.is_dynamic_string = 1;
+	kv.u.dstr = value;
+	return kv;
+}
+
+CB_INTERNAL int
 cb_kv_comp(const cb_kv* left, const cb_kv* right)
 {
 	return left->hash != right->hash
-		? right->hash - left->hash
+		? (right->hash < left->hash ? -1 : 1)
 		: cb_strv_compare_strv(left->key, right->key);
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_kv_less(const cb_kv* left, const cb_kv* right)
 {
 	return cb_kv_comp(left, right) < 0;
 }
 
 /*-----------------------------------------------------------------------*/
-/* cb_map */
-/*-----------------------------------------------------------------------*/
-
-static void cb_map_init(cb_map* map) { cb_darrT_init(map); }
-static void cb_map_destroy(cb_map* map) { cb_darrT_destroy(map); }
-
-static void cb_map_set(cb_map* map, cb_kv kv)
-{
-	int index = cb_darr_lower_bound_predicate(&map->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
-
-    cb_darrT_insert(map, index, kv);
-}
-
-static int
-cb_map_find(const cb_map* map, const cb_kv* kv)
-{
-    int index = cb_darr_lower_bound_predicate(&map->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
-
-    if (index == map->base.size || cb_kv_less(kv, cb_darrT_ptr(map, index)))
-    {
-		index = map->base.size; /* not found */
-    }
-
-    return index;
-}
-
-static cb_bool cb_map_get_from_kv(cb_map* map, const cb_kv* item, cb_kv* result)
-{
-	int index = cb_map_find(map, item);
-	if (index != map->base.size)
-	{
-		*result = cb_darrT_at(map, index);
-		return cb_true;
-	}
-
-	return cb_false;
-}
-
-static void cb_map_set_ptr(cb_map* map, cb_strv key, const void* value_ptr)
-{
-	cb_map_set(map, cb_kv_make_with_ptr(key, value_ptr));
-}
-
-static const void* cb_map_get_ptr(cb_map* map, cb_strv key, const void* default_value)
-{
-	cb_kv key_item;
-	cb_kv__set_key(&key_item, key);
-	cb_kv result;
-
-	return cb_map_get_from_kv(map, &key_item, &result) ? result.u.ptr : default_value;
-}
-
-static cb_strv cb_map_get_strv(cb_map* map, cb_strv key, cb_strv default_value)
-{
-	cb_kv key_item;
-	cb_kv__set_key(&key_item, key);
-	cb_kv result;
-
-	return cb_map_get_from_kv(map, &key_item, &result) ? result.u.strv : default_value;
-}
-
-static void
-cb_map_insert(cb_map* map, cb_kv kv)
-{
-	/* we don't need to check if something was found or not, if value is not found the new value will be added at the end of the array */
-	int index = cb_darr_lower_bound_predicate(&map->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
-
-	cb_darrT_insert(map, index, kv);
-}
-
-static cb_bool
-cb_map_remove(cb_map* m, cb_kv kv)
-{
-	int index = cb_map_find(m, &kv);
-	if (index != m->darr.size)
-	{
-		cb_darrT_remove(m, index);
-		return cb_true;
-	}
-
-	return cb_false;
-}
-
-/*-----------------------------------------------------------------------*/
 /* cb_mmap - a multimap */
 /*-----------------------------------------------------------------------*/
 
-static void cb_mmap_init(cb_mmap* m) { cb_darrT_init(m); }
-static void cb_mmap_destroy(cb_mmap* m) { cb_darrT_destroy(m); }
+CB_INTERNAL void cb_mmap_init(cb_mmap* m) { cb_darrT_init(m); }
+CB_INTERNAL void cb_mmap_destroy(cb_mmap* m) { cb_darrT_destroy(m); }
 
-static void cb_mmap_insert(cb_mmap* m, cb_kv kv)
+CB_INTERNAL void
+cb_mmap_insert(cb_mmap* m, cb_kv kv)
 {
-	int index = cb_darr_lower_bound_comp(&m->base, &kv, sizeof(cb_kv), (cb_comp_t)cb_kv_comp);
+	int index = cb_darr_lower_bound_predicate(&m->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
 
 	cb_darrT_insert(m, index, kv);
 }
 
 /* cb_mmap_find does the same as cb_map_find, we should probably remove cb_map implementation if it's not used anymore */
-static int
-cb_mmap_find(const cb_mmap* map, const cb_kv* kv)
+CB_INTERNAL int
+cb_mmap_find(const cb_mmap* m, const cb_kv* kv)
 {
-	int index = cb_darr_lower_bound_predicate(&map->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
+	int index = cb_darr_lower_bound_predicate(&m->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
 
-	if (index == map->base.size || cb_kv_less(kv, cb_darrT_ptr(map, index)))
+	if (index == m->base.size || cb_kv_less(kv, cb_darrT_ptr(m, index)))
 	{
-		index = map->base.size; /* not found */
+		index = m->base.size; /* not found */
 	}
 
 	return index;
@@ -835,8 +817,6 @@ cb_mmap_try_get_first(const cb_mmap* m, cb_strv key, cb_kv* kv)
 CB_INTERNAL cb_kv_range
 cb_mmap_get_range(const cb_mmap* m, cb_strv key)
 {
-	cb_comp_t comp = (cb_comp_t)cb_kv_comp;
-
 	cb_kv_range result = { 0, 0, 0 };
 
 	cb_kv key_item = cb_kv_make_with_str(key, "");
@@ -855,7 +835,8 @@ cb_mmap_get_range(const cb_mmap* m, cb_strv key)
 	result.count++;
 
 	/* Check for other items */
-	while (index != m->base.size && comp(cb_darrT_ptr(m, index), &key_item) == 0)
+	while (index != m->base.size
+		&& cb_kv_comp(cb_darrT_ptr(m, index), &key_item) == 0)
 	{
 		index += 1;
 
@@ -872,7 +853,8 @@ cb_mmap_get_range_str(const cb_mmap* m, const char* key)
 	return cb_mmap_get_range(m, cb_strv_make_str(key));
 }
 
-cb_bool cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
+CB_INTERNAL cb_bool
+cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 {
 	CB_ASSERT(range->begin <= range->end);
 
@@ -887,8 +869,23 @@ cb_bool cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 	return cb_false;
 }
 
-/* Remove all values found in keys*/
-static int cb_mmap_remove(cb_mmap* m, cb_kv kv)
+CB_INTERNAL void
+cb_mmap_remove_one(cb_mmap* m, int index)
+{
+	/* destroy dynamic string if needed */
+	{
+		cb_kv* kv = cb_darrT_ptr(m, index);
+		if (kv->is_dynamic_string)
+		{
+			cb_dstr_destroy(&kv->u.dstr);
+		}
+	}
+	cb_darrT_remove(m, index);
+}
+
+/* Remove all values found in keys, if the value was a dynamic string the dynamic string is destroyed */
+CB_INTERNAL int
+cb_mmap_remove(cb_mmap* m, cb_kv kv)
 {
 	cb_kv_range range = cb_mmap_get_range(m, kv.key);
 
@@ -899,29 +896,79 @@ static int cb_mmap_remove(cb_mmap* m, cb_kv kv)
 	{
 		while (current_index < count_to_remove)
 		{
-			cb_darrT_remove(m, current_index);
+			cb_mmap_remove_one(m, current_index);
 			current_index += 1;
 		}
 	}
 	return count_to_remove;
 }
 
-static void cb_context_init(cb_context* ctx)
+
+CB_INTERNAL cb_bool
+cb_mmap_get_from_kv(cb_mmap* map, const cb_kv* item, cb_kv* result)
+{
+	int index = cb_mmap_find(map, item);
+	if (index != map->base.size)
+	{
+		*result = cb_darrT_at(map, index);
+		return cb_true;
+	}
+
+	return cb_false;
+}
+
+CB_INTERNAL void
+cb_mmap_insert_ptr(cb_mmap* map, cb_strv key, const void* value_ptr)
+{
+	cb_mmap_insert(map, cb_kv_make_with_ptr(key, value_ptr));
+}
+
+CB_INTERNAL const void*
+cb_mmap_get_ptr(cb_mmap* map, cb_strv key, const void* default_value)
+{
+	cb_kv key_item;
+	cb_kv_init(&key_item, key);
+	cb_kv result;
+
+	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.ptr : default_value;
+}
+
+CB_INTERNAL cb_strv
+cb_mmap_get_strv(cb_mmap* map, cb_strv key, cb_strv default_value)
+{
+	cb_kv key_item;
+	cb_kv_init(&key_item, key);
+	cb_kv result;
+
+	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.strv : default_value;
+}
+
+CB_INTERNAL void
+cb_context_init(cb_context* ctx)
 {
 	memset(ctx, 0, sizeof(cb_context));
-	cb_map_init(&ctx->projects);
+	cb_mmap_init(&ctx->projects);
 	ctx->current_project = 0;
 }
 
-static cb_project_t* cb_find_project_by_name(cb_strv sv)
+CB_INTERNAL void
+cb_context_destroy(cb_context* ctx)
 {
-	void* default_value = CB_NULL;
-	return (cb_project_t*)cb_map_get_ptr(&current_ctx->projects, sv, default_value);
+	cb_mmap_destroy(&ctx->projects);
+	cb_context_init(ctx);
 }
 
-static cb_project_t* cb_find_project_by_name_str(const char* name) { return cb_find_project_by_name(cb_strv_make_str(name)); }
+CB_INTERNAL cb_project_t*
+cb_find_project_by_name(cb_strv sv)
+{
+	void* default_value = NULL;
+	return (cb_project_t*)cb_mmap_get_ptr(&current_ctx->projects, sv, default_value);
+}
 
-static void cb_project_init(cb_project_t* project)
+CB_INTERNAL cb_project_t* cb_find_project_by_name_str(const char* name) { return cb_find_project_by_name(cb_strv_make_str(name)); }
+
+CB_INTERNAL void
+cb_project_init(cb_project_t* project)
 {
 	memset(project, 0, sizeof(cb_project_t));
 
@@ -929,42 +976,100 @@ static void cb_project_init(cb_project_t* project)
 	cb_mmap_init(&project->mmap);
 }
 
-static void cb_project_destroy(cb_project_t* project)
+CB_INTERNAL void
+cb_project_destroy(cb_project_t* project)
 {
 	cb_darrT_destroy(&project->file_commands);
 	cb_mmap_destroy(&project->mmap);
 }
 
-static cb_project_t* cb_create_project(const char* name)
+CB_INTERNAL cb_project_t*
+cb_create_project(const char* name)
 {
-    cb_id id = cb_hash(name);
+	cb_strv n = cb_strv_make_str(name);
+    cb_id id = cb_hash_strv(n);
 	
 	cb_project_t* project = (cb_project_t*)CB_MALLOC(sizeof(cb_project_t));
 	cb_project_init(project);
 	project->context = current_ctx;
 	project->id = id;
-	project->name.data = name;
-	project->name.size = strlen(name);
+	project->name = n;
 	
-	cb_map_set_ptr(&current_ctx->projects, cb_strv_make_str(name), project);
+	cb_mmap_insert_ptr(&current_ctx->projects, n, project);
 	
     return project;
 }
+
+CB_INTERNAL cb_project_t*
+cb__current_project()
+{
+	CB_ASSERT(current_ctx->current_project);
+	cb_project_t* p = current_ctx->current_project;
+	CB_ASSERT(p);
+	return p;
+};
 
 /* API */
 
 #ifdef _WIN32
 /* Any error would silently crash any application, this handler is just there to display a message and exit the application with a specific value */
- __declspec(noinline) static LONG WINAPI exit_on_exception_handler(EXCEPTION_POINTERS* ex_ptr)
- {
-    (void)ex_ptr;
+__declspec(noinline) static LONG WINAPI exit_on_exception_handler(EXCEPTION_POINTERS* ex_ptr)
+{
+	(void)ex_ptr;
 	int exit_code=1;
 	printf("[CB] Error: unexpected error. exited with code %d\n", exit_code);
 	exit(exit_code);
 }
 #endif
+CB_INTERNAL void cb__add(cb_kv kv);
+CB_INTERNAL void cb__set(cb_kv kv);
+CB_INTERNAL int cb__remove_all(cb_kv kv);
+CB_INTERNAL cb_bool cb__remove_one(cb_kv kv);
 
-RE_CB_API void cb_init()
+CB_INTERNAL void
+cb__add(cb_kv kv)
+{
+	cb_project_t* p = cb__current_project();
+	cb_mmap_insert(&p->mmap, kv);
+}
+
+CB_INTERNAL void
+cb__set(cb_kv kv)
+{
+	/* @FIXME this can easily be optimized, but we don't care about that right now. */
+	cb__remove_all(kv);
+	cb__add(kv);
+}
+
+CB_INTERNAL cb_bool
+cb__remove_one(cb_kv kv)
+{
+	cb_project_t* p = cb__current_project();
+
+	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
+
+	while (range.begin < range.begin)
+	{
+		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
+		{
+			int index = p->mmap.darr.data - range.begin;
+			cb_mmap_remove_one(&p->mmap, index);
+			return cb_true;
+		}
+		range.begin++;
+	}
+	return cb_false;
+}
+
+CB_INTERNAL int
+cb__remove_all(cb_kv kv)
+{
+	 cb_project_t* p = cb__current_project();
+	 return cb_mmap_remove(&p->mmap, kv);
+}
+
+RE_CB_API void
+cb_init()
 {
 	cb_context_init(&default_ctx);
 	current_ctx = &default_ctx;
@@ -979,56 +1084,50 @@ RE_CB_API void cb_init()
 #endif
 }
 
-RE_CB_API cb_bool cb_project(const char* name)
+RE_CB_API void
+cb_destroy()
+{
+	/* @TODO remove all projects from current context */
+	cb_context_destroy(&default_ctx);
+}
+
+
+RE_CB_API cb_project_t* cb_project(const char* name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(name);
-	cb_bool is_new_project = project == CB_NULL;
+	cb_bool is_new_project = project == NULL;
 	if (is_new_project)
 	{
 		project = cb_create_project(name);
 	}
 	
 	current_ctx->current_project = project;
-	return is_new_project;
+	return project;
 }
-
-RE_CB_API void cb_add_files(const char* pattern)
-{
-	CB_ASSERT(current_ctx->current_project);
-	
-	cb_project_t* p = current_ctx->current_project;
-	
-	cb_file_command cmd;
-	cmd.glob = 1; 
-	cmd.pattern = pattern;
-
-	cb_darrT_push_back(&p->file_commands, cmd);
-}
-
-RE_CB_API void cb_add_file(const char* file)
-{
-	CB_ASSERT(current_ctx->current_project);
-	
-	cb_project_t* p = current_ctx->current_project;
-	
-	cb_file_command cmd;
-	cmd.glob = 0; 
-	cmd.pattern = file;
-
-	cb_darrT_push_back(&p->file_commands, cmd);
-}
-
 
 RE_CB_API void
 cb_add(const char* key, const char* value)
 {
-	CB_ASSERT(current_ctx->current_project);
-
-	cb_project_t* p = current_ctx->current_project;
+	cb_project_t* p = cb__current_project();
 
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
 
 	cb_mmap_insert(&p->mmap, kv);
+}
+
+RE_CB_API void
+cb_add_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
 }
 
 RE_CB_API void
@@ -1039,42 +1138,99 @@ cb_set(const char* key, const char* value)
 	cb_add(key, value);
 }
 
+RE_CB_API void
+cb_set_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	cb__set(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+}
+
 RE_CB_API int
 cb_remove_all(const char* key)
 {
-	cb_project_t* p = current_ctx->current_project;
-
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
-	return cb_mmap_remove(&p->mmap, kv);
+	return cb__remove_all(kv);
+}
+
+RE_CB_API int
+cb_remove_all_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	int count;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	count = cb__remove_all(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+	return count;
 }
 
 RE_CB_API cb_bool
 cb_remove_one(const char* key, const char* value)
 {
-	cb_project_t* p = current_ctx->current_project;
-
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
-	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
+	return cb__remove_one(kv);
+}
 
-	while (range.begin < range.begin)
-	{
-		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
-		{
-			int index = p->mmap.darr.data - range.begin;
-			cb_darrT_remove(&p->mmap, index);
-			return cb_true;
-		}
-		range.begin++;
-	}
-	return cb_false;
+RE_CB_API cb_bool
+cb_remove_one_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	cb_bool was_removed;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	was_removed = cb__remove_one(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+	return was_removed;
+}
+
+RE_CB_API void
+cb_add_files(const char* pattern)
+{
+	cb_file_command cmd;
+	cmd.glob = 1;
+	cmd.pattern = pattern;
+
+	cb_project_t* p = cb__current_project();
+	cb_darrT_push_back(&p->file_commands, cmd);
+}
+
+RE_CB_API void
+cb_add_file(const char* file)
+{
+	cb_file_command cmd;
+	cmd.glob = 0;
+	cmd.pattern = file;
+
+	cb_project_t* p = cb__current_project();
+	cb_darrT_push_back(&p->file_commands, cmd);
 }
 
 /* #file utils */
 
-static inline cb_bool cb_is_directory_separator(char c) { return (c == '/' || c == '\\'); }
+CB_INTERNAL cb_bool cb_is_directory_separator(char c) { return (c == '/' || c == '\\'); }
 
 #define CB_NPOS (-1)
-static int cb_rfind(cb_strv s, char c)
+
+CB_INTERNAL int
+cb_rfind(cb_strv s, char c)
 {
 	if (s.size == 0) return CB_NPOS;
 
@@ -1086,7 +1242,9 @@ static int cb_rfind(cb_strv s, char c)
 	}
 	return end < begin ? CB_NPOS : (end - begin);
 }
-static int cb_rfind2(cb_strv s, char c1, char c2)
+
+CB_INTERNAL int
+cb_rfind2(cb_strv s, char c1, char c2)
 {
 	if (s.size == 0) return CB_NPOS;
 
@@ -1098,7 +1256,9 @@ static int cb_rfind2(cb_strv s, char c1, char c2)
 	}
 	return end < begin ? CB_NPOS : (end - begin);
 }
-static cb_strv cb_path_filename(cb_strv path)
+
+CB_INTERNAL cb_strv
+cb_path_filename(cb_strv path)
 {
 	int pos = cb_rfind2(path, '/', '\\');
 	if (pos != CB_NPOS && pos > 0) {
@@ -1108,7 +1268,8 @@ static cb_strv cb_path_filename(cb_strv path)
 	return path;
 }
 
-static cb_strv cb_path_basename(cb_strv s)
+CB_INTERNAL cb_strv
+cb_path_basename(cb_strv s)
 {
 	cb_strv filename = cb_path_filename(s);
 
@@ -1126,7 +1287,9 @@ static cb_strv cb_path_basename(cb_strv s)
 #define CB_MAX_PATH 1024 /* this is an arbitrary limit */
 
 /* file iterator (can be recursive) */
-typedef struct cb_file_it_t {
+typedef struct cb_file_it cb_file_it;
+struct cb_file_it {
+	cb_bool recursive;
 	cb_bool has_next;
 
     /* stack used for recursion */
@@ -1147,11 +1310,12 @@ typedef struct cb_file_it_t {
 	DIR* handle_stack[CB_MAX_DIR_DEPTH];
 	struct dirent* find_data;
 #endif
-
-} cb_file_it;
+};
 
 #define cb_safe_strcpy(dst, src, index, max) cb_safe_strcpy_internal(dst, src, index, max, __FILE__, __LINE__)
-static int cb_safe_strcpy_internal(char* dst, const char* src, int index, int max, const char* file, int line)
+
+CB_INTERNAL int
+cb_safe_strcpy_internal(char* dst, const char* src, int index, int max, const char* file, int line)
 {
 	char c;
 	const char* original = src;
@@ -1171,14 +1335,16 @@ static int cb_safe_strcpy_internal(char* dst, const char* src, int index, int ma
 	return index;
 }
 
-static void cb_file_it_destroy(cb_file_it* it);
+CB_INTERNAL void cb_file_it_destroy(cb_file_it* it);
 
-static int cb_safe_combine_path(char* dst, const char* path, int index)
+CB_INTERNAL int
+cb_safe_combine_path(char* dst, const char* path, int index)
 {
 	return cb_safe_strcpy(dst, path, index, CB_MAX_PATH);
 }
 
-static void cb_file_it__push_dir(cb_file_it* it, const char* directory)
+CB_INTERNAL void
+cb_file_it__push_dir(cb_file_it* it, const char* directory)
 {
 	int current_dir_len = it->stack_size >= 0 ? it->dir_len_stack[it->stack_size] : 0;
 	int n = cb_safe_combine_path(it->current_file, directory, current_dir_len);
@@ -1228,7 +1394,8 @@ static void cb_file_it__push_dir(cb_file_it* it, const char* directory)
 	it->has_next = 1;
 }
 
-void cb_file_it_close_current_handle(cb_file_it* it)
+CB_INTERNAL void
+cb_file_it_close_current_handle(cb_file_it* it)
 {
 	if (it->handle_stack[it->stack_size] != CB_INVALID_FILE_HANDLE)
 	{
@@ -1241,7 +1408,7 @@ void cb_file_it_close_current_handle(cb_file_it* it)
 	}
 }
 
-static const char*
+CB_INTERNAL const char*
 cb_file_it__get_next_entry(cb_file_it* it)
 {
 #if defined(_WIN32)
@@ -1263,17 +1430,22 @@ cb_file_it__get_next_entry(cb_file_it* it)
 #endif
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_file_it__current_entry_is_directory(cb_file_it* it)
 {
 #if defined(_WIN32)
 	return !!(it->find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
 #else
+/* @FIXME: in c89 DT_DIR is not defined so we explicitely define it, this is not portable though. */
+#ifndef DT_DIR
+#define DT_DIR 4
+#endif 
 	return it->find_data->d_type == DT_DIR;
 #endif
 }
 
-void cb_file_it__pop_dir(cb_file_it* it)
+CB_INTERNAL void
+cb_file_it__pop_dir(cb_file_it* it)
 {
 	if (it->stack_size > 0)
 	{
@@ -1291,7 +1463,8 @@ void cb_file_it__pop_dir(cb_file_it* it)
 	}
 }
 	
-static void cb_file_it_init(cb_file_it* it, const char* base_directory)
+CB_INTERNAL void
+cb_file_it_init(cb_file_it* it, const char* base_directory)
 {
 	memset(it, 0, sizeof(cb_file_it));
 	it->stack_size = -1;
@@ -1299,7 +1472,15 @@ static void cb_file_it_init(cb_file_it* it, const char* base_directory)
 	cb_file_it__push_dir(it, base_directory);
 }
 
-static void cb_file_it_destroy(cb_file_it* it)
+CB_INTERNAL void
+cb_file_it_init_recursive(cb_file_it* it, const char* base_directory)
+{
+	cb_file_it_init(it, base_directory);
+	it->recursive = cb_true;;
+}
+
+CB_INTERNAL void
+cb_file_it_destroy(cb_file_it* it)
 {
 	while(it->stack_size > 0)
 	{
@@ -1311,9 +1492,10 @@ static void cb_file_it_destroy(cb_file_it* it)
 	it->has_next = 0;
 }
 
-static const char* cb_file_it_current_file(cb_file_it* it) { return it->current_file; }
+CB_INTERNAL const char* cb_file_it_current_file(cb_file_it* it) { return it->current_file; }
 
-static cb_bool cb_file_it_get_next(cb_file_it* it)
+CB_INTERNAL cb_bool
+cb_file_it_get_next(cb_file_it* it)
 {
 	CB_ASSERT(it->has_next);
 
@@ -1349,14 +1531,15 @@ static cb_bool cb_file_it_get_next(cb_file_it* it)
 	/* build path with current file found */
 	cb_safe_combine_path(it->current_file, found, it->dir_len_stack[it->stack_size]);
 
-	if (is_directory)
+	if (is_directory && it->recursive)
 	{
 		cb_file_it__push_dir(it, found);
 	}
 	return cb_true;
 }
 
-static cb_bool cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
+CB_INTERNAL cb_bool
+cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
 {
 	while (cb_file_it_get_next(it))
 	{
@@ -1369,7 +1552,8 @@ static cb_bool cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
 }
 
 /* return cb_true if separator has been added */
-static cb_bool cb_add_trailing_dir_separator(char* path, int path_len)
+CB_INTERNAL cb_bool
+cb_add_trailing_dir_separator(char* path, int path_len)
 {
 	if (!path || path_len >= CB_MAX_PATH) return cb_false;
 
@@ -1387,23 +1571,25 @@ static cb_bool cb_add_trailing_dir_separator(char* path, int path_len)
 }
 #ifdef WIN32
 /* @TODO rename everything related to file into cp_path_XXX */
-static cb_bool cb_path_exists(const char* path) {
+CB_INTERNAL cb_bool
+cb_path_exists(const char* path) {
 
 	DWORD attr = GetFileAttributesA(path);
 	return attr != INVALID_FILE_ATTRIBUTES;
 }
-static cb_bool cb_create_directory(const char* path) { return CreateDirectoryA(path, NULL); }
+CB_INTERNAL cb_bool cb_create_directory(const char* path) { return CreateDirectoryA(path, NULL); }
 #else
 
-static cb_bool cb_path_exists(const char* path) { return access(path, F_OK) == 0; }
+CB_INTERNAL cb_bool cb_path_exists(const char* path) { return access(path, F_OK) == 0; }
 
-static cb_bool cb_create_directory(const char* path) { return mkdir(path, 0777) == 0; }
+CB_INTERNAL cb_bool cb_create_directory(const char* path) { return mkdir(path, 0777) == 0; }
 
 #endif
 
-static void cb_create_directory_recursively(const char* path, int size)
+CB_INTERNAL void
+cb_create_directory_recursively(const char* path, int size)
 {
-	if (path == CB_NULL || size <= 0) {
+	if (path == NULL || size <= 0) {
 		cb_log_error("Could not create directory. Path is empty.");
 		return;
 	}
@@ -1446,7 +1632,8 @@ static void cb_create_directory_recursively(const char* path, int size)
 	}
 }
 
-static cb_bool cb_copy_file(const char* src_path, const char* dest_path)
+CB_INTERNAL cb_bool
+cb_copy_file(const char* src_path, const char* dest_path)
 {
 	/* create target directory if it does not exists */
 	cb_create_directory_recursively(dest_path, strlen(dest_path));
@@ -1514,14 +1701,14 @@ static cb_bool cb_copy_file(const char* src_path, const char* dest_path)
 }
 
 /* recursively copy the content of the directory in another one, empty directory will be omitted */
-static cb_bool cb_copy_directory(const char* source_dir, const char* target_dir)
+CB_INTERNAL cb_bool
+cb_copy_directory(const char* source_dir, const char* target_dir)
 {
-	/* only use to copy a directory */
 	char dest_buffer[CB_MAX_PATH];
 	memset(dest_buffer, 0, sizeof(dest_buffer));
 
 	cb_file_it it;
-	cb_file_it_init(&it, source_dir);
+	cb_file_it_init_recursive(&it, source_dir);
 
 	while (cb_file_it_get_next(&it))
 	{
@@ -1537,8 +1724,7 @@ static cb_bool cb_copy_directory(const char* source_dir, const char* target_dir)
 	return cb_true;
 }
 
-
-static cb_bool
+CB_INTERNAL cb_bool
 cb_delete_file(const char* src_path)
 {
 	cb_bool result = 0;
@@ -1554,7 +1740,7 @@ cb_delete_file(const char* src_path)
 	return result;
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_move_file(const char* src_path, const char* dest_path)
 {
 	if (cb_copy_file(src_path, dest_path))
@@ -1566,10 +1752,9 @@ cb_move_file(const char* src_path, const char* dest_path)
 }
 
 /* recursively copy the content of the directory in another one, empty directory will be omitted */
-static cb_bool
+CB_INTERNAL cb_bool
 cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)(cb_strv path))
 {
-	/* only use to copy a directory */
 	char dest_buffer[CB_MAX_PATH];
 	memset(dest_buffer, 0, sizeof(dest_buffer));
 
@@ -1578,7 +1763,7 @@ cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)
 
 	while (cb_file_it_get_next(&it))
 	{
-		/* copy current directory*/
+		/* copy current directory */
 		const char* source_relative_path = it.current_file + it.dir_len_stack[0];
 
 		int n = snprintf(dest_buffer, CB_MAX_PATH, "%s", target_dir);
@@ -1597,7 +1782,8 @@ cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)
 }
 
 /* Properties are just (strv) values from the map of a project. */
-static cb_bool try_get_property(cb_project_t* project, const char* key, cb_strv* result)
+CB_INTERNAL cb_bool
+try_get_property(cb_project_t* project, const char* key, cb_strv* result)
 {
 	cb_kv kv_result;
 	if (cb_mmap_try_get_first(&project->mmap, cb_strv_make_str(key), &kv_result))
@@ -1608,7 +1794,7 @@ static cb_bool try_get_property(cb_project_t* project, const char* key, cb_strv*
 	return cb_false;
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_property_equals(cb_project_t* project, const char* key, const char* comparison_value)
 {
 	cb_strv result;
@@ -1616,10 +1802,10 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 		&& cb_strv_equals_str(result, comparison_value);
 }
 
-RE_CB_API void
-cb_bake(cb_toolchain_t toolchain, const char* project_name)
+RE_CB_API cb_bool
+cb_bake(cb_toolchain toolchain, const char* project_name)
 {
-	toolchain.bake(&toolchain, project_name);
+	return toolchain.bake(&toolchain, project_name);
 }
 
 static void
@@ -1641,9 +1827,12 @@ cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_o
 }
 
 RE_CB_API cb_bool
-cb_bake_and_run(cb_toolchain_t toolchain, const char* project_name)
+cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 {
-	cb_bake(toolchain, project_name);
+	if (!cb_bake(toolchain, project_name))
+	{
+		return cb_false;
+	}
 	
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
@@ -1685,7 +1874,7 @@ cb_bake_and_run(cb_toolchain_t toolchain, const char* project_name)
 static cb_bool cb_wildcad_debug = 0;
 
 /** return nbytes, 0 on end, -1 on error */
-static int
+CB_INTERNAL int
 cb_decode_utf8(const void* p, int* pc)
 {
 	const int replacement = 0xFFFD;
@@ -1722,10 +1911,10 @@ cb_decode_utf8(const void* p, int* pc)
 }
 
 /* backslash and slash are assumed to be the same */
-static cb_bool
+CB_INTERNAL cb_bool
 cb_path_char_is_different(int left, int right) { return cb_is_directory_separator((char)left) ? !cb_is_directory_separator((char)right) : left != right; }
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_wildmatch(const char* pat, const char* str)
 {
 	const char* p, * s;
@@ -1802,17 +1991,17 @@ cb_subprocess(const char* str)
 	si.cb = sizeof(si);
 	ZeroMemory(&pi, sizeof(pi));
 
-	// Start the child process. 
-	if (!CreateProcessA(NULL,   // No module name (use command line)
-		cmd.data,       // Command line
-		NULL,           // Process handle not inheritable
-		NULL,           // Thread handle not inheritable
-		FALSE,          // Set handle inheritance to FALSE
-		0,              // No creation flags
-		NULL,           // Use parent's environment block
-		NULL,           // Use parent's starting directory 
-		&si,            // Pointer to STARTUPINFO structure
-		&pi)            // Pointer to PROCESS_INFORMATION structure
+	/* Start the child process. */
+	if (!CreateProcessA(NULL, /* No module name (use command line) */
+		cmd.data,       /* Command line */
+		NULL,           /* Process handle not inheritable */
+		NULL,           /* Thread handle not inheritable */ 
+		FALSE,          /* Set handle inheritance to FALSE */
+		0,              /* No creation flags */
+		NULL,           /* Use parent's environment block */
+		NULL,           /* Use parent's starting directory */
+		&si,            /* Pointer to STARTUPINFO structure */
+		&pi)            /* Pointer to PROCESS_INFORMATION structure */
 		)
 	{
 		cb_log_error("CreateProcessA failed (%d).", GetLastError());
@@ -1821,7 +2010,7 @@ cb_subprocess(const char* str)
 
 	WaitForSingleObject(pi.hProcess, INFINITE);
 
-	// Close process and thread handles. 
+	/* Close process and thread handles. */
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
 
@@ -1831,8 +2020,10 @@ cb_subprocess(const char* str)
 	
 
 /* space or tab */
-static cb_bool cb_is_space(char c) { return c == ' ' || c == '\t'; }
-static cb_bool cb_is_end_of_quote(const char* str, char quote_type)
+CB_INTERNAL cb_bool cb_is_space(char c) { return c == ' ' || c == '\t'; }
+
+CB_INTERNAL cb_bool
+cb_is_end_of_quote(const char* str, char quote_type)
 {
 	return *str != '\0'
 		&& *str == quote_type
@@ -1847,12 +2038,13 @@ a "b" c => 3 arguments a b c;
 a"b"c   => 1 argument a"b"c
 "a"b"c" => 1 argument a"b"c
 */
-static const char* cb_get_next_arg(const char* str, cb_strv* sv)
+CB_INTERNAL const char*
+cb_get_next_arg(const char* str, cb_strv* sv)
 {
 	sv->data = str;
 	sv->size = 0;
 	if (str == NULL || *str == '\0')
-		return CB_NULL;
+		return NULL;
 		
 	while (*str != '\0')
 	{
@@ -1862,7 +2054,7 @@ static const char* cb_get_next_arg(const char* str, cb_strv* sv)
 
 		/* Return early if end of string */
 		if (*str == '\0') 
-			return sv->size > 0 ? str: CB_NULL;
+			return sv->size > 0 ? str: NULL;
 
 		/* Handle quotes */
 		if (*str == '\'' || *str == '\"')
@@ -1872,7 +2064,7 @@ static const char* cb_get_next_arg(const char* str, cb_strv* sv)
 			
 			/* Return early if end of string */
 			if (*str == '\0')
-				return sv->size > 0 ? str : CB_NULL;
+				return sv->size > 0 ? str : NULL;
 
 			/* Quote next the previous one so it's an empty content, we look for another item */
 			if (cb_is_end_of_quote(str, *quote))
@@ -1906,12 +2098,13 @@ static const char* cb_get_next_arg(const char* str, cb_strv* sv)
 			return str;
 		}
 	}
-	return CB_NULL;
+	return NULL;
 }
 
 #define CB_INVALID_PROCESS (-1)
 
-pid_t cb_fork_process(char* args[])
+CB_INTERNAL pid_t
+cb_fork_process(char* args[])
 {
 	pid_t pid = fork();
 	if (pid < 0) {
@@ -2017,7 +2210,7 @@ cb_subprocess(const char* str)
 /* #msvc #toolchain */
 
 RE_CB_API cb_bool
-cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
+cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
@@ -2042,7 +2235,10 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	/* Format output directory */
 	cb_dstr_add_output_path(&str_ouput_path, project, tc->default_directory_base);
 
+	/* Create output directory if it does not exist yet. */
 	cb_create_directory_recursively(str_ouput_path.data, str_ouput_path.size);
+
+
 	cb_dstr_append_v(&str, "cl.exe", _);
 
 	/* Handle binary type */
@@ -2074,6 +2270,17 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		cb_dstr_append_v(&str, "/Fe", str_ouput_path.data, "\\", project_name, ext, _);
 	}
 
+	/* Append compiler flags */
+	{
+		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
+		cb_kv current;
+		while (cb_mmap_range_get_next(&range, &current))
+		{
+			cb_dstr_append_strv(&str, current.u.strv);
+			cb_dstr_append_str(&str,  _);
+		}
+	}
+
 	/* Append include directories */
 	{
 		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
@@ -2101,13 +2308,14 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	}
 
 	cb_file_it it;
-	for (int i = 0; i < project->file_commands.darr.size; ++i)
+	int i;
+	for (i = 0; i < project->file_commands.darr.size; ++i)
 	{
 		cb_file_command cmd = cb_darrT_at(&project->file_commands, i);
 
 		if (cmd.glob)
 		{
-			cb_file_it_init(&it, ".");
+			cb_file_it_init_recursive(&it, ".");
 
 			while(cb_file_it_get_next_glob(&it, cmd.pattern))
 			{
@@ -2123,10 +2331,6 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 
 			cb_file_it_destroy(&it);
 		}
-		else
-		{
-			CB_ASSERT("Not Implemented Yet");
-		}
 	}
 
 	/* for each linked project we add the link information to the cl.exe command */
@@ -2137,6 +2341,16 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		cb_dstr_init(&linked_output_dir);
 
 		cb_dstr_append_v(&str, "/link", _);
+		/* Add linker flags */
+		{
+			cb_kv_range lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			cb_kv lflag;
+			while (cb_mmap_range_get_next(&lflag_range, &lflag))
+			{
+				cb_dstr_append_strv(&str, lflag.u.strv);
+				cb_dstr_append_str(&str, _);
+			}
+		}
 		cb_kv current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
@@ -2176,6 +2390,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	/* execute cl.exe */
 	if (!cb_subprocess(str.data))
 	{
+		/* @FIXME: Release all allocated objects here. */
 		return cb_false;
 	}
 	
@@ -2189,6 +2404,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	
 		if (!cb_subprocess(str.data))
 		{
+			/* @FIXME: Release all allocated objects here. */
 			cb_log_error("Could not execute command to build static library\n");
 			return cb_false;
 		}
@@ -2201,10 +2417,10 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	return cb_true;
 }
 
-RE_CB_API cb_toolchain_t
+RE_CB_API cb_toolchain
 cb_toolchain_msvc()
 {
-	cb_toolchain_t tc;
+	cb_toolchain tc;
 	tc.bake = cb_toolchain_msvc_bake;
 	tc.name = "msvc";
 	tc.default_directory_base = ".cb\\msvc";
@@ -2219,31 +2435,31 @@ cb_toolchain_msvc()
 
 /* #gcc #toolchain */
 
-static cb_bool
+CB_INTERNAL cb_bool
 cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 {
 	if (sv.size < rhs.size)
 	{
-		return (cb_bool)(0);
+		return cb_false;
 	}
 
 	cb_strv sub = cb_strv_make(sv.data + (sv.size - rhs.size), rhs.size);
 	return cb_strv_equals_strv(sub, rhs);
 }
 
-static cb_bool
+CB_INTERNAL cb_bool
 is_created_by_gcc(cb_strv file)
 {
-	static cb_strv o_ext = { ".o" , 2 };
-	static cb_strv so_ext = { ".so" , 3 };
-	static cb_strv a_ext = { ".a" , 3 };
+	static cb_strv o_ext = { 2, ".o" };
+	static cb_strv so_ext = { 3, ".so" };
+	static cb_strv a_ext = { 2, ".a" };
 	return cb_strv_ends_with(file, o_ext)
 		|| cb_strv_ends_with(file, so_ext)
 		|| cb_strv_ends_with(file, a_ext);
 }
 
 RE_CB_API cb_bool
-cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
+cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
@@ -2268,7 +2484,10 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	/* Format output directory */
 	cb_dstr_add_output_path(&str_ouput_path, project, tc->default_directory_base);
 
+	/* Create output directory if it does not exist yet. */
 	cb_create_directory_recursively(str_ouput_path.data, str_ouput_path.size);
+
+	/* Start command */
 	cb_dstr_append_v(&str, "cc ", _);
 
 	/* Handle binary type */
@@ -2279,9 +2498,20 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	CB_ASSERT(is_exe || is_shared_library || is_static_library && "Unknown library type");
 
 	const char* ext = "";
-	ext = is_exe ? "" : ext;
+	ext = is_exe ? "" : ext; /* do not provide extension to executables on linux */
 	ext = is_static_library ? ".a" : ext;
 	ext = is_shared_library ? ".so" : ext;
+
+	/* Append compiler flags */
+	{
+		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
+		cb_kv current;
+		while (cb_mmap_range_get_next(&range, &current))
+		{
+			cb_dstr_append_strv(&str, current.u.strv);
+			cb_dstr_append_str(&str, _);
+		}
+	}
 
 	/* Append include directories */
 	{
@@ -2326,13 +2556,14 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	}
 
 	cb_file_it it;
-	for (int i = 0; i < project->file_commands.darr.size; ++i)
+	int i;
+	for (i = 0; i < project->file_commands.darr.size; ++i)
 	{
 		cb_file_command cmd = cb_darrT_at(&project->file_commands, i);
 
 		if (cmd.glob)
 		{
-			cb_file_it_init(&it, ".");
+			cb_file_it_init_recursive(&it, ".");
 
 			while (cb_file_it_get_next_glob(&it, cmd.pattern))
 			{
@@ -2350,16 +2581,23 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 
 			cb_file_it_destroy(&it);
 		}
-		else
-		{
-			CB_ASSERT("Not Implemented Yet");
-		}
 	}
 
 	/* for each linked project we add the link information to the gcc command */
 	cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
 	if (range.count > 0)
 	{
+		/* Add linker flags */
+		{
+			cb_kv_range lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			cb_kv lflag;
+			while (cb_mmap_range_get_next(&lflag_range, &lflag))
+			{
+				cb_dstr_append_strv(&str, lflag.u.strv);
+				cb_dstr_append_str(&str, _);
+			}
+		}
+
 		/* Give some parameters to the linker to  look for the shared library next to the binary being built */
 		cb_dstr_append_str(&str, " -Wl,-rpath,$ORIGIN ");
 
@@ -2404,6 +2642,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	/* Example: gcc <includes> -c  <c source files> */
 	if (!cb_subprocess(str.data))
 	{
+		/* @FIXME: Release all allocated objects here. */
 		return cb_false;
 	}
 
@@ -2416,6 +2655,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 		if (chmod(project_name, mode) < 0)
 		{
 			cb_log_error("Could not give executable permission to '%s'.", project_name);
+			/* @FIXME: Release all allocated objects here. */
 			return cb_false;
 		}
 		/* move executable to the output directory */
@@ -2429,6 +2669,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 		if (!cb_move_files("./", str_ouput_path.data, is_created_by_gcc))
 		{
 			cb_log_error("Could not move files from './' to '%s'.", str_ouput_path.data);
+			/* @FIXME: Release all allocated objects here. */
 			return cb_false;
 		}
 
@@ -2439,6 +2680,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 			cb_dstr_assign_f(&str, "ar -crs %slib%s%s %s", str_ouput_path.data, project_name, ext, str_obj.data);
 			if (!cb_subprocess(str.data))
 			{
+				/* @FIXME: Release all allocated objects here. */
 				return cb_false;
 			}
 			cb_log_important("Created static library: %slib%s%s", str_ouput_path.data, project_name, ext);
@@ -2458,10 +2700,10 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	return cb_true;
 }
 
-RE_CB_API cb_toolchain_t
+RE_CB_API cb_toolchain
 cb_toolchain_gcc()
 {
-	cb_toolchain_t tc;
+	cb_toolchain tc;
 	tc.bake = cb_toolchain_gcc_bake;
 	tc.name = "gcc";
 	tc.default_directory_base = ".cb/gcc";
@@ -2470,7 +2712,7 @@ cb_toolchain_gcc()
 
 #endif /* #else of _WIN32 */
 
-RE_CB_API cb_toolchain_t
+RE_CB_API cb_toolchain
 cb_toolchain_default()
 {
 #ifdef _WIN32

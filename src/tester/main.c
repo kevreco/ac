@@ -6,7 +6,7 @@
 
 int main(int argc, const char* args[]) {
    
-   struct dstr s;
+   dstr s;
    dstr_init(&s);
    dstr_append_str(&s, "Hello, World! (from tester) using dstr from re.lib \n");
    printf(s.data);
@@ -14,5 +14,6 @@ int main(int argc, const char* args[]) {
    printf(dyn_lib_a_get_string());
    printf(dyn_lib_b_get_string());
    
+   dstr_destroy(&s);
    return 0;
 }

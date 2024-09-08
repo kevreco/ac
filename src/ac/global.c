@@ -123,11 +123,11 @@ static void display_message_v(FILE* file, enum message_type type, struct ac_loca
     {
         bool emit_color = os_std_console_color_enabled() && type == message_type_ERROR;
 
-        if (emit_color) fprintf(file, os_std_console_color_red_begin());
+        if (emit_color) fprintf(file, "%s", os_std_console_color_red_begin());
 
         fprintf(file, "%s ", get_message_prefix(type));
 
-        if (emit_color) fprintf(file, os_std_console_color_end());
+        if (emit_color) fprintf(file, "%s", os_std_console_color_end());
     }
 
     fprintf(file, "%s", dstr_c_str(&message.dstr));
@@ -146,7 +146,7 @@ static void display_message_v(FILE* file, enum message_type type, struct ac_loca
 
         char margin_format[64];
         static const char* margin_text = "> ";
-        int line_number_text_size = snprintf(0, 0, "%d", next_line_count);
+        int line_number_text_size = snprintf(0, 0, "%zu", next_line_count);
         // if 'lin_number_text_size' is 3 this should write "%3d> %.*s\n"
         snprintf(margin_format, 64, "%%%dd%s%%.*s", line_number_text_size, margin_text);
         int margin_text_size = line_number_text_size + strlen(margin_text);
