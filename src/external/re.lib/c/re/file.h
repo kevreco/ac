@@ -429,7 +429,7 @@ re_file_copy(const char* src_path, const char* dest_path)
 
 	int src_fd = -1;
 	int dst_fd = -1;
-	src_fd = open(src_path, O_RDONLY);
+	src_fd = open(src_path, O_RDONLY, 0755);
 	if (src_fd < 0) {
 		fprintf(stderr, "Could not open file '%s': '%s'", src_path, strerror(errno));
 		return (re_file_bool)0;
@@ -442,7 +442,7 @@ re_file_copy(const char* src_path, const char* dest_path)
 		return (re_file_bool)0;
 	}
 
-	dst_fd = open(src_path, O_CREAT | O_TRUNC | O_WRONLY);
+	dst_fd = open(src_path, O_CREAT | O_TRUNC | O_WRONLY, 0755);
 
 	if (src_fd < 0) {
 		fprintf(stderr, "Could not open file %s: %s", src_path, strerror(errno));

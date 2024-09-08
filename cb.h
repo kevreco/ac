@@ -322,7 +322,7 @@ static cb_context* current_ctx;
 CB_INTERNAL void
 cb_log(FILE* file, const char* prefix, const char* fmt, ...)
 {
-	fprintf(file, prefix);
+	fprintf(file, "%s", prefix);
 
 	va_list args;
 	va_start(args, fmt);
