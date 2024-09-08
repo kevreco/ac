@@ -92,7 +92,8 @@ RE_CB_API cb_bool cb_remove_one(const char* key, const char* value);
 RE_CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
 
 /* @FIXME: This should be equivalent to use cb_add("file", XXX); in a loop. */
-RE_CB_API void cb_add_files(const char* pattern);
+RE_CB_API void cb_add_file(const char* filepath);
+RE_CB_API void cb_add_files(const char* dir, const char* pattern);
 
 typedef struct cb_toolchain cb_toolchain;
 typedef cb_bool (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
@@ -120,6 +121,7 @@ RE_CB_API cb_bool cb_subprocess(const char* cmd);
 extern const char* cbk_BINARY_TYPE;   /* Exe, shared_lib or static_lib */
 extern const char* cbk_CXFLAGS;       /* Extra flags to give to the C/C++ compiler */
 extern const char* cbk_DEFINES;       /* Define preprocessing symbol */
+extern const char* cbk_FILES;         /* Files to consume (could be .c, .cpp, etc.). */
 extern const char* cbk_INCLUDE_DIR;   /* Include directories */
 extern const char* cbk_LINK_PROJECT;  /* Other project to link */
 extern const char* cbk_LFLAGS;        /* Extra flags to give to the linker */
@@ -175,6 +177,7 @@ extern const char* cbk_static_lib;
 const char* cbk_BINARY_TYPE = "binary_type";
 const char* cbk_CXFLAGS = "cxflags";
 const char* cbk_DEFINES = "defines";
+const char* cbk_FILES = "files";
 const char* cbk_INCLUDE_DIR = "include_dir";
 const char* cbk_LINK_PROJECT = "link_project";
 const char* cbk_LFLAGS = "lflags";
@@ -287,11 +290,6 @@ struct {                \
 
 typedef cb_rangeT(cb_kv) cb_kv_range;
 
-typedef struct cb_file_command_t {
-	cb_bool glob;
-	const char* pattern; /* could be a pattern (if glob is set to true) or a regular file path. */
-} cb_file_command;
-
 typedef struct cb_context cb_context; /* forward declaration */
 
 typedef struct cb_project_t cb_project_t;
@@ -299,7 +297,6 @@ struct cb_project_t {
 	cb_context* context;
 	cb_id id;
 	cb_strv name;
-	cb_darrT(cb_file_command) file_commands;
 
 	cb_mmap mmap; /* multi map of strings - when you want to have multiple values per key */
 };
@@ -972,14 +969,12 @@ cb_project_init(cb_project_t* project)
 {
 	memset(project, 0, sizeof(cb_project_t));
 
-	cb_darrT_init(&project->file_commands);
 	cb_mmap_init(&project->mmap);
 }
 
 CB_INTERNAL void
 cb_project_destroy(cb_project_t* project)
 {
-	cb_darrT_destroy(&project->file_commands);
 	cb_mmap_destroy(&project->mmap);
 }
 
@@ -1021,207 +1016,6 @@ __declspec(noinline) static LONG WINAPI exit_on_exception_handler(EXCEPTION_POIN
 	exit(exit_code);
 }
 #endif
-CB_INTERNAL void cb__add(cb_kv kv);
-CB_INTERNAL void cb__set(cb_kv kv);
-CB_INTERNAL int cb__remove_all(cb_kv kv);
-CB_INTERNAL cb_bool cb__remove_one(cb_kv kv);
-
-CB_INTERNAL void
-cb__add(cb_kv kv)
-{
-	cb_project_t* p = cb__current_project();
-	cb_mmap_insert(&p->mmap, kv);
-}
-
-CB_INTERNAL void
-cb__set(cb_kv kv)
-{
-	/* @FIXME this can easily be optimized, but we don't care about that right now. */
-	cb__remove_all(kv);
-	cb__add(kv);
-}
-
-CB_INTERNAL cb_bool
-cb__remove_one(cb_kv kv)
-{
-	cb_project_t* p = cb__current_project();
-
-	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
-
-	while (range.begin < range.begin)
-	{
-		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
-		{
-			int index = p->mmap.darr.data - range.begin;
-			cb_mmap_remove_one(&p->mmap, index);
-			return cb_true;
-		}
-		range.begin++;
-	}
-	return cb_false;
-}
-
-CB_INTERNAL int
-cb__remove_all(cb_kv kv)
-{
-	 cb_project_t* p = cb__current_project();
-	 return cb_mmap_remove(&p->mmap, kv);
-}
-
-RE_CB_API void
-cb_init()
-{
-	cb_context_init(&default_ctx);
-	current_ctx = &default_ctx;
-#ifdef _WIN32
-	cb_bool exit_on_exception = cb_true; /* @TODO make this configurable */
-    if (exit_on_exception)
-	{
-		SetUnhandledExceptionFilter(exit_on_exception_handler);
-	}
-#else
-	CB_ASSERT("Not Yet Implemented");
-#endif
-}
-
-RE_CB_API void
-cb_destroy()
-{
-	/* @TODO remove all projects from current context */
-	cb_context_destroy(&default_ctx);
-}
-
-
-RE_CB_API cb_project_t* cb_project(const char* name)
-{
-	cb_project_t* project = cb_find_project_by_name_str(name);
-	cb_bool is_new_project = project == NULL;
-	if (is_new_project)
-	{
-		project = cb_create_project(name);
-	}
-	
-	current_ctx->current_project = project;
-	return project;
-}
-
-RE_CB_API void
-cb_add(const char* key, const char* value)
-{
-	cb_project_t* p = cb__current_project();
-
-	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
-
-	cb_mmap_insert(&p->mmap, kv);
-}
-
-RE_CB_API void
-cb_add_f(const char* key, const char* fmt, ...)
-{
-	cb_dstr s;
-	va_list args;
-	va_start(args, fmt);
-
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
-
-	va_end(args);
-}
-
-RE_CB_API void
-cb_set(const char* key, const char* value)
-{
-	/* @FIXME this can easily be optimized, but we don't care about that right now. */
-	cb_remove_all(key);
-	cb_add(key, value);
-}
-
-RE_CB_API void
-cb_set_f(const char* key, const char* fmt, ...)
-{
-	cb_dstr s;
-	va_list args;
-	va_start(args, fmt);
-
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	cb__set(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
-
-	va_end(args);
-}
-
-RE_CB_API int
-cb_remove_all(const char* key)
-{
-	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
-	return cb__remove_all(kv);
-}
-
-RE_CB_API int
-cb_remove_all_f(const char* key, const char* fmt, ...)
-{
-	cb_dstr s;
-	va_list args;
-	int count;
-	va_start(args, fmt);
-
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	count = cb__remove_all(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
-
-	va_end(args);
-	return count;
-}
-
-RE_CB_API cb_bool
-cb_remove_one(const char* key, const char* value)
-{
-	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
-	return cb__remove_one(kv);
-}
-
-RE_CB_API cb_bool
-cb_remove_one_f(const char* key, const char* fmt, ...)
-{
-	cb_dstr s;
-	va_list args;
-	cb_bool was_removed;
-	va_start(args, fmt);
-
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	was_removed = cb__remove_one(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
-
-	va_end(args);
-	return was_removed;
-}
-
-RE_CB_API void
-cb_add_files(const char* pattern)
-{
-	cb_file_command cmd;
-	cmd.glob = 1;
-	cmd.pattern = pattern;
-
-	cb_project_t* p = cb__current_project();
-	cb_darrT_push_back(&p->file_commands, cmd);
-}
-
-RE_CB_API void
-cb_add_file(const char* file)
-{
-	cb_file_command cmd;
-	cmd.glob = 0;
-	cmd.pattern = file;
-
-	cb_project_t* p = cb__current_project();
-	cb_darrT_push_back(&p->file_commands, cmd);
-}
 
 /* #file utils */
 
@@ -1569,6 +1363,208 @@ cb_add_trailing_dir_separator(char* path, int path_len)
 	}
 	return cb_false;
 }
+
+CB_INTERNAL void cb__add(cb_kv kv);
+CB_INTERNAL void cb__set(cb_kv kv);
+CB_INTERNAL int cb__remove_all(cb_kv kv);
+CB_INTERNAL cb_bool cb__remove_one(cb_kv kv);
+
+CB_INTERNAL void
+cb__add(cb_kv kv)
+{
+	cb_project_t* p = cb__current_project();
+	cb_mmap_insert(&p->mmap, kv);
+}
+
+CB_INTERNAL void
+cb__set(cb_kv kv)
+{
+	/* @FIXME this can easily be optimized, but we don't care about that right now. */
+	cb__remove_all(kv);
+	cb__add(kv);
+}
+
+CB_INTERNAL cb_bool
+cb__remove_one(cb_kv kv)
+{
+	cb_project_t* p = cb__current_project();
+
+	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
+
+	while (range.begin < range.begin)
+	{
+		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
+		{
+			int index = p->mmap.darr.data - range.begin;
+			cb_mmap_remove_one(&p->mmap, index);
+			return cb_true;
+		}
+		range.begin++;
+	}
+	return cb_false;
+}
+
+CB_INTERNAL int
+cb__remove_all(cb_kv kv)
+{
+	cb_project_t* p = cb__current_project();
+	return cb_mmap_remove(&p->mmap, kv);
+}
+
+RE_CB_API void
+cb_init()
+{
+	cb_context_init(&default_ctx);
+	current_ctx = &default_ctx;
+#ifdef _WIN32
+	cb_bool exit_on_exception = cb_true; /* @TODO make this configurable */
+	if (exit_on_exception)
+	{
+		SetUnhandledExceptionFilter(exit_on_exception_handler);
+	}
+#else
+	CB_ASSERT("Not Yet Implemented");
+#endif
+}
+
+RE_CB_API void
+cb_destroy()
+{
+	/* @TODO remove all projects from current context */
+	cb_context_destroy(&default_ctx);
+}
+
+RE_CB_API cb_project_t* cb_project(const char* name)
+{
+	cb_project_t* project = cb_find_project_by_name_str(name);
+	cb_bool is_new_project = project == NULL;
+	if (is_new_project)
+	{
+		project = cb_create_project(name);
+	}
+
+	current_ctx->current_project = project;
+	return project;
+}
+
+RE_CB_API void
+cb_add(const char* key, const char* value)
+{
+	cb_project_t* p = cb__current_project();
+
+	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
+
+	cb_mmap_insert(&p->mmap, kv);
+}
+
+RE_CB_API void
+cb_add_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+}
+
+RE_CB_API void
+cb_set(const char* key, const char* value)
+{
+	/* @FIXME this can easily be optimized, but we don't care about that right now. */
+	cb_remove_all(key);
+	cb_add(key, value);
+}
+
+RE_CB_API void
+cb_set_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	cb__set(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+}
+
+RE_CB_API int
+cb_remove_all(const char* key)
+{
+	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
+	return cb__remove_all(kv);
+}
+
+RE_CB_API int
+cb_remove_all_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	int count;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	count = cb__remove_all(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+	return count;
+}
+
+RE_CB_API cb_bool
+cb_remove_one(const char* key, const char* value)
+{
+	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
+	return cb__remove_one(kv);
+}
+
+RE_CB_API cb_bool
+cb_remove_one_f(const char* key, const char* fmt, ...)
+{
+	cb_dstr s;
+	va_list args;
+	cb_bool was_removed;
+	va_start(args, fmt);
+
+	cb_dstr_init(&s);
+	cb_dstr_append_from_fv(&s, s.size, fmt, args);
+
+	was_removed = cb__remove_one(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+
+	va_end(args);
+	return was_removed;
+}
+
+RE_CB_API void
+cb_add_file(const char* file)
+{
+	cb_add(cbk_FILES, file);
+}
+
+
+RE_CB_API void
+cb_add_files(const char* directory, const char* pattern)
+{
+	cb_file_it it;
+	cb_file_it_init_recursive(&it, directory);
+
+	while (cb_file_it_get_next_glob(&it, pattern))
+	{
+		const char* filepath = cb_file_it_current_file(&it);
+		/* Allocate new string */
+		cb_add_f(cbk_FILES, "%s", filepath);
+	}
+}
+
+
 #ifdef WIN32
 /* @TODO rename everything related to file into cp_path_XXX */
 CB_INTERNAL cb_bool
@@ -2323,33 +2319,23 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		}
 	}
 
-	cb_file_it it;
-	int i;
-	for (i = 0; i < project->file_commands.darr.size; ++i)
+	/* Append files and .obj */
 	{
-		cb_file_command cmd = cb_darrT_at(&project->file_commands, i);
-
-		if (cmd.glob)
+		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
+		cb_kv current;
+		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_file_it_init_recursive(&it, ".");
+			cb_dstr_append_v(&str, current.u.dstr.data, _);
 
-			while(cb_file_it_get_next_glob(&it, cmd.pattern))
-			{
-				cb_dstr_append_v(&str, cb_file_it_current_file(&it), _);
+			cb_strv basename = cb_path_basename(current.u.strv);
 
-				cb_strv current_strv = cb_strv_make_str(cb_file_it_current_file(&it));
-				cb_strv basename = cb_path_basename(current_strv);
-
-				cb_dstr_append_strv(&str_obj, basename);
-				cb_dstr_append_str(&str_obj, ".obj");
-				cb_dstr_append_str(&str_obj, _);
-			}
-
-			cb_file_it_destroy(&it);
+			cb_dstr_append_strv(&str_obj, basename);
+			cb_dstr_append_str(&str_obj, ".obj");
+			cb_dstr_append_str(&str_obj, _);
 		}
 	}
 
-	/* for each linked project we add the link information to the cl.exe command */
+	/* For each linked project we add the link information to the cl.exe command */
 	cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
 	if (range.count > 0)
 	{
@@ -2571,35 +2557,24 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		cb_dstr_append_f(&str, "-o %s ", project_name);
 	}
 
-	cb_file_it it;
-	int i;
-	for (i = 0; i < project->file_commands.darr.size; ++i)
+	/* Append .c files and .obj */
 	{
-		cb_file_command cmd = cb_darrT_at(&project->file_commands, i);
-
-		if (cmd.glob)
+		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
+		cb_kv current;
+		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_file_it_init_recursive(&it, ".");
+			cb_dstr_append_v(&str, current.u.dstr.data, _);
 
-			while (cb_file_it_get_next_glob(&it, cmd.pattern))
-			{
-				/* add .c files */
-				cb_dstr_append_v(&str, cb_file_it_current_file(&it), _);
+			cb_strv basename = cb_path_basename(current.u.strv);
 
-				cb_strv current_strv = cb_strv_make_str(cb_file_it_current_file(&it));
-				cb_strv basename = cb_path_basename(current_strv);
-
-				cb_dstr_append_str(&str_obj, str_ouput_path.data);
-				cb_dstr_append_strv(&str_obj, basename);
-				cb_dstr_append_str(&str_obj, ".o");
-				cb_dstr_append_str(&str_obj, _);
-			}
-
-			cb_file_it_destroy(&it);
+			cb_dstr_append_str(&str_obj, str_ouput_path.data);
+			cb_dstr_append_strv(&str_obj, basename);
+			cb_dstr_append_str(&str_obj, ".o");
+			cb_dstr_append_str(&str_obj, _);
 		}
 	}
 
-	/* for each linked project we add the link information to the gcc command */
+	/* For each linked project we add the link information to the gcc command */
 	cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
 	if (range.count > 0)
 	{

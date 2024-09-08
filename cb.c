@@ -10,6 +10,8 @@ int build_exe_with_dependencies();
 int build_with_configs();
 int build_with_platform_specific_flags();
 
+const char* root_dir = "./";
+
 int main()
 {
 	return build_with_platform_specific_flags();
@@ -21,7 +23,7 @@ int build_static_library()
 
 	{
 		cb_project("ac");
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir, "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 
@@ -49,7 +51,7 @@ int build_shared_libraries()
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -59,7 +61,7 @@ int build_shared_libraries()
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -82,7 +84,7 @@ int build_exe_with_dependencies()
 	/* build a static library */
 	{
 		cb_project("ac");
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir, "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 
@@ -96,7 +98,7 @@ int build_exe_with_dependencies()
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -105,7 +107,7 @@ int build_exe_with_dependencies()
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -118,7 +120,7 @@ int build_exe_with_dependencies()
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_a");
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_b");
 
-		cb_add_files("*/src/tester/*.c");
+		cb_add_files(root_dir, "*/src/tester/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_exe);
 
@@ -165,7 +167,7 @@ int build_ex(const char* arch, const char* config)
 		cb_project(project_name);
 		cb_set_f(cbk_OUTPUT_DIR, ".build/%s_%s_%s/%s/", toolchain_name, arch, config, project_name);
 		
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir,  "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 		cb_add(cbk_INCLUDE_DIR, "./src/ac");
@@ -180,7 +182,7 @@ int build_ex(const char* arch, const char* config)
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -191,7 +193,7 @@ int build_ex(const char* arch, const char* config)
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -206,7 +208,7 @@ int build_ex(const char* arch, const char* config)
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_a");
 	    cb_add(cbk_LINK_PROJECT, "dyn_lib_b");
 	
-		cb_add_files("*/src/tester/*.c");
+		cb_add_files(root_dir, "*/src/tester/*.c");
 		cb_set(cbk_BINARY_TYPE, cbk_exe);
 		
 		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_a");
@@ -262,6 +264,7 @@ int build_with_configs()
 void my_project(const char* project_name, const char* toolchain, const char* arch, const char* config)
 {
 	cb_project(project_name);
+
 	cb_set_f(cbk_OUTPUT_DIR, ".build/%s_%s_%s/%s/", toolchain, arch, config, project_name);
 
 	/* Defines the MESSAGE constant define which is used for the dynamic library samples */
@@ -320,7 +323,7 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 	{
 		my_project("ac", toolchain_name, arch, config);
 
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir, "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 		cb_add(cbk_INCLUDE_DIR, "./src/ac");
@@ -333,7 +336,7 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -342,7 +345,7 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -355,7 +358,7 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_a");
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_b");
 
-		cb_add_files("*/src/tester/*.c");
+		cb_add_files(root_dir, "*/src/tester/*.c");
 		cb_set(cbk_BINARY_TYPE, cbk_exe);
 
 		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_a");
