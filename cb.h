@@ -1984,6 +1984,11 @@ cb_subprocess(const char* str)
 	cb_dstr_append_from(&cmd, 0, str, strlen(str));
 	
 	cb_log_debug("Running subprocess '%s'", cmd.data);
+
+	/* Ensure that everything is written into the outputs before creating a new process that will also write in those outputs */
+	fflush(stdout);
+	fflush(stderr);
+
 	STARTUPINFOA si;
 	PROCESS_INFORMATION pi;
 
@@ -2008,7 +2013,18 @@ cb_subprocess(const char* str)
 		return cb_false;
 	}
 
-	WaitForSingleObject(pi.hProcess, INFINITE);
+	DWORD result = WaitForSingleObject(
+					  pi.hProcess, /* HANDLE hHandle, */
+					  INFINITE     /* DWORD  dwMilliseconds */
+	);
+
+	if (result == WAIT_FAILED) {
+		cb_log_error("Could not wait on child process: %lu", GetLastError());
+		/* Close process and thread handles. */
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+		return cb_false;
+	}
 
 	/* Close process and thread handles. */
 	CloseHandle(pi.hProcess);
