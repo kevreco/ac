@@ -1,8 +1,8 @@
 #include "string.h"
 #include "stdio.h"
 
-#define RE_CB_IMPLEMENTATION
-#include "cb.h"
+#define CB_IMPLEMENTATION
+#include "cb/cb.h"
 
 int build_static_library();
 int build_shared_libraries();

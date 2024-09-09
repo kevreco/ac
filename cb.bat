@@ -14,7 +14,7 @@ set "cb_run=1"
 @REM input file
 set "cb_file=cb.c"
 @REM temp directory - NOTE: strings in .bat files requires backslashes
-set "cb_tmp_dir=.cb\.tmp"
+set "cb_tmp_dir=.build\cb"
 @REM output path with exe name - NOTE: strings in .bat files requires backslashes
 set "cb_output=.\cb.exe"
 

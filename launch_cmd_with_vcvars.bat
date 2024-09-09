@@ -23,8 +23,5 @@ echo ERROR: vcvars path not found
 :end_of_loop
 
 echo VC VARS path found : %MY_VCVARS_PATH%
-@rem cmd.exe /k ""%ProgramFiles(x86)%\Microsoft Visual Studio 10.0\VC\vcvarsall.bat"" x86
 
-@REM cmd.exe /k ""%MY_VCVARS_PATH%"" x86
-
-cmd /k ""%MY_VCVARS_PATH%\vcvarsall.bat"" x86
+cmd /k ""%MY_VCVARS_PATH%\vcvarsall.bat"" x64

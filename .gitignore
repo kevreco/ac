@@ -12,7 +12,7 @@
 
 
 *.cb/
-cb
+cb.bin
 cb.exe
 
 /src/external/re.lib/

@@ -4,8 +4,8 @@ cd "$(dirname "$0")"
 cb_gcc=1
 cb_compiler="${CC:-gcc}"
 cb_run=1
-cb_file="./cb.c"   # Source file name to compile, , relative to tmp_dir
-cb_output="./cb"   # Executable name, relative to tmp_dir
+cb_file="./cb.c"   # Source file name to compile
+cb_output="./cb.bin"   # Executable name
 
 while (( "$#" )); do
 

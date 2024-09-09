@@ -1,7 +1,7 @@
 #ifndef RE_CB_H
 #define RE_CB_H
 
-#define RE_CB_IMPLEMENTATION
+#define CB_IMPLEMENTATION
 
 #if _WIN32
 #if !defined _CRT_SECURE_NO_WARNINGS
@@ -27,8 +27,8 @@
 #endif
 #endif
 
-#ifndef RE_CB_API
-#define RE_CB_API
+#ifndef CB_API
+#define CB_API
 #endif
 #ifndef CB_INTERNAL
 #define CB_INTERNAL static
@@ -64,36 +64,36 @@ extern "C" {
 typedef unsigned int cb_id; /* hashed key */
 typedef unsigned int cb_bool;
 
-RE_CB_API void cb_init();
-RE_CB_API void cb_destroy();
+CB_API void cb_init();
+CB_API void cb_destroy();
 
 typedef struct cb_project_t cb_project_t;
 /* Set or create current project.  */
-RE_CB_API cb_project_t* cb_project(const char* name); 
+CB_API cb_project_t* cb_project(const char* name); 
 
 /* Add value for the specific key. */
-RE_CB_API void cb_add(const char* key, const char* value);
+CB_API void cb_add(const char* key, const char* value);
 /* Wrapper of cb_set with string formatting */
-RE_CB_API void cb_add_f(const char* key, const char* fmt, ...);
+CB_API void cb_add_f(const char* key, const char* fmt, ...);
 
 /* Remove all previous values according to the key and set the new one. */
-RE_CB_API void cb_set(const char* key, const char* value);
+CB_API void cb_set(const char* key, const char* value);
 /* Wrapper around cb_set with string formatting */
-RE_CB_API void cb_set_f(const char* key, const char* fmt, ...);
+CB_API void cb_set_f(const char* key, const char* fmt, ...);
 
 /* Remove all values associated with the key. Returns number of removed values */
-RE_CB_API int cb_remove_all(const char* key);
+CB_API int cb_remove_all(const char* key);
 /* Wrapper around cb_remove_all with string formatting */
-RE_CB_API int cb_remove_all_f(const char* key, const char* fmt, ...);
+CB_API int cb_remove_all_f(const char* key, const char* fmt, ...);
 
 /* Remove item with the exact key and value. */
-RE_CB_API cb_bool cb_remove_one(const char* key, const char* value);
+CB_API cb_bool cb_remove_one(const char* key, const char* value);
 /* Wrapper around cb_remove_one with string formatting */
-RE_CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
+CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
 
 /* @FIXME: This should be equivalent to use cb_add("file", XXX); in a loop. */
-RE_CB_API void cb_add_file(const char* filepath);
-RE_CB_API void cb_add_files(const char* dir, const char* pattern);
+CB_API void cb_add_file(const char* filepath);
+CB_API void cb_add_files(const char* dir, const char* pattern);
 
 typedef struct cb_toolchain cb_toolchain;
 typedef cb_bool (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
@@ -105,17 +105,17 @@ struct cb_toolchain {
 	const char* default_directory_base;
 };
 
-RE_CB_API cb_toolchain cb_toolchain_msvc();
+CB_API cb_toolchain cb_toolchain_msvc();
 
-RE_CB_API cb_bool cb_bake(cb_toolchain toolchain, const char* project_name);
-RE_CB_API cb_bool cb_bake_and_run(cb_toolchain toolchain, const char* project_name);
+CB_API cb_bool cb_bake(cb_toolchain toolchain, const char* project_name);
+CB_API cb_bool cb_bake_and_run(cb_toolchain toolchain, const char* project_name);
 
 /** wildcard matching, supporting * ** ? [] */
 static cb_bool cb_wildmatch(const char* pattern, const char* str); /* forward declaration */
-RE_CB_API void cb_wildmatch_test();
+CB_API void cb_wildmatch_test();
 
-RE_CB_API cb_bool cb_subprocess(const char* cmd);
-RE_CB_API cb_bool cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory);
+CB_API cb_bool cb_subprocess(const char* cmd);
+CB_API cb_bool cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory);
 /* commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
@@ -140,9 +140,9 @@ extern const char* cbk_static_lib;
 
 #endif /* RE_CB_H */
 
-#ifdef RE_CB_IMPLEMENTATION
-#ifndef RE_CB_IMPLEMENTATION_CPP
-#define RE_CB_IMPLEMENTATION_CPP
+#ifdef CB_IMPLEMENTATION
+#ifndef CB_IMPLEMENTATION_CPP
+#define CB_IMPLEMENTATION_CPP
 /* INTERNAL */
 
 #ifdef _WIN32
@@ -1705,7 +1705,7 @@ cb__remove_all(cb_kv kv)
 	return cb_mmap_remove(&p->mmap, kv);
 }
 
-RE_CB_API void
+CB_API void
 cb_init()
 {
 	cb_context_init(&default_ctx);
@@ -1721,14 +1721,14 @@ cb_init()
 #endif
 }
 
-RE_CB_API void
+CB_API void
 cb_destroy()
 {
 	/* @TODO remove all projects from current context */
 	cb_context_destroy(&default_ctx);
 }
 
-RE_CB_API cb_project_t* cb_project(const char* name)
+CB_API cb_project_t* cb_project(const char* name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(name);
 	cb_bool is_new_project = project == NULL;
@@ -1741,7 +1741,7 @@ RE_CB_API cb_project_t* cb_project(const char* name)
 	return project;
 }
 
-RE_CB_API void
+CB_API void
 cb_add(const char* key, const char* value)
 {
 	cb_project_t* p = cb__current_project();
@@ -1751,7 +1751,7 @@ cb_add(const char* key, const char* value)
 	cb_mmap_insert(&p->mmap, kv);
 }
 
-RE_CB_API void
+CB_API void
 cb_add_f(const char* key, const char* fmt, ...)
 {
 	cb_dstr s;
@@ -1766,7 +1766,7 @@ cb_add_f(const char* key, const char* fmt, ...)
 	va_end(args);
 }
 
-RE_CB_API void
+CB_API void
 cb_set(const char* key, const char* value)
 {
 	/* @FIXME this can easily be optimized, but we don't care about that right now. */
@@ -1774,7 +1774,7 @@ cb_set(const char* key, const char* value)
 	cb_add(key, value);
 }
 
-RE_CB_API void
+CB_API void
 cb_set_f(const char* key, const char* fmt, ...)
 {
 	cb_dstr s;
@@ -1789,14 +1789,14 @@ cb_set_f(const char* key, const char* fmt, ...)
 	va_end(args);
 }
 
-RE_CB_API int
+CB_API int
 cb_remove_all(const char* key)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
 	return cb__remove_all(kv);
 }
 
-RE_CB_API int
+CB_API int
 cb_remove_all_f(const char* key, const char* fmt, ...)
 {
 	cb_dstr s;
@@ -1813,14 +1813,14 @@ cb_remove_all_f(const char* key, const char* fmt, ...)
 	return count;
 }
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_remove_one(const char* key, const char* value)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
 	return cb__remove_one(kv);
 }
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_remove_one_f(const char* key, const char* fmt, ...)
 {
 	cb_dstr s;
@@ -1837,7 +1837,7 @@ cb_remove_one_f(const char* key, const char* fmt, ...)
 	return was_removed;
 }
 
-RE_CB_API void
+CB_API void
 cb_add_file(const char* file)
 {
 	cb_dstr absolute_file;
@@ -1847,7 +1847,7 @@ cb_add_file(const char* file)
 	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(cbk_FILES), absolute_file));
 }
 
-RE_CB_API void
+CB_API void
 cb_add_files(const char* directory, const char* pattern)
 {
 	cb_dstr absolute_dir;
@@ -1900,7 +1900,7 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 		&& cb_strv_equals_str(result, comparison_value);
 }
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_bake(cb_toolchain toolchain, const char* project_name)
 {
 	return toolchain.bake(&toolchain, project_name);
@@ -1931,7 +1931,7 @@ cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_o
 	cb_dstr_destroy(&o);
 }
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 {
 	if (!cb_bake(toolchain, project_name))
@@ -2063,7 +2063,7 @@ cb_wildmatch(const char* pat, const char* str)
 	}
 }
 
-RE_CB_API void
+CB_API void
 cb_wildmatch_test()
 {
 	CB_ASSERT(cb_wildmatch("a", "a"));
@@ -2086,7 +2086,7 @@ cb_wildmatch_test()
 /* #process #subprocess */
 
 /* the char* cmd should be writtable */
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_subprocess_with_starting_directory(const char* str, const char* starting_directory)
 {
 	cb_dstr cmd;
@@ -2270,7 +2270,7 @@ cb_fork_process(char* args[], const char* starting_directory)
 	return pid;
 }
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_subprocess_with_starting_directory(const char* str, const char* starting_directory)
 {
 	cb_log_debug("Running subprocess '%s'", str);
@@ -2358,7 +2358,7 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 
 #endif
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_subprocess(const char* str)
 {
 	return cb_subprocess_with_starting_directory(str, NULL);
@@ -2372,7 +2372,7 @@ cb_subprocess(const char* str)
 
 /* #msvc #toolchain */
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
@@ -2580,7 +2580,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	return cb_true;
 }
 
-RE_CB_API cb_toolchain
+CB_API cb_toolchain
 cb_toolchain_msvc()
 {
 	cb_toolchain tc;
@@ -2621,7 +2621,7 @@ is_created_by_gcc(cb_strv file)
 		|| cb_strv_ends_with(file, a_ext);
 }
 
-RE_CB_API cb_bool
+CB_API cb_bool
 cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
@@ -2868,7 +2868,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	return cb_true;
 }
 
-RE_CB_API cb_toolchain
+CB_API cb_toolchain
 cb_toolchain_gcc()
 {
 	cb_toolchain tc;
@@ -2880,7 +2880,7 @@ cb_toolchain_gcc()
 
 #endif /* #else of _WIN32 */
 
-RE_CB_API cb_toolchain
+CB_API cb_toolchain
 cb_toolchain_default()
 {
 #ifdef _WIN32
@@ -2890,5 +2890,5 @@ cb_toolchain_default()
 #endif
 }
 
-#endif /* RE_CB_IMPLEMENTATION_CPP  */
-#endif /* RE_CB_IMPLEMENTATION */
+#endif /* CB_IMPLEMENTATION_CPP  */
+#endif /* CB_IMPLEMENTATION */
