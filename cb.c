@@ -265,6 +265,7 @@ void my_project(const char* project_name, const char* toolchain, const char* arc
 {
 	cb_project(project_name);
 
+	cb_set_f(cbk_WORKING_DIRECTORY, ".build/%s_%s_%s", toolchain, arch, config);
 	cb_set_f(cbk_OUTPUT_DIR, ".build/%s_%s_%s/%s/", toolchain, arch, config, project_name);
 
 	/* Defines the MESSAGE constant define which is used for the dynamic library samples */
