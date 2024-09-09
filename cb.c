@@ -10,6 +10,8 @@ int build_exe_with_dependencies();
 int build_with_configs();
 int build_with_platform_specific_flags();
 
+const char* root_dir = "./";
+
 int main()
 {
 	return build_with_platform_specific_flags();
@@ -21,7 +23,7 @@ int build_static_library()
 
 	{
 		cb_project("ac");
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir, "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 
@@ -49,23 +51,23 @@ int build_shared_libraries()
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
 
 	{
-		cb_project("dyn_lib_b");
+		cb_project("dyn lib b");
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn lib b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
 
 	if (!cb_bake(cb_toolchain_default(), "dyn_lib_a")
-		|| !cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+		|| !cb_bake(cb_toolchain_default(), "dyn lib b"))
 	{
 		return -1;
 	}
@@ -82,7 +84,7 @@ int build_exe_with_dependencies()
 	/* build a static library */
 	{
 		cb_project("ac");
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir, "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 
@@ -96,16 +98,16 @@ int build_exe_with_dependencies()
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
 	{
-		cb_project("dyn_lib_b");
+		cb_project("dyn lib b");
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn lib b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -116,14 +118,14 @@ int build_exe_with_dependencies()
 
 		cb_add(cbk_LINK_PROJECT, "ac");
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_a");
-		cb_add(cbk_LINK_PROJECT, "dyn_lib_b");
+		cb_add(cbk_LINK_PROJECT, "dyn lib b");
 
-		cb_add_files("*/src/tester/*.c");
+		cb_add_files(root_dir, "*/src/tester/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_exe);
 
 		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_a");
-		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_b");
+		cb_add(cbk_INCLUDE_DIR, "./src/dyn lib b");
 		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/c");
 	}
 
@@ -138,7 +140,7 @@ int build_exe_with_dependencies()
 		return -1;
 	}
 
-	if (!cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+	if (!cb_bake(cb_toolchain_default(), "dyn lib b"))
 	{
 		return -1;
 	}
@@ -165,7 +167,7 @@ int build_ex(const char* arch, const char* config)
 		cb_project(project_name);
 		cb_set_f(cbk_OUTPUT_DIR, ".build/%s_%s_%s/%s/", toolchain_name, arch, config, project_name);
 		
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir,  "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 		cb_add(cbk_INCLUDE_DIR, "./src/ac");
@@ -180,18 +182,18 @@ int build_ex(const char* arch, const char* config)
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
 	{
-		project_name = "dyn_lib_b";
+		project_name = "dyn lib b";
 		cb_project(project_name);
 		cb_set_f(cbk_OUTPUT_DIR, ".build/%s_%s_%s/%s/", toolchain_name, arch, config, project_name);
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn lib b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -204,13 +206,13 @@ int build_ex(const char* arch, const char* config)
 
 		cb_add(cbk_LINK_PROJECT, "ac");
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_a");
-	    cb_add(cbk_LINK_PROJECT, "dyn_lib_b");
+	    cb_add(cbk_LINK_PROJECT, "dyn lib b");
 	
-		cb_add_files("*/src/tester/*.c");
+		cb_add_files(root_dir, "*/src/tester/*.c");
 		cb_set(cbk_BINARY_TYPE, cbk_exe);
 		
 		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_a");
-		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_b");
+		cb_add(cbk_INCLUDE_DIR, "./src/dyn lib b");
 		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/c");
 	}
 	
@@ -222,7 +224,7 @@ int build_ex(const char* arch, const char* config)
 	{
 		return -1;
 	}
-	if (!cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+	if (!cb_bake(cb_toolchain_default(), "dyn lib b"))
 	{
 		return -1;
 	}
@@ -262,6 +264,8 @@ int build_with_configs()
 void my_project(const char* project_name, const char* toolchain, const char* arch, const char* config)
 {
 	cb_project(project_name);
+
+	cb_set_f(cbk_WORKING_DIRECTORY, ".build/%s_%s_%s", toolchain, arch, config);
 	cb_set_f(cbk_OUTPUT_DIR, ".build/%s_%s_%s/%s/", toolchain, arch, config, project_name);
 
 	/* Defines the MESSAGE constant define which is used for the dynamic library samples */
@@ -320,7 +324,7 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 	{
 		my_project("ac", toolchain_name, arch, config);
 
-		cb_add_files("*/src/ac/*.c");
+		cb_add_files(root_dir, "*/src/ac/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 		cb_add(cbk_INCLUDE_DIR, "./src/ac");
@@ -333,16 +337,16 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_a/*.c");
+		cb_add_files(root_dir, "*/src/dyn_lib_a/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
 	{
-		my_project("dyn_lib_b", toolchain_name, arch, config);
+		my_project("dyn lib b", toolchain_name, arch, config);
 
 		cb_add(cbk_DEFINES, "DYN_LIB_EXPORT");
 
-		cb_add_files("*/src/dyn_lib_b/*.c");
+		cb_add_files(root_dir, "*/src/dyn lib b/*.c");
 
 		cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 	}
@@ -353,13 +357,13 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 
 		cb_add(cbk_LINK_PROJECT, "ac");
 		cb_add(cbk_LINK_PROJECT, "dyn_lib_a");
-		cb_add(cbk_LINK_PROJECT, "dyn_lib_b");
+		cb_add(cbk_LINK_PROJECT, "dyn lib b");
 
-		cb_add_files("*/src/tester/*.c");
+		cb_add_files(root_dir, "*/src/tester/*.c");
 		cb_set(cbk_BINARY_TYPE, cbk_exe);
 
 		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_a");
-		cb_add(cbk_INCLUDE_DIR, "./src/dyn_lib_b");
+		cb_add(cbk_INCLUDE_DIR, "./src/dyn lib b");
 		cb_add(cbk_INCLUDE_DIR, "./src/external/re.lib/c");
 	}
 
@@ -373,7 +377,7 @@ int build_ex_with_platform_specific_flags(const char* arch, const char* config)
 		return -1;
 	}
 
-	if (!cb_bake(cb_toolchain_default(), "dyn_lib_b"))
+	if (!cb_bake(cb_toolchain_default(), "dyn lib b"))
 	{
 		return -1;
 	}
