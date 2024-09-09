@@ -1,38 +1,36 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
-gcc=1
-compiler="${CC:-gcc}"
-run=1
-file=cb.c
-tmp=".cb/.tmp"
-output="./cb"
+cb_gcc=1
+cb_compiler="${CC:-gcc}"
+cb_run=1
+cb_file="./cb.c"   # Source file name to compile, , relative to tmp_dir
+cb_output="./cb"   # Executable name, relative to tmp_dir
 
 while (( "$#" )); do
 
     echo "$1"
-    if [ "$1" == "clang" ];  then clang=1; compiler="${CC:-clang}"; unset gcc; fi
-    if [ "$1" == "gcc" ];    then gcc=1;   compiler="${CC:-gcc}";   unset clang; fi
-    if [ "$1" == "help" ];   then help=1; fi
-    if [ "$1" == "run" ];    then run=1; fi    
-    if [ "$1" == "--file" ]; then file=$2; shift; fi
-    if [ "$1" == "--output" ]; then output=$2; shift; fi    
-    if [ "$1" == "--tmp" ];  then tmp=$2; shift; fi    
-    
+    if [ "$1" == "clang" ];  then clang=1; cb_compiler="${CC:-clang}"; unset cb_gcc; fi
+    if [ "$1" == "gcc" ];    then cb_gcc=1;   cb_compiler="${CC:-gcc}";   unset clang; fi
+    if [ "$1" == "help" ];   then cb_help=1; fi
+    if [ "$1" == "run" ];    then cb_run=1; fi    
+    if [ "$1" == "--file" ]; then cb_file=$2; shift; fi
+    if [ "$1" == "--output" ]; then cb_output=$2; shift; fi    
     shift
 
 done
 
-
-if [ -v gcc ]; then
-   $compiler -std=c89 -g -o $output -O0 ./cb.c 
+# Check if there is a value in cb_gcc
+if [ -v cb_gcc ]; then
+   $cb_compiler -std=c89 -g -o $cb_output -O0 $cb_file
 fi
 
 # exit code not equal to 0
 if [ $? -ne 0 ]; then echo "ERROR: Could not run the compiler command properly."; exit 1; fi
 
-if [ -v run ]; then
-   exec $output
+# Check if there is a value in cb_run
+if [ -v cb_run ]; then
+   exec $cb_output
 fi
 
 if [ $? -ne 0 ]; then echo "ERROR: Could not run the builder properly."; exit 1; fi
