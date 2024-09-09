@@ -2,46 +2,46 @@
 ::SETLOCAL EnableDelayedExpansion
 cd /D "%~dp0"
 
-@REM This script name. Get name without extension (%~n0) the append ".bat"
-set "SCRIPT=%~n0.bat" 
+@REM This script name. Get name without extension (%~n0) and append ".bat"
+set "cb_script=%~n0.bat" 
 
-
-set "help="
+set "cb_help="
 @REM use msvc
-set "msvc=1"
-set "clang="
+set "cb_msvc=1"
+set "cb_clang="
 @REM also run the executable
-set "run=1"
+set "cb_run=1"
 @REM input file
-set "file=cb.c"
+set "cb_file=cb.c"
 @REM temp directory - NOTE: strings in .bat files requires backslashes
-set "tmp=.cb\.tmp"
-@REM output directory with exe name - NOTE: strings in .bat files requires backslashes
-set "output=.\cb.exe"
+set "cb_tmp_dir=.cb\.tmp"
+@REM output path with exe name - NOTE: strings in .bat files requires backslashes
+set "cb_output=.\cb.exe"
 
-:: --------------------------------------------------------------------------------
-:: Unpack Arguments
-:: --------------------------------------------------------------------------------
-echo [%SCRIPT%] input args: %*
+@REM --------------------------------------------------------------------------------
+@REM Parse Arguments
+@REM --------------------------------------------------------------------------------
+echo [%cb_script%] input args: %*
 :loop
 IF NOT "%1"=="" (
-    IF "%1"=="help"   set "help=1"
-	@REM toolchain
-    IF "%1"=="msvc"   set "msvc=1"  && set "clang="
-	IF "%1"=="clang"  set "clang=1" && set "msvc="
-	@REM options
-	IF "%1"=="run"    set "run=1"
-    IF "%1"=="--file" set "file=%2" && SHIFT
-    IF "%1"=="--tmp"  set "tmp=%2"  && SHIFT
+    IF "%1"=="help"      set "cb_help=1"
+	@REM toolchain       
+    IF "%1"=="msvc"      set "cb_msvc=1"  && set "cb_clang="
+	IF "%1"=="clang"     set "cb_clang=1" && set "cb_msvc="
+	@REM options         
+	IF "%1"=="run"       set "cb_run=1"
+    IF "%1"=="--file"    set "cb_file=%2" && SHIFT
+    IF "%1"=="--tmp-dir" set "cb_tmp_dir=%2"  && SHIFT
+	IF "%1"=="--output"  set "cb_output=%2" && SHIFT
 
     SHIFT
     GOTO :loop
 )
 
-:: --------------------------------------------------------------------------------
-:: Display help if needed
-:: --------------------------------------------------------------------------------
-if "%help%"=="1" (
+@REM --------------------------------------------------------------------------------
+@REM Display help if needed
+@REM --------------------------------------------------------------------------------
+if "%cb_help%"=="1" (
 echo usage:
 echo.
 echo Compile the builder
@@ -58,61 +58,55 @@ echo.
 Exit /B 5
 )
 
-set "C_SOURCE=%file%"
-set "C_OBJ_DIR=%tmp%"
-set "C_EXE_PATH=%output%"
 @REM use a loop just to use the %%XXX function
-for %%a in (%file%) do (
-    set "basename=%%~na"
+for %%a in (%cb_file%) do (
+    set "cb_basename=%%~na"
 ) 
 
-:: --------------------------------------------------------------------------------
-:: Prepare and clean output directory
-:: --------------------------------------------------------------------------------
-echo [%SCRIPT%] Clean up output directory "%C_OBJ_DIR%"
-if exist %C_EXE_PATH% del %C_EXE_PATH%
-if exist %C_OBJ_DIR% rmdir /S /Q %C_OBJ_DIR%
-if not exist %C_OBJ_DIR% mkdir %C_OBJ_DIR%
+@REM --------------------------------------------------------------------------------
+@REM Prepare and clean output directory
+@REM --------------------------------------------------------------------------------
+echo [%cb_script%] Clean up output directory "%cb_tmp_dir%"
+if exist %cb_output% del %cb_output%
+if exist %cb_tmp_dir% rmdir /S /Q %cb_tmp_dir%
+if not exist %cb_tmp_dir% mkdir %cb_tmp_dir%
 
-:: --------------------------------------------------------------------------------
-:: Compile the builder
-:: --------------------------------------------------------------------------------
-echo [%SCRIPT%] Compile builder "%C_SOURCE%"
+@REM --------------------------------------------------------------------------------
+@REM Compile the builder
+@REM --------------------------------------------------------------------------------
 
-if "%msvc%"=="1" (
-    cl.exe  /EHsc /nologo /Zi /utf-8 %INCLUDES% /D UNICODE /D _UNICODE /Fo%C_OBJ_DIR%/ /Fd%C_OBJ_DIR%/  %C_SOURCE% /link /OUT:"%C_EXE_PATH%" /PDB:"%C_OBJ_DIR%/" /ILK:"%C_OBJ_DIR%/%basename%.ilk" 
+if "%cb_msvc%"=="1" (
+    echo [%cb_script%] Compile builder "%cb_file%"
+	
+    cl.exe /EHsc /nologo /Zi /utf-8 /D UNICODE /D _UNICODE /Fo%cb_tmp_dir%/ /Fd%cb_tmp_dir%/  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%/" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto clean_up
 )
 
-if "%clang%"=="1" (
-    echo [%SCRIPT%] ERROR: clang is not suported yet.
+if "%cb_clang%"=="1" (
+    echo [%cb_script%] ERROR: clang is not suported yet.
     goto clean_up
 )
 
 if ERRORLEVEL 1 goto clean_up
  
-if "%run%"=="1" (
-    echo [%SCRIPT%] Running "%C_EXE_PATH%"
-    call "%C_EXE_PATH%"
+if "%cb_run%"=="1" (
+    echo [%cb_script%] Running "%cb_output%"
+	"%cb_output%" || goto clean_up
 )
 
-:: --------------------------------------------------------------------------------
-:: Clean up this script variable
-:: --------------------------------------------------------------------------------
+@REM --------------------------------------------------------------------------------
+@REM Clean up this script variable
+@REM --------------------------------------------------------------------------------
 :clean_up
-echo [%SCRIPT%] Clean up .bat variables.
+echo [%cb_script%] Clean up .bat variables.
 
-set "C_EXE_PATH="
-set "C_OBJ_DIR="
-set "C_SOURCE="
-
-set "help="
-set "msvc"
-set "clang="
-set "run="
-set "file="
-set "tmp="
-set "output="
-set "basename="
-set "SCRIPT="
+Set "cb_basename="
+set "cb_output="
+set "cb_tmp_dir="
+set "cb_file="
+set "cb_run="
+set "cb_clang="
+set "cb_msvc"
+set "cb_help="
+set "cb_script="
 
 Exit /B 0
