@@ -2484,7 +2484,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		cb_kv current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_dstr_append_v(&str, current.u.dstr.data, _);
+			cb_dstr_append_v(&str, "\"", current.u.dstr.data, "\"", _);
 
 			cb_strv basename = cb_path_basename(current.u.strv);
 
@@ -2534,9 +2534,10 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 			{
 				cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
 
-				cb_dstr_append_v(&str, "/LIBPATH:", linked_output_dir.data, _);
+				/* /LIBPATH:"my/path" "mlib.lib" */
+				cb_dstr_append_v(&str, "/LIBPATH:", "\"", linked_output_dir.data, "\"", _ ,"\"");
 				cb_dstr_append_strv(&str, linked_project_name);
-				cb_dstr_append_v(&str, ".lib", _);
+				cb_dstr_append_v(&str, ".lib", "\"", _);
 			}
 
 			if (is_shared_libary)
@@ -2720,12 +2721,12 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	if (is_shared_library)
 	{
 		cb_dstr_append_str(&str, "-shared ");
-		cb_dstr_append_f(&str, "-o %s/lib%s%s ", str_ouput_path.data, project_name, ext);
+		cb_dstr_append_f(&str, "-o \"%s/lib%s%s\" ", str_ouput_path.data, project_name, ext);
 	}
 
 	if (is_exe)
 	{
-		cb_dstr_append_f(&str, "-o %s/%s ", str_ouput_path.data, project_name);
+		cb_dstr_append_f(&str, "-o \"%s/%s\" ", str_ouput_path.data, project_name);
 	}
 
 	/* Append .c files and .obj */
@@ -2734,14 +2735,13 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		cb_kv current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_dstr_append_v(&str, current.u.dstr.data, _);
+			cb_dstr_append_v(&str, "\"", current.u.dstr.data, "\"", _);
 
 			cb_strv basename = cb_path_basename(current.u.strv);
 
-			cb_dstr_append_str(&str_obj, str_ouput_path.data);
+			cb_dstr_append_v(&str_obj, "\"", str_ouput_path.data,  );
 			cb_dstr_append_strv(&str_obj, basename);
-			cb_dstr_append_str(&str_obj, ".o");
-			cb_dstr_append_str(&str_obj, _);
+			cb_dstr_append_v(&str_obj, ".o", "\"", _);
 		}
 	}
 
@@ -2788,8 +2788,10 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			{
 				cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
 
-				cb_dstr_append_v(&str, "-L", linked_output_dir.data, _);
-				cb_dstr_append_f(&str, "-l%.*s ", linked_project_name.size, linked_project_name.data);
+				/* -L "my/path/" */ 
+				cb_dstr_append_v(&str, "-L", _, "\"", linked_output_dir.data, "\"", _);
+				/* -l "my_proj" */
+				cb_dstr_append_f(&str, "-l '%.*s' ", linked_project_name.size, linked_project_name.data);
 			}
 
 			if (linked_project_is_shared_libary)
