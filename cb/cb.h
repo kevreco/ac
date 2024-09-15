@@ -4,10 +4,13 @@
 #define CB_IMPLEMENTATION
 
 #if _WIN32
-#if !defined _CRT_SECURE_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
-#endif
-#include <windows.h>
+	#if !defined _CRT_SECURE_NO_WARNINGS
+		#define _CRT_SECURE_NO_WARNINGS
+	#endif
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>
+
+	#define CB_THREAD  __declspec( thread )
 #else
 	#include <unistd.h>   /* open, close, access */
     #include <sys/stat.h> /* mkdir */
@@ -16,6 +19,8 @@
 	#include <sys/sendfile.h> /* sendfile */
 	#include <sys/wait.h>     /* waitpid */
 	#include <dirent.h>       /* opendir */
+
+	#define CB_THREAD __thread
 #endif
 
 #include <stdarg.h> /* va_start, va_end */
@@ -91,9 +96,7 @@ CB_API cb_bool cb_remove_one(const char* key, const char* value);
 /* Wrapper around cb_remove_one with string formatting */
 CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
 
-/* @FIXME: This should be equivalent to use cb_add("file", XXX); in a loop. */
 CB_API void cb_add_file(const char* filepath);
-CB_API void cb_add_files(const char* dir, const char* pattern);
 
 typedef struct cb_toolchain cb_toolchain;
 typedef cb_bool (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
@@ -116,6 +119,7 @@ CB_API void cb_wildmatch_test();
 
 CB_API cb_bool cb_subprocess(const char* cmd);
 CB_API cb_bool cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory);
+
 /* commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
@@ -339,6 +343,76 @@ cb_log(FILE* file, const char* prefix, const char* fmt, ...)
 #define cb_log_warning(fmt, ...)   cb_log(stderr, "[CB-WARNING] ", fmt, ##__VA_ARGS__)
 #define cb_log_debug(fmt, ...)     cb_log(stdout, "[CB-DEBUG] ", fmt,  ##__VA_ARGS__)
 #define cb_log_important(fmt, ...) cb_log(stdout, "", fmt,  ##__VA_ARGS__)
+
+/*-----------------------------------------------------------------------*/
+/* temporary allocation */
+/*-----------------------------------------------------------------------*/
+
+#ifndef CB_TMP_CAPACITY
+#define CB_TMP_CAPACITY (8 * 1024 * 1024) /* Arbitrary size. Must be big enough. Can be increased if needed. */
+#endif
+
+static CB_THREAD int cb_tmp_size = 0;
+static CB_THREAD char cb_tmp_buffer[CB_TMP_CAPACITY] = { 0 };
+
+CB_INTERNAL void*
+cb_tmp_alloc(int size)
+{
+	CB_ASSERT((cb_tmp_size + size <= CB_TMP_CAPACITY) && "Size of the temporary allocator is too small. Increase it if needed.");
+
+	if (cb_tmp_size + size > CB_TMP_CAPACITY)
+	{
+		return NULL;
+	}
+
+	void* data = &cb_tmp_buffer[cb_tmp_size];
+	cb_tmp_size += size;
+	return data;
+}
+
+CB_INTERNAL void
+cb_tmp_reset(void)
+{
+	cb_tmp_size = 0;
+}
+
+CB_INTERNAL char*
+cb_tmp_sprintf(const char* format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	int n = vsnprintf(NULL, 0, format, args);
+	CB_ASSERT(n >= 0);
+	va_end(args);
+
+	char* data = cb_tmp_alloc(n + 1);
+	va_start(args, format);
+	vsnprintf(data, n + 1, format, args);
+	va_end(args);
+
+	return data;
+}
+
+CB_INTERNAL const char*
+cb_tmp_strv_to_str(cb_strv sv)
+{
+	char* data = cb_tmp_alloc(sv.size + 1);
+	memcpy(data, sv.data, sv.size);
+	data[sv.size] = '\0';
+	return data;
+}
+
+CB_INTERNAL int
+cb_tmp_save()
+{
+	return cb_tmp_size;
+}
+
+CB_INTERNAL void
+cb_tmp_restore(int index)
+{
+	cb_tmp_size = index;
+}
 
 /*-----------------------------------------------------------------------*/
 /* cb_darr - dynamic array */
@@ -1021,6 +1095,22 @@ __declspec(noinline) static LONG WINAPI exit_on_exception_handler(EXCEPTION_POIN
 	printf("[CB] Error: unexpected error. exited with code %d\n", exit_code);
 	exit(exit_code);
 }
+
+/* Convert utf-8 string to utf-16 string. String is allocated using the temp buffer */
+CB_INTERNAL wchar_t*
+cb_utf8_to_utf16(const char* str)
+{
+	/* Calculate len */
+	int length = MultiByteToWideChar(CP_UTF8, 0, str, -1, NULL, 0);
+	/* Allocate enough space */
+	wchar_t* data = (wchar_t*)cb_tmp_alloc(length * sizeof(wchar_t));
+	/* Write data */
+	MultiByteToWideChar(CP_UTF8, 0, str, -1, data, length);
+	/* Place null-terminated char to end the string */
+	data[length] = L'\0';
+	return data;
+}
+
 #endif
 
 /* #file utils */
@@ -1067,6 +1157,11 @@ cb_path_filename(cb_strv path)
 	}
 	return path;
 }
+CB_INTERNAL cb_strv
+cb_path_filename_str(const char* str)
+{
+	return cb_path_filename(cb_strv_make_str(str));
+}
 
 CB_INTERNAL cb_strv
 cb_path_basename(cb_strv s)
@@ -1082,35 +1177,15 @@ cb_path_basename(cb_strv s)
 	}
 	return filename;
 }
+
+CB_INTERNAL cb_strv
+cb_path_basename_str(const char* str)
+{
+	return cb_path_basename(cb_strv_make_str(str));
+}
 /*  #file_iterator */
 
 #define CB_MAX_PATH 1024 /* this is an arbitrary limit */
-
-/* file iterator (can be recursive) */
-typedef struct cb_file_it cb_file_it;
-struct cb_file_it {
-	cb_bool recursive;
-	cb_bool has_next;
-
-    /* stack used for recursion */
-	char current_file[CB_MAX_PATH];
-
-#define CB_MAX_DIR_DEPTH 256
-	/* stack used for recursion */
-	int dir_len_stack[CB_MAX_DIR_DEPTH];
-	int stack_size;
-
-#if defined(_WIN32)
-#define CB_INVALID_FILE_HANDLE INVALID_HANDLE_VALUE
-	WIN32_FIND_DATAA find_data;
-	
-	HANDLE handle_stack[CB_MAX_DIR_DEPTH];
-#else
-#define CB_INVALID_FILE_HANDLE NULL
-	DIR* handle_stack[CB_MAX_DIR_DEPTH];
-	struct dirent* find_data;
-#endif
-};
 
 #define cb_safe_strcpy(dst, src, index, max) cb_safe_strcpy_internal(dst, src, index, max, __FILE__, __LINE__)
 
@@ -1135,222 +1210,6 @@ cb_safe_strcpy_internal(char* dst, const char* src, int index, int max, const ch
 	return index;
 }
 
-CB_INTERNAL void cb_file_it_destroy(cb_file_it* it);
-
-CB_INTERNAL int
-cb_safe_combine_path(char* dst, const char* path, int index)
-{
-	return cb_safe_strcpy(dst, path, index, CB_MAX_PATH);
-}
-
-CB_INTERNAL void
-cb_file_it__push_dir(cb_file_it* it, const char* directory)
-{
-	int current_dir_len = it->stack_size >= 0 ? it->dir_len_stack[it->stack_size] : 0;
-	int n = cb_safe_combine_path(it->current_file, directory, current_dir_len);
-
-	/* add slash if it's missing , n-1 to get the last char (null terminating char), n-2 to get the last valid char */
-	if (!cb_is_directory_separator(it->current_file[n - 2]))
-	{
-		n = cb_safe_combine_path(it->current_file, CB_PREFERRED_DIR_SEPARATOR, n - 1);
-	}
-	
-	int new_directory_len = n - 1;
-	
-#if defined(_WIN32)
-	
-    /* add asterisk to read all files from the directory */
-	n = cb_safe_combine_path(it->current_file, "*", n - 1);
-	HANDLE handle = FindFirstFileA(it->current_file, &it->find_data);
-	
-	if (handle == INVALID_HANDLE_VALUE)
-	{
-		cb_log_error("Could not open directory '%s'", it->current_file);
-
-		it->has_next = 0;
-		return;
-	}
-
-	/* remove the last asterisk '*' */
-	it->current_file[new_directory_len] = '\0';
-	
-#else
-	DIR* handle = opendir(it->current_file);
-
-	if (handle == NULL)
-	{
-		cb_log_error("Could not open directory '%s': %s.", directory, strerror(errno));
-		it->has_next = 0;
-		return;
-	}
-
-#endif
-	it->stack_size++;
-
-	it->handle_stack[it->stack_size] = handle;
-
-	it->dir_len_stack[it->stack_size] =  new_directory_len;
-	
-	it->has_next = 1;
-}
-
-CB_INTERNAL void
-cb_file_it_close_current_handle(cb_file_it* it)
-{
-	if (it->handle_stack[it->stack_size] != CB_INVALID_FILE_HANDLE)
-	{
-#if defined(_WIN32)
-		FindClose(it->handle_stack[it->stack_size]);
-#else
-		closedir(it->handle_stack[it->stack_size]);
-#endif
-		it->handle_stack[it->stack_size] = 0;
-	}
-}
-
-CB_INTERNAL const char*
-cb_file_it__get_next_entry(cb_file_it* it)
-{
-#if defined(_WIN32)
-	BOOL b = FindNextFileA(it->handle_stack[it->stack_size], &it->find_data);
-	if(!b)
-	{
-		DWORD err = GetLastError();
-		if (err != ERROR_SUCCESS && err != ERROR_NO_MORE_FILES)
-		{
-			cb_log_error("Could not go to the next entry.");
-		}
-		return NULL;
-	}
-	return it->find_data.cFileName;
-#else
-	it->find_data = readdir(it->handle_stack[it->stack_size]);
-
-	return it->find_data != NULL ? it->find_data->d_name: NULL;
-#endif
-}
-
-CB_INTERNAL cb_bool
-cb_file_it__current_entry_is_directory(cb_file_it* it)
-{
-#if defined(_WIN32)
-	return !!(it->find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
-#else
-/* @FIXME: in c89 DT_DIR is not defined so we explicitely define it, this is not portable though. */
-#ifndef DT_DIR
-#define DT_DIR 4
-#endif 
-	return it->find_data->d_type == DT_DIR;
-#endif
-}
-
-CB_INTERNAL void
-cb_file_it__pop_dir(cb_file_it* it)
-{
-	if (it->stack_size > 0)
-	{
-		cb_file_it_close_current_handle(it);
-
-		it->stack_size -= 1;
-		
-		int dir_len = it->dir_len_stack[it->stack_size];
-		it->current_file[dir_len] = 0; /* set null term char at the end of the*/
-
-		if (it->stack_size < 0)
-		{
-			it->has_next = 0;
-		}
-	}
-}
-	
-CB_INTERNAL void
-cb_file_it_init(cb_file_it* it, const char* base_directory)
-{
-	memset(it, 0, sizeof(cb_file_it));
-	it->stack_size = -1;
-	
-	cb_file_it__push_dir(it, base_directory);
-}
-
-CB_INTERNAL void
-cb_file_it_init_recursive(cb_file_it* it, const char* base_directory)
-{
-	cb_file_it_init(it, base_directory);
-	it->recursive = cb_true;;
-}
-
-CB_INTERNAL void
-cb_file_it_destroy(cb_file_it* it)
-{
-	while(it->stack_size > 0)
-	{
-		cb_file_it_close_current_handle(it);
-		it->stack_size -= 1;
-	}
-	
-	it->current_file[0] = 0;
-	it->has_next = 0;
-}
-
-CB_INTERNAL const char* cb_file_it_current_file(cb_file_it* it) { return it->current_file; }
-
-CB_INTERNAL cb_bool
-cb_file_it_get_next(cb_file_it* it)
-{
-	CB_ASSERT(it->has_next);
-
-	cb_bool is_directory = false;
-	const char* found = 0;
-
-	do
-	{
-		/* Check if there is remaining/next file, if not just pop the stack.
-		*  Do it multiple times if we are at the end of a directory and a parent directory.
-		*/
-		while ((found = cb_file_it__get_next_entry(it)) == NULL)
-		{
-			/* no parent directory so it's the end */
-			if (it->stack_size == 0)
-			{
-				it->has_next = false;
-				return cb_false;
-			}
-
-			/* since there is no more file in the directory
-			   we pop the directory and loop again to get the next file
-			*/
-			cb_file_it__pop_dir(it);
-		}
-		
-		is_directory = cb_file_it__current_entry_is_directory(it);
-	/* skip parent directory or current directory ..' or '.'*/
-	} while (it->has_next
-		&& is_directory
-		&& found[0] == '.');
-
-	/* build path with current file found */
-	cb_safe_combine_path(it->current_file, found, it->dir_len_stack[it->stack_size]);
-
-	if (is_directory && it->recursive)
-	{
-		cb_file_it__push_dir(it, found);
-	}
-	return cb_true;
-}
-
-CB_INTERNAL cb_bool
-cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
-{
-	while (cb_file_it_get_next(it))
-	{
-		if (cb_wildmatch(pattern, cb_file_it_current_file(it)))
-		{
-			return cb_true;
-		}
-	}
-	return cb_false;
-}
-
 /* return cb_true if separator has been added */
 CB_INTERNAL cb_bool
 cb_add_trailing_dir_separator(char* path, int path_len)
@@ -1371,21 +1230,38 @@ cb_add_trailing_dir_separator(char* path, int path_len)
 }
 
 #ifdef WIN32
-/* @TODO rename everything related to file into cp_path_XXX */
-CB_INTERNAL cb_bool
-cb_path_exists(const char* path) {
 
-	DWORD attr = GetFileAttributesA(path);
+CB_INTERNAL cb_bool
+cb_path__exists(const wchar_t* path)
+{
+	DWORD attr = GetFileAttributesW(path);
 	return attr != INVALID_FILE_ATTRIBUTES;
 }
 
-CB_INTERNAL cb_bool cb_create_directory(const char* path) { return CreateDirectoryA(path, NULL); }
+CB_INTERNAL cb_bool
+cb_path_exists(const char* path)
+{
+	return cb_path__exists(cb_utf8_to_utf16(path));
+}
 
+CB_INTERNAL cb_bool
+cb__create_directory(const wchar_t* path)
+{
+	return CreateDirectoryW(path, NULL);
+}
+
+CB_INTERNAL cb_bool
+cb_create_directory(const char* path)
+{
+	return cb__create_directory(cb_utf8_to_utf16(path));
+}
 #else
 
 CB_INTERNAL cb_bool cb_path_exists(const char* path) { return access(path, F_OK) == 0; }
+CB_INTERNAL cb_bool cb_path__exists(const char* path) { return cb_path_exists(path); }
 
 CB_INTERNAL cb_bool cb_create_directory(const char* path) { return mkdir(path, 0777) == 0; }
+CB_INTERNAL cb_bool cb__create_directory(const char* path) { return cb_create_directory(path); }
 
 #endif
 
@@ -1412,8 +1288,7 @@ cb_path_is_absolute(cb_strv path)
 }
 
 #ifdef _WIN32
-#include <direct.h> /* _getcwd */
-#define getcwd _getcwd
+#define getcwd(buf, size) GetCurrentDirectoryA((DWORD)size, buf)
 #else
 #include <unistd.h> /* getcwd */
 #endif
@@ -1428,22 +1303,23 @@ cb_path_get_absolute(const char* path, cb_dstr* abs_path)
 			path += 2;
 
 		char buffer[FILENAME_MAX];
-		char* p = (char*)getcwd(buffer, FILENAME_MAX);
-		if (p == NULL)
+		getcwd(buffer, FILENAME_MAX);
+		if (buffer == NULL)
 			return cb_false;
 
-		cb_dstr_assign_str(abs_path, p);
+		cb_dstr_assign_str(abs_path, buffer);
 
 		cb_dstr_append_str(abs_path, CB_PREFERRED_DIR_SEPARATOR);
 	}
 
 	cb_dstr_append_str(abs_path, path);
 
-	int i = 3; /* start at 3 to dealing with volume name. */
+	int i = 2; /* start at 2 to dealing with volume name. */
 	/* Replace slash with the preferred one. */
 	while (i < abs_path->size)
 	{
-		if (abs_path->data[i] == CB_DEFAULT_DIR_SEPARATOR_CHAR) {
+		if (abs_path->data[i] == CB_DEFAULT_DIR_SEPARATOR_CHAR)
+		{
 			abs_path->data[i] = CB_PREFERRED_DIR_SEPARATOR_CHAR;
 		}
 		i += 1;
@@ -1451,8 +1327,9 @@ cb_path_get_absolute(const char* path, cb_dstr* abs_path)
 	return cb_true;
 }
 
+/* create directories recursively */
 CB_INTERNAL void
-cb_create_directory_recursively(const char* path, int size)
+cb_create_directories_core(const char* path, int size)
 {
 	if (path == NULL || size <= 0) {
 		cb_log_error("Could not create directory. Path is empty.");
@@ -1463,15 +1340,18 @@ cb_create_directory_recursively(const char* path, int size)
 		cb_log_error("Could not create directory. Path is too long '%s'.", path);
 		return;
 	}
+#ifdef _WIN32
+	typedef wchar_t tchar;
+	wchar_t* str = (wchar_t*)cb_utf8_to_utf16(path);
+#else
+	typedef char tchar;
+	char* str = (char*)path;
+#endif
 
-	if (!cb_path_exists(path))
+	if (!cb_path__exists(str))
 	{
-		char tmp_buffer[CB_MAX_PATH + 1];  /* extra for the possible missing separator */
-
-		cb_safe_strcpy(tmp_buffer, path, 0, CB_MAX_PATH);
-
-		char* cur = tmp_buffer + 3; /* + 3 to avoid root on Windows (unix would require +1 for the original slash ) */
-		char* end = tmp_buffer + size;
+		tchar* cur = str + 2; /* + 2 to avoid root on Windows (unix would require +1 for the original slash ) */
+		tchar* end = str + size;
 		while (cur < end)
 		{
 			/* go to next directory separator */
@@ -1480,13 +1360,12 @@ cb_create_directory_recursively(const char* path, int size)
 
 			if (*cur)
 			{
-
 				*cur = '\0'; /* terminate path at separator */
-				if (!cb_path_exists(tmp_buffer))
+				if (!cb_path__exists(str))
 				{
-					if (!cb_create_directory(tmp_buffer))
+					if (!cb__create_directory(str))
 					{
-						cb_log_error("Could not create directory '%s'.", tmp_buffer);
+						cb_log_error("Could not create directory.");
 						return;
 					}
 				}
@@ -1497,18 +1376,26 @@ cb_create_directory_recursively(const char* path, int size)
 	}
 }
 
+CB_INTERNAL void
+cb_create_directories(const char* path, int size)
+{
+	int index = cb_tmp_save();
+	cb_create_directories_core(path, size);
+	cb_tmp_restore(index);
+}
+
 CB_INTERNAL cb_bool
 cb_copy_file(const char* src_path, const char* dest_path)
 {
 	/* create target directory if it does not exists */
-	cb_create_directory_recursively(dest_path, strlen(dest_path));
+	cb_create_directories(dest_path, strlen(dest_path));
 	cb_log_debug("Copying '%s' to '%s'", src_path, dest_path);
 #ifdef _WIN32
 
 	DWORD attr = GetFileAttributesA(src_path);
 
 	if (attr == INVALID_FILE_ATTRIBUTES) {
-		cb_log_error("Could not rertieve file attributes of file '%s' (%d).", src_path, GetLastError());
+		cb_log_error("Could not retieve file attributes of file '%s' (%d).", src_path, GetLastError());
 		return cb_false;
 	}
 
@@ -1524,13 +1411,15 @@ cb_copy_file(const char* src_path, const char* dest_path)
 	int src_fd = -1;
 	int dst_fd = -1;
 	src_fd = open(src_path, O_RDONLY);
-	if (src_fd < 0) {
+	if (src_fd < 0)
+	{
 		cb_log_error("Could not open file '%s': %s", src_path, strerror(errno));
 		return cb_false;
 	}
 	
     struct stat src_stat;
-    if (fstat(src_fd, &src_stat) < 0) {
+    if (fstat(src_fd, &src_stat) < 0)
+	{
         cb_log_error("Could not get fstat of file '%s': %s", src_path, strerror(errno));
 		close(src_fd);
 		return cb_false;
@@ -1538,7 +1427,8 @@ cb_copy_file(const char* src_path, const char* dest_path)
 	
 	dst_fd = open(dest_path, O_CREAT | O_TRUNC | O_WRONLY, src_stat.st_mode);
 
-	if (dst_fd < 0) {
+	if (dst_fd < 0)
+	{
         cb_log_error("Could not open file '%s': %s", dest_path, strerror(errno));
 		close(src_fd);
 		return cb_false;
@@ -1565,85 +1455,25 @@ cb_copy_file(const char* src_path, const char* dest_path)
 #endif
 }
 
-/* recursively copy the content of the directory in another one, empty directory will be omitted */
 CB_INTERNAL cb_bool
-cb_copy_directory(const char* source_dir, const char* target_dir)
+cb_copy_file_to_dir(const char* file, const char* directory)
 {
-	char dest_buffer[CB_MAX_PATH];
-	memset(dest_buffer, 0, sizeof(dest_buffer));
-
-	cb_file_it it;
-	cb_file_it_init_recursive(&it, source_dir);
-
-	while (cb_file_it_get_next(&it))
+	if (!cb_path_exists(file))
 	{
-		/* copy current directory*/
-		const char* source_relative_path = it.current_file + it.dir_len_stack[0];
-
-		int n = snprintf(dest_buffer, CB_MAX_PATH, "%s", target_dir);
-		n += cb_add_trailing_dir_separator(dest_buffer, n) ? 1 : 0;
-		n += snprintf(dest_buffer + n, CB_MAX_PATH, "%s", source_relative_path);
-
-		cb_copy_file(it.current_file, dest_buffer);
+		cb_log_error("File does not exist: %s", file);
+		return cb_false;
 	}
-	return cb_true;
-}
 
-CB_INTERNAL cb_bool
-cb_delete_file(const char* src_path)
-{
-	cb_bool result = 0;
-	cb_log_debug("Deleting file '%s'.", src_path);
-#ifdef _WIN32
-	result = DeleteFileA(src_path);
-#else
-	result = remove(src_path) != -1;
-#endif
-	if (!result)
-		cb_log_debug("Could not delete file '%s'.", src_path);
+	int index = cb_tmp_save();
 
+	cb_strv filename = cb_path_filename_str(file);
+	const char* destination_file = cb_tmp_sprintf("%s%.*s", directory, filename.size, filename.data);
+
+	cb_bool result = cb_copy_file(file, destination_file);
+
+	cb_tmp_restore(index);
+	
 	return result;
-}
-
-CB_INTERNAL cb_bool
-cb_move_file(const char* src_path, const char* dest_path)
-{
-	if (cb_copy_file(src_path, dest_path))
-	{
-		return cb_delete_file(src_path);
-	}
-
-	return cb_false;
-}
-
-/* recursively copy the content of the directory in another one, empty directory will be omitted */
-CB_INTERNAL cb_bool
-cb_move_files(const char* source_dir, const char* target_dir, cb_bool(*can_move)(cb_strv path))
-{
-	char dest_buffer[CB_MAX_PATH];
-	memset(dest_buffer, 0, sizeof(dest_buffer));
-
-	cb_file_it it;
-	cb_file_it_init(&it, source_dir);
-
-	while (cb_file_it_get_next(&it))
-	{
-		/* copy current directory */
-		const char* source_relative_path = it.current_file + it.dir_len_stack[0];
-
-		int n = snprintf(dest_buffer, CB_MAX_PATH, "%s", target_dir);
-		n += cb_add_trailing_dir_separator(dest_buffer, n) ? 1 : 0;
-		n += snprintf(dest_buffer + n, CB_MAX_PATH, "%s", source_relative_path);
-
-		cb_strv p = cb_strv_make(dest_buffer, n);
-
-		cb_bool should_move = !can_move || (can_move && can_move(p));
-		if (should_move)
-		{
-			cb_move_file(it.current_file, dest_buffer);
-		}
-	}
-	return cb_true;
 }
 
 CB_INTERNAL void
@@ -1726,6 +1556,7 @@ cb_destroy()
 {
 	/* @TODO remove all projects from current context */
 	cb_context_destroy(&default_ctx);
+	cb_tmp_reset();
 }
 
 CB_API cb_project_t* cb_project(const char* name)
@@ -1847,28 +1678,6 @@ cb_add_file(const char* file)
 	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(cbk_FILES), absolute_file));
 }
 
-CB_API void
-cb_add_files(const char* directory, const char* pattern)
-{
-	cb_dstr absolute_dir;
-	cb_dstr_init(&absolute_dir);
-	cb_path_get_absolute(directory, &absolute_dir);
-
-	cb_file_it it;
-	cb_file_it_init_recursive(&it, absolute_dir.data);
-
-	while (cb_file_it_get_next_glob(&it, pattern))
-	{
-		const char* filepath = cb_file_it_current_file(&it);
-		
-		cb_dstr result;
-		cb_dstr_init(&result);
-		cb_dstr_assign_str(&result, filepath);
-
-		cb__add(cb_kv_make_with_dstr(cb_strv_make_str(cbk_FILES), result));
-	}
-}
-
 /* Properties are just (strv) values from the map of a project. */
 CB_INTERNAL cb_bool
 try_get_property(cb_project_t* project, const char* key, cb_kv* result)
@@ -1972,115 +1781,6 @@ cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 	return cb_true;
 }
 
-/* EXTERNAL DEPENDENCY (still internal API) */
-
-/* ================================================================ */
-/* WILDMATCH_H */
-/* Taken from https://github.com/ujr/wildmatch - UNLICENSED
-*  - 'cb_decode_utf8' was named 'decode'
-*  - 'cb_wildmatch' was created from 'match1'
-/* ================================================================ */
-
-static cb_bool cb_wildcad_debug = 0;
-
-/** return nbytes, 0 on end, -1 on error */
-CB_INTERNAL int
-cb_decode_utf8(const void* p, int* pc)
-{
-	const int replacement = 0xFFFD;
-	const unsigned char* s = (const unsigned char*)p;
-	if (s[0] < 0x80) {
-		*pc = s[0];
-		return *pc ? 1 : 0;
-	}
-	if ((s[0] & 0xE0) == 0xC0) {
-		*pc = (int)(s[0] & 0x1F) << 6
-			| (int)(s[1] & 0x3F);
-		return 2;
-	}
-	if ((s[0] & 0xF0) == 0xE0) {
-		*pc = (int)(s[0] & 0x0F) << 12
-			| (int)(s[1] & 0x3F) << 6
-			| (int)(s[2] & 0x3F);
-		/* surrogate pairs not allowed in UTF8 */
-		if (0xD800 <= *pc && *pc <= 0xDFFF)
-			*pc = replacement;
-		return 3;
-	}
-	if ((s[0] & 0xF8) == 0xF0 && (s[0] <= 0xF4)) {
-		/* 2nd cond: not greater than 0x10FFFF */
-		*pc = (int)(s[0] & 0x07) << 18
-			| (int)(s[1] & 0x3F) << 12
-			| (int)(s[2] & 0x3F) << 6
-			| (int)(s[3] & 0x3F);
-		return 4;
-	}
-	*pc = replacement;
-	/*errno = EILSEQ;*/
-	return -1;
-}
-
-/* backslash and slash are assumed to be the same */
-CB_INTERNAL cb_bool
-cb_path_char_is_different(int left, int right) { return cb_is_directory_separator((char)left) ? !cb_is_directory_separator((char)right) : left != right; }
-
-CB_INTERNAL cb_bool
-cb_wildmatch(const char* pat, const char* str)
-{
-	const char* p, * s;
-	int pc, sc;
-	int len = 0;
-	p = s = 0;           /* anchor initially not set */
-
-	if (!pat || !str) return cb_false;
-
-	for (;;) {
-		if (cb_wildcad_debug)
-			fprintf(stderr, "s=%s\tp=%s\n", str, pat);
-		len = cb_decode_utf8(pat, &pc);
-		if (len < 0)
-			return cb_false;
-		pat += len;
-		if (pc == '*') {
-			while (*pat == '*') pat++; /* multiple wildcards have not special effect compared to a single wildcard */
-			p = pat;         /* set anchor just after wild star */
-			s = str;
-			continue;
-		}
-		len = cb_decode_utf8(str, &sc);
-		if (len < 0)
-			return cb_false;
-		str += len;
-		if (sc == '\0')
-			return pc == '\0';
-		if (pc != '?' && cb_path_char_is_different(pc,sc)) {
-			if (!p)
-				return cb_false;
-			pat = p;         /* resume at anchor in pattern */     
-			str = s += cb_decode_utf8(s, &pc); /* but one later in string */
-			continue;
-		}
-	}
-}
-
-CB_API void
-cb_wildmatch_test()
-{
-	CB_ASSERT(cb_wildmatch("a", "a"));
-	CB_ASSERT(!cb_wildmatch("a", "B"));
-	CB_ASSERT(cb_wildmatch("*", "a"));
-
-	CB_ASSERT(cb_wildmatch("*.c", "a.c"));
-	CB_ASSERT(cb_wildmatch("\\*.c", "\\a.c"));
-	CB_ASSERT(cb_wildmatch("\\**.c", "\\a.c"));
-	CB_ASSERT(cb_wildmatch("/**.c", "\\a.c"));
-	CB_ASSERT(cb_wildmatch("a/**.c", "a/a.c"));
-	CB_ASSERT(cb_wildmatch("a\\**.c", "a/a.c"));
-	CB_ASSERT(cb_wildmatch("*.c", ".\\src\\tester\\a.c"));
-	CB_ASSERT(cb_wildmatch("*src*.c", ".\\src\\tester\\a.c"));
-	CB_ASSERT(cb_wildmatch("*\\src\\*.c", ".\\src\\tester\\a.c"));
-}
-
 #if _WIN32
 
 /* #process #subprocess */
@@ -2089,10 +1789,6 @@ cb_wildmatch_test()
 CB_API cb_bool
 cb_subprocess_with_starting_directory(const char* str, const char* starting_directory)
 {
-	cb_dstr cmd;
-	cb_dstr_init(&cmd);
-	cb_dstr_append_from(&cmd, 0, str, strlen(str));
-	
 	cb_log_debug("Running subprocess '%s'", str);
 	if (starting_directory && starting_directory[0])
 	{
@@ -2103,28 +1799,30 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 	fflush(stdout);
 	fflush(stderr);
 
-	STARTUPINFOA si;
+	STARTUPINFOW si;
 	PROCESS_INFORMATION pi;
 
 	ZeroMemory(&si, sizeof(si));
 	si.cb = sizeof(si);
 	ZeroMemory(&pi, sizeof(pi));
 
-	/* Start the child process. */
-	if (!CreateProcessA(
-		NULL,               /* No module name (use command line) */
-		cmd.data,           /* Command line */
-		NULL,               /* Process handle not inheritable */
-		NULL,               /* Thread handle not inheritable */ 
-		FALSE,              /* Set handle inheritance to FALSE */
-		0,                  /* No creation flags */
-		NULL,               /* Use parent's environment block */
-		starting_directory, /* Use parent's starting directory */
-		&si,                /* Pointer to STARTUPINFO structure */
-		&pi)                /* Pointer to PROCESS_INFORMATION structure */
+	/* Start the child process.
+	*  NOTE: we use CreateProcessW because CreateProcessA (with /utf-8) cannot create path with unicode.
+	*/
+	if (!CreateProcessW(
+		NULL,                                 /* No module name (use command line) */
+		cb_utf8_to_utf16(str),                /* Command line */
+		NULL,                                 /* Process handle not inheritable */
+		NULL,                                 /* Thread handle not inheritable */ 
+		FALSE,                                /* Set handle inheritance to FALSE */
+		0,                                    /* No creation flags */
+		NULL,                                 /* Use parent's environment block */
+		cb_utf8_to_utf16(starting_directory), /* Use parent's starting directory */
+		&si,                                  /* Pointer to STARTUPINFO structure */
+		&pi)                                  /* Pointer to PROCESS_INFORMATION structure */
 		)
 	{
-		cb_log_error("CreateProcessA failed (%d).", GetLastError());
+		cb_log_error("CreateProcessW failed: %d", GetLastError());
 		/* @FIXME cleanup objects */
 		return cb_false;
 	}
@@ -2136,7 +1834,6 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 
 	if (result == WAIT_FAILED) {
 		cb_log_error("Could not wait on child process: %lu", GetLastError());
-		/* @FIXME cleanup objects */
 		/* Close process and thread handles. */
 		CloseHandle(pi.hProcess);
 		CloseHandle(pi.hThread);
@@ -2152,7 +1849,6 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 		cb_log_error("Command exited with exit code %lu", exit_status);
 	}
 
-	cb_dstr_destroy(&cmd);
 	/* Close process and thread handles. */
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
@@ -2399,7 +2095,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	cb_dstr_add_output_path(&str_ouput_path, project, tc->default_directory_base);
 
 	/* Create output directory if it does not exist yet. */
-	cb_create_directory_recursively(str_ouput_path.data, str_ouput_path.size);
+	cb_create_directories(str_ouput_path.data, str_ouput_path.size);
 
 	/* Get working directory, this will be set right before calling the compiler. */
 	cb_dstr str_wd;
@@ -2411,7 +2107,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		cb_dstr_append_absolute_path(&str_wd, working_dir.data);
 	}
 
-	cb_dstr_append_v(&str, "cl.exe", _);
+	cb_dstr_append_v(&str, "cl.exe /utf-8", _);
 
 	/* Handle binary type */
 
@@ -2512,6 +2208,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				cb_dstr_append_str(&str, _);
 			}
 		}
+
 		cb_kv current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
@@ -2534,7 +2231,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 			{
 				cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
 
-				/* /LIBPATH:"my/path" "mlib.lib" */
+				/* /LIBPATH:"output/dir/" "mlib.lib" */
 				cb_dstr_append_v(&str, "/LIBPATH:", "\"", linked_output_dir.data, "\"", _ ,"\"");
 				cb_dstr_append_strv(&str, linked_project_name);
 				cb_dstr_append_v(&str, ".lib", "\"", _);
@@ -2542,7 +2239,20 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 			if (is_shared_libary)
 			{
-				cb_copy_directory(linked_output_dir.data, str_ouput_path.data);
+				const char* dll = cb_tmp_sprintf("%s%.*s.dll", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
+				const char* pdb = cb_tmp_sprintf("%s%.*s.pdb", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
+
+				/* TODO create copy_files_to_dir */
+				if (!cb_copy_file_to_dir(dll, str_ouput_path.data))
+				{
+					/* @FIXME: Release all allocated objects here. */
+					return cb_false;
+				}
+				if (!cb_copy_file_to_dir(pdb, str_ouput_path.data))
+				{
+					/* @FIXME: Release all allocated objects here. */
+					return cb_false;
+				}
 			}
 		}
 
@@ -2559,6 +2269,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	if (is_static_library)
 	{
 		cb_dstr_clear(&str);
+		/* lib.exe /OUT:output/dir/project_name.lib /LIBPATH:output/dir/ a.obj b.obj c.obj etc. */
 		cb_dstr_append_v(&str,
 			"lib.exe", _,
 			"/OUT:", str_ouput_path.data, project_name, ext, _,
@@ -2586,7 +2297,7 @@ cb_toolchain_msvc()
 	cb_toolchain tc;
 	tc.bake = cb_toolchain_msvc_bake;
 	tc.name = "msvc";
-	tc.default_directory_base = ".cb\\msvc";
+	tc.default_directory_base = ".build/msvc";
 	return tc;
 }
 
@@ -2648,7 +2359,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_dstr_add_output_path(&str_ouput_path, project, tc->default_directory_base);
 
 	/* Create output directory if it does not exist yet. */
-	cb_create_directory_recursively(str_ouput_path.data, str_ouput_path.size);
+	cb_create_directories(str_ouput_path.data, str_ouput_path.size);
 
 	/* Get working directory, this will be set right before calling the compiler. */
 	cb_dstr str_wd;
@@ -2874,7 +2585,7 @@ cb_toolchain_gcc()
 	cb_toolchain tc;
 	tc.bake = cb_toolchain_gcc_bake;
 	tc.name = "gcc";
-	tc.default_directory_base = ".cb/gcc";
+	tc.default_directory_base = ".build/gcc";
 	return tc;
 }
 
@@ -2891,4 +2602,9 @@ cb_toolchain_default()
 }
 
 #endif /* CB_IMPLEMENTATION_CPP  */
+
+#ifdef CB_EXTENSIONS
+#include "cb_extensions.h"
+#endif /* CB_EXTENSIONS */
+
 #endif /* CB_IMPLEMENTATION */

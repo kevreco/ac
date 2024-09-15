@@ -78,7 +78,7 @@ if not exist %cb_tmp_dir% mkdir %cb_tmp_dir%
 if "%cb_msvc%"=="1" (
     echo [%cb_script%] Compile builder "%cb_file%"
 	
-    cl.exe /EHsc /nologo /Zi /utf-8 /D UNICODE /D _UNICODE /Fo%cb_tmp_dir%/ /Fd%cb_tmp_dir%/  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%/" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto clean_up
+    cl.exe /EHsc /nologo /Zi /utf-8  /Fo%cb_tmp_dir%/ /Fd%cb_tmp_dir%/  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%/" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto clean_up
 )
 
 if "%cb_clang%"=="1" (

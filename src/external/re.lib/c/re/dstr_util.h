@@ -512,7 +512,7 @@ static inline void eat_email_suffix(const char** _cursor, const char* _end)
 	while (cursor < _end)
 	{
 		dstr_bool valid = !!(dstr__char_is_alphanum(*cursor)
-			|| strv_contains_char(strv_make_from_str(".!#$%&’*+/=?^_`{|}~-"), *cursor))
+			|| strv_contains_char(strv_make_from_str(".!#$%&â€™*+/=?^_`{|}~-"), *cursor))
 			;
 
 		if (!valid) {
@@ -624,7 +624,7 @@ static dstr_bool dstr__parse_email_ending(const char** _cursor, const char* _end
 }
 
 // Should match W3C email regex:
-// /^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/
+// /^[a-zA-Z0-9.!#$%&â€™*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/
 static inline dstr_bool strv_is_email(strv _str)
 {
 	const dstr_char_t* cursor = _str.data;
