@@ -267,6 +267,9 @@ struct cb_darr {
 #define cb_darrT_ptr(a, index) \
     (&(a)->darr.data[index])
 
+#define cb_darrT_size(a) \
+    ((a)->darr.size)
+
 /* dynamic string */
 typedef cb_darr cb_dstr;
 
@@ -1035,14 +1038,29 @@ cb_context_destroy(cb_context* ctx)
 	cb_context_init(ctx);
 }
 
+CB_INTERNAL cb_bool
+cb_try_find_project_by_name(cb_strv sv, cb_project_t** project)
+{
+	void* default_value = NULL;
+	*project = (cb_project_t*)cb_mmap_get_ptr(&current_ctx->projects, sv, default_value);
+	return (cb_bool)(*project != NULL);
+}
+
 CB_INTERNAL cb_project_t*
 cb_find_project_by_name(cb_strv sv)
 {
-	void* default_value = NULL;
-	return (cb_project_t*)cb_mmap_get_ptr(&current_ctx->projects, sv, default_value);
+	cb_project_t* project = 0;
+	if (!cb_try_find_project_by_name(sv, &project))
+	{
+		cb_log_error("Project not found '%.*s'", sv.size, sv.data);
+		return NULL;
+	}
+
+	return project;
 }
 
 CB_INTERNAL cb_project_t* cb_find_project_by_name_str(const char* name) { return cb_find_project_by_name(cb_strv_make_str(name)); }
+CB_INTERNAL cb_bool cb_try_find_project_by_name_str(const char* name, cb_project_t** project) { return cb_try_find_project_by_name(cb_strv_make_str(name), project); }
 
 CB_INTERNAL void
 cb_project_init(cb_project_t* project)
@@ -1324,6 +1342,7 @@ cb_path_get_absolute(const char* path, cb_dstr* abs_path)
 		}
 		i += 1;
 	}
+
 	return cb_true;
 }
 
@@ -1456,11 +1475,10 @@ cb_copy_file(const char* src_path, const char* dest_path)
 }
 
 CB_INTERNAL cb_bool
-cb_copy_file_to_dir(const char* file, const char* directory)
+cb_try_copy_file_to_dir(const char* file, const char* directory)
 {
 	if (!cb_path_exists(file))
 	{
-		cb_log_error("File does not exist: %s", file);
 		return cb_false;
 	}
 
@@ -1472,10 +1490,84 @@ cb_copy_file_to_dir(const char* file, const char* directory)
 	cb_bool result = cb_copy_file(file, destination_file);
 
 	cb_tmp_restore(index);
-	
+
 	return result;
 }
 
+CB_INTERNAL cb_bool
+cb_copy_file_to_dir(const char* file, const char* directory)
+{
+	if (!cb_try_copy_file_to_dir(file, directory))
+	{
+		cb_log_error("Could not copy file '%s' to directory %s", file, directory);
+		return cb_false;
+	}
+	return cb_true;
+}
+
+
+CB_INTERNAL cb_bool
+cb_delete_file(const char* src_path)
+{
+	cb_bool result = 0;
+	cb_log_debug("Deleting file '%s'.", src_path);
+#ifdef _WIN32
+	int index = cb_tmp_save();
+	result = DeleteFileW(cb_utf8_to_utf16(src_path));
+	cb_tmp_restore(index);
+#else
+	result = remove(src_path) != -1;
+#endif
+	if (!result)
+		cb_log_debug("Could not delete file '%s'.", src_path);
+
+	return result;
+}
+
+CB_INTERNAL cb_bool
+cb_move_file(const char* src_path, const char* dest_path)
+{
+	if (cb_copy_file(src_path, dest_path))
+	{
+		return cb_delete_file(src_path);
+	}
+
+	return cb_false;
+}
+
+CB_INTERNAL cb_bool
+cb_try_move_file_to_dir(const char* file, const char* directory)
+{
+	if (!cb_path_exists(file))
+	{
+		return cb_false;
+	}
+
+	int index = cb_tmp_save();
+
+	cb_strv filename = cb_path_filename_str(file);
+	const char* destination_file = cb_tmp_sprintf("%s%.*s", directory, filename.size, filename.data);
+
+	cb_bool result = cb_move_file(file, destination_file);
+
+	cb_tmp_restore(index);
+
+	return result;
+}
+
+CB_INTERNAL cb_bool
+cb_move_file_to_dir(const char* file, const char* directory)
+{
+	if (!cb_try_move_file_to_dir(file, directory))
+	{
+		cb_log_error("Could not move file '%s' to '%s'", file, directory);
+		return cb_false;
+	}
+	return cb_true;
+}
+
+
+/* Get absolute path, ends with a directory separator if it's a directory. */
 CB_INTERNAL void
 cb_dstr_append_absolute_path(cb_dstr* s, const char* path)
 {
@@ -1486,6 +1578,13 @@ cb_dstr_append_absolute_path(cb_dstr* s, const char* path)
 	cb_dstr_append_from(s, s->size, abs.data, abs.size);
 
 	cb_dstr_destroy(&abs);
+}
+
+CB_INTERNAL void
+cb_dstr_ensure_trailing_slash(cb_dstr* s)
+{
+	/* Add trailing slash if necessary */
+	cb_dstr_append_str(s, cb_is_directory_separator(s->data[s->size - 1]) ? "" : CB_PREFERRED_DIR_SEPARATOR);
 }
 
 CB_INTERNAL void cb__add(cb_kv kv);
@@ -1546,8 +1645,6 @@ cb_init()
 	{
 		SetUnhandledExceptionFilter(exit_on_exception_handler);
 	}
-#else
-	CB_ASSERT("Not Yet Implemented");
 #endif
 }
 
@@ -1561,9 +1658,9 @@ cb_destroy()
 
 CB_API cb_project_t* cb_project(const char* name)
 {
-	cb_project_t* project = cb_find_project_by_name_str(name);
-	cb_bool is_new_project = project == NULL;
-	if (is_new_project)
+	cb_project_t* project;
+
+	if (!cb_try_find_project_by_name_str(name, &project))
 	{
 		project = cb_create_project(name);
 	}
@@ -1725,17 +1822,16 @@ cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_o
 	if (try_get_property_strv(project, cbk_OUTPUT_DIR, &out_dir))
 	{
 		cb_dstr_append_v(&o, out_dir.data);
-		/* Add trailing slash if necessary */
-		cb_dstr_append_v(&o, cb_is_directory_separator(out_dir.data[out_dir.size - 1]) ? "" : CB_PREFERRED_DIR_SEPARATOR);
 	}
 	else /* Get default output directory */
 	{
 		cb_dstr_append_v(&o, default_output_directory, CB_PREFERRED_DIR_SEPARATOR);
 		cb_dstr_append_strv(&o, project->name);
-		cb_dstr_append_str(&o, CB_PREFERRED_DIR_SEPARATOR);
 	}
 
 	cb_path_get_absolute(o.data, s);
+
+	cb_dstr_ensure_trailing_slash(s);
 
 	cb_dstr_destroy(&o);
 }
@@ -1752,7 +1848,6 @@ cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 
 	if (!project)
 	{
-		cb_log_error("Project not found '%s'", project_name);
 		return cb_false;
 	}
 
@@ -2075,7 +2170,6 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	if (!project)
 	{
-		cb_log_error("Project not found '%s'\n", project_name);
 		return cb_false;
 	}
 	
@@ -2218,16 +2312,15 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 			cb_project_t* linked_project = cb_find_project_by_name(linked_project_name);
 			if (!project)
 			{
-				cb_log_warning("linked_project '%.*s' not found \n", linked_project_name.size, linked_project_name.data);
 				continue;
 			}
 
 			CB_ASSERT(linked_project);
 
-			cb_bool is_shared_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib);
-			cb_bool is_static_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib);
+			cb_bool link_project_is_shared_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib);
+			cb_bool link_project_is_static_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib);
 
-			if (is_static_libary || is_shared_libary)
+			if (link_project_is_static_libary || link_project_is_shared_libary)
 			{
 				cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
 
@@ -2237,7 +2330,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				cb_dstr_append_v(&str, ".lib", "\"", _);
 			}
 
-			if (is_shared_libary)
+			if (link_project_is_shared_libary)
 			{
 				const char* dll = cb_tmp_sprintf("%s%.*s.dll", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
 				const char* pdb = cb_tmp_sprintf("%s%.*s.pdb", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
@@ -2248,11 +2341,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 					/* @FIXME: Release all allocated objects here. */
 					return cb_false;
 				}
-				if (!cb_copy_file_to_dir(pdb, str_ouput_path.data))
-				{
-					/* @FIXME: Release all allocated objects here. */
-					return cb_false;
-				}
+				/* Copy .pdb if there is any. */
+				cb_try_copy_file_to_dir(pdb, str_ouput_path.data);
 			}
 		}
 
@@ -2321,17 +2411,6 @@ cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 	return cb_strv_equals_strv(sub, rhs);
 }
 
-CB_INTERNAL cb_bool
-is_created_by_gcc(cb_strv file)
-{
-	static cb_strv o_ext = { 2, ".o" };
-	static cb_strv so_ext = { 3, ".so" };
-	static cb_strv a_ext = { 2, ".a" };
-	return cb_strv_ends_with(file, o_ext)
-		|| cb_strv_ends_with(file, so_ext)
-		|| cb_strv_ends_with(file, a_ext);
-}
-
 CB_API cb_bool
 cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 {
@@ -2339,7 +2418,6 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	if (!project)
 	{
-		cb_log_error("Project not found '%s'\n", project_name);
 		return cb_false;
 	}
 
@@ -2350,6 +2428,9 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	cb_dstr str_obj; /* to keep track of the .o generated */
 	cb_dstr_init(&str_obj);
+
+	cb_darrT(const char*) objects;
+	cb_darrT_init(&objects);
 
 	/* Output path - contains the directory path or binary file path (it just depends on how deep we are) */
 	cb_dstr str_ouput_path;
@@ -2370,6 +2451,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		if (try_get_property_strv(project, cbk_WORKING_DIRECTORY, &working_dir))
 		{
 			cb_dstr_append_absolute_path(&str_wd, working_dir.data);
+			cb_dstr_ensure_trailing_slash(&str_wd);
 		}
 	}
 
@@ -2450,9 +2532,15 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 			cb_strv basename = cb_path_basename(current.u.strv);
 
-			cb_dstr_append_v(&str_obj, "\"", str_ouput_path.data,  );
-			cb_dstr_append_strv(&str_obj, basename);
-			cb_dstr_append_v(&str_obj, ".o", "\"", _);
+			if (is_exe || is_static_library)
+			{
+				cb_dstr_append_v(&str_obj, "\"", str_ouput_path.data, );
+				cb_dstr_append_strv(&str_obj, basename);
+				cb_dstr_append_v(&str_obj, ".o", "\"", _);
+
+				/* my_object.o */
+				cb_darrT_push_back(&objects, cb_tmp_sprintf("%.*s.o", basename.size, basename.data));
+			}
 		}
 	}
 
@@ -2486,7 +2574,6 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			cb_project_t* linked_project = cb_find_project_by_name(linked_project_name);
 			if (!project)
 			{
-				cb_log_warning("linked_project '%.*s' not found \n", linked_project_name.size, linked_project_name.data);
 				continue;
 			}
 
@@ -2502,12 +2589,20 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 				/* -L "my/path/" */ 
 				cb_dstr_append_v(&str, "-L", _, "\"", linked_output_dir.data, "\"", _);
 				/* -l "my_proj" */
-				cb_dstr_append_f(&str, "-l '%.*s' ", linked_project_name.size, linked_project_name.data);
+				cb_dstr_append_f(&str, "-l \"%.*s\" ", linked_project_name.size, linked_project_name.data);
 			}
 
 			if (linked_project_is_shared_libary)
 			{
-				cb_copy_directory(linked_output_dir.data, str_ouput_path.data);
+				/* libmy_project.so*/
+				const char* so = cb_tmp_sprintf("%slib%.*s.so", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
+
+				/* TODO create copy_files_to_dir */
+				if (!cb_copy_file_to_dir(so, str_ouput_path.data))
+				{
+					/* @FIXME: Release all allocated objects here. */
+					return cb_false;
+				}
 			}
 		}
 
@@ -2541,17 +2636,30 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		cb_dstr_append_absolute_path(&abs_generated_file, project_name);
 
 		/* move executable to the output directory */
-		cb_move_file(abs_generated_file.data, str.data);
+		if (!cb_move_file(abs_generated_file.data, str.data))
+		{
+			return cb_false;
+		}
 	}
 
 	if (is_static_library || is_shared_library)
 	{
-		/* Move all generated file in the output directory */
-		if (!cb_move_files(str_wd.data, str_ouput_path.data, is_created_by_gcc))
+		/* Move all generated .o file in the working directory to the output directory */
+		int i = 0;
+		for (; i < cb_darrT_size(&objects); ++i)
 		{
-			cb_log_error("Could not move files from '%s' to '%s'.", str_wd.data, str_ouput_path.data);
-			/* @FIXME: Release all allocated objects here. */
-			return cb_false;
+			const char* o = cb_darrT_at(&objects, i);
+			int index = cb_tmp_save();
+			/* /working/directory/my_lib.o */
+			const char* o_path = cb_tmp_sprintf("%s%s", str_wd.data, o);
+			
+			if (!cb_move_file_to_dir(o_path, str_ouput_path.data))
+			{
+				/* @FIXME cleanup allocated objects */
+				return cb_false; 
+			}
+
+			cb_tmp_restore(index);
 		}
 
 		if (is_static_library)

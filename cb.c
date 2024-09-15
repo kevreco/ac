@@ -2,6 +2,7 @@
 #include "stdio.h"
 
 #define CB_IMPLEMENTATION
+#define CB_EXTENSIONS
 #include "cb/cb.h"
 
 int build_static_library();
