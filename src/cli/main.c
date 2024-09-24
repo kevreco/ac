@@ -28,10 +28,21 @@ static const struct cmd commands[] = {
     {0, 0, 0, 0},
 };
 
+/* Return current argument and go to the next one. */
+char*
+pop_args(int* argc, char*** argv)
+{
+    char* current_arg = **argv;
+    (*argv) += 1;
+    (*argc) -= 1;
+    return current_arg;
+}
+
 int display_help() { help(0, 0, 0); return -1; }
 int display_error(const char* str) { fprintf(stderr, str); return -1; }
 
-int help(const struct cmd* cmd, int argc, char** argv )
+int
+help(const struct cmd* cmd, int argc, char** argv )
 {
     (void)cmd;
     (void)argc;
@@ -52,7 +63,8 @@ int help(const struct cmd* cmd, int argc, char** argv )
     return 0;
 }
 
-int version(const struct cmd* cmd, int argc, char** argv)
+int
+version(const struct cmd* cmd, int argc, char** argv)
 {
     (void)cmd;
     (void)argc;
@@ -67,20 +79,18 @@ int version(const struct cmd* cmd, int argc, char** argv)
 
 char output_file_name[MAX_FILENAME];
 
-int compile(const struct cmd* cmd, int argc, char** argv)
+int
+compile(const struct cmd* cmd, int argc, char** argv)
 {
     (void)cmd;
     (void)argc;
 
-    const char* filename = *argv;
-    ++argv;
-    --argc;
+    const char* filename = pop_args(&argc, &argv);
+
     const char* extension = ".generated";
     if (argc > 0)
     {
-        extension = *argv;
-        ++argv;
-        --argc;
+        extension = pop_args(&argc, &argv);
     }
 
     /*  format path for yhr .c output file */
@@ -107,7 +117,8 @@ int compile(const struct cmd* cmd, int argc, char** argv)
     return 0;
 }
 
-int main(int argc, char** argv)
+int
+main(int argc, char** argv)
 {
     char* command_name;
     int result = 0;
@@ -118,17 +129,14 @@ int main(int argc, char** argv)
     }
 
     /* skip application name */
-    --argc;
-    ++argv;
+    pop_args(&argc, &argv);
 
     if (!*argv) { /* no argument */
         return display_help();
     }
 
     /* process first command and go to next */
-    command_name = *argv;
-    --argc;
-    ++argv;
+    command_name = pop_args(&argc, &argv);
 
     while (c->name)
     {
