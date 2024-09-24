@@ -12,20 +12,27 @@ extern "C" {
 struct cmd
 {
     int (*func)(const struct cmd* cmd, int argc, char** argv);
-    const char* name;
-    unsigned int strlen;
+    strv name;
     const char* usage;
 };
 
 int help(const struct cmd* cmd, int argc, char** argv);
 int version(const struct cmd* cmd, int argc, char** argv);
 int compile(const struct cmd* cmd, int argc, char** argv);
+int end_command(const struct cmd* cmd, int argc, char** argv) {}
+
+#define STRV(x)\
+    { sizeof(x)-1 , (const char*)(x)  }
+
+static const struct cmd default_command =
+{
+    compile, STRV("compile"), "ac compile [--config-file <config-file>] <filename>",
+};
 
 static const struct cmd commands[] = {
-    {help,    "help",    sizeof("help") -1,     "ac help"},
-    {version, "version", sizeof("version") - 1, "ac version"},
-    {compile, "compile", sizeof("compile") - 1, "ac compile <filename>"},
-    {0, 0, 0, 0},
+    {help,    STRV("help"),     "ac help"},
+    {version, STRV("version"),  "ac version"},
+    {end_command, 0, 0, 0},
 };
 
 /* Return current argument and go to the next one. */
@@ -131,26 +138,26 @@ main(int argc, char** argv)
     /* skip application name */
     pop_args(&argc, &argv);
 
-    if (!*argv) { /* no argument */
+    if (!*argv) { /* no argument left */
         return display_help();
     }
 
     /* process first command and go to next */
     command_name = pop_args(&argc, &argv);
 
-    while (c->name)
+    while (c->func != end_command)
     {
-        if (strncmp(command_name, c->name, c->strlen) == 0)
+        if (strv_equals_str(c->name, command_name))
         {
             result = c->func(c, argc, argv);
             break;
         }
         ++c;
     }
-
-    /* we reach the end of commands list, no command was found, display help */
-    if (c->name == 0) {
-        return display_help();
+   
+    /* No command was found execute default command */
+    if (c->func == end_command) {
+        default_command.func(&default_command, argc, argv);
     }
 
     return result;

@@ -5,12 +5,12 @@
 #include "parser_c.h"
 #include "converter_c.h"
 
-void ac_compiler_options_init_default(struct ac_compiler_options* o)
+void ac_compiler_options_init_default(ac_compiler_options* o)
 {
     o->step = ac_compilation_step_ALL;
 }
 
-void ac_compiler_init(struct ac_compiler* c, struct ac_compiler_options options)
+void ac_compiler_init(struct ac_compiler* c, ac_compiler_options options)
 {
     memset(c, 0, sizeof(struct ac_compiler));
 
