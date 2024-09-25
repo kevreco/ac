@@ -13,7 +13,10 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 
 	cb_bool is_debug = cb_str_equals(config, "Debug");
 
-	if (is_debug)
+	if (is_debug
+		/* @FIXME sanitize=address require clang with msvc*/
+		&& cb_str_equals(toolchain, "gcc")
+		)
 	{
 		cb_add(cb_CXFLAGS, "-fsanitize=address"); /* Address sanitizer, same flag for gcc and msvc. */
 	}
