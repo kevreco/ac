@@ -165,5 +165,9 @@ void test_directory(const char* exe, const char* directory)
 
 void tests(const char* exe)
 {
-	test_directory(exe, "./testsuits/");
+	test_directory(exe, "./tests/01_parse_only/");
+	/* @TODO */
+	/* test_directory(exe, "./tests/02_check/"); */
+	/* @TODO */
+	/* test_directory(exe, "./tests/03_gen/"); */
 }
