@@ -3,6 +3,13 @@
 
 #include "location.h"
 
+#define AC_UNUSED(x) ((void)(x))
+
+#ifndef AC_ASSERT
+#include <assert.h>
+#define AC_ASSERT assert
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -3,6 +3,8 @@
 
 #include <ac/compiler.h>
 
+#include "parse_options.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -19,10 +21,7 @@ struct cmd
 int help(const struct cmd* cmd, int argc, char** argv);
 int version(const struct cmd* cmd, int argc, char** argv);
 int compile(const struct cmd* cmd, int argc, char** argv);
-int end_command(const struct cmd* cmd, int argc, char** argv) {}
-
-#define STRV(x)\
-    { sizeof(x)-1 , (const char*)(x)  }
+int end_command(const struct cmd* cmd, int argc, char** argv) { AC_UNUSED(cmd);  AC_UNUSED(argc);  AC_UNUSED(argv); return 1; }
 
 static const struct cmd default_command =
 {
@@ -35,18 +34,8 @@ static const struct cmd commands[] = {
     {end_command, 0, 0, 0},
 };
 
-/* Return current argument and go to the next one. */
-char*
-pop_args(int* argc, char*** argv)
-{
-    char* current_arg = **argv;
-    (*argv) += 1;
-    (*argc) -= 1;
-    return current_arg;
-}
-
-int display_help() { help(0, 0, 0); return -1; }
-int display_error(const char* str) { fprintf(stderr, str); return -1; }
+int display_help() { help(0, 0, 0); return 1; }
+int display_error(const char* str) { fprintf(stderr, "%s", str); return 1; }
 
 int
 help(const struct cmd* cmd, int argc, char** argv )
@@ -60,8 +49,7 @@ help(const struct cmd* cmd, int argc, char** argv )
     fprintf(stdout, "AC compiler command line interface.");
     fprintf(stdout, "usage:\n");
 
-
-    while (c->name)
+    while (c->func != end_command)
     {
         fprintf(stdout, "\n%s", c->usage);
         ++c;
@@ -89,45 +77,31 @@ char output_file_name[MAX_FILENAME];
 int
 compile(const struct cmd* cmd, int argc, char** argv)
 {
+    int result = 1;
     (void)cmd;
-    (void)argc;
 
-    const char* filename = pop_args(&argc, &argv);
-
-    const char* extension = ".generated";
-    if (argc > 0)
-    {
-        extension = pop_args(&argc, &argv);
-    }
-
-    /*  format path for yhr .c output file */
-    {
-        if (strlen(filename) >= MAX_FILENAME - 1)
-        {
-            return display_error("input file name is too long");
-        }
-
-        sprintf_s(output_file_name, MAX_FILENAME, "%s%s", filename, extension);
-    }
-
-    struct ac_compiler_options options;
-    struct ac_compiler c;
-
+    ac_compiler_options options;
     ac_compiler_options_init_default(&options);
-    ac_compiler_init(&c, options);
-
-    if (!ac_compiler_compile(&c, filename, output_file_name))
+    
+    if (parse_options(&options, &argc, &argv))
     {
-        return -1;
+        struct ac_compiler c;
+
+        ac_compiler_init(&c, options);
+
+        result = ac_compiler_compile(&c) ? 0 : 1;
+
+        ac_compiler_destroy(&c);
     }
 
-    return 0;
+    ac_compiler_options_destroy(&options);
+
+    return result;
 }
 
 int
 main(int argc, char** argv)
 {
-    char* command_name;
     int result = 0;
     const struct cmd* c = commands;
 
@@ -142,12 +116,11 @@ main(int argc, char** argv)
         return display_help();
     }
 
-    /* process first command and go to next */
-    command_name = pop_args(&argc, &argv);
+    char* first_arg = *argv;
 
     while (c->func != end_command)
     {
-        if (strv_equals_str(c->name, command_name))
+        if (strv_equals_str(c->name, first_arg))
         {
             result = c->func(c, argc, argv);
             break;
@@ -155,7 +128,7 @@ main(int argc, char** argv)
         ++c;
     }
    
-    /* No command was found execute default command */
+    /* No command was found, execute default command. */
     if (c->func == end_command) {
         default_command.func(&default_command, argc, argv);
     }

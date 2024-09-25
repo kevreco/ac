@@ -1,5 +1,6 @@
 
 #include <re/dstr.h>
+#include <re/darr.h>
 #include <re/file.h>
 #include <re/path.h>
 
@@ -7,8 +8,12 @@
 #define DSTR_IMPLEMENTATION
 #include <re/dstr.h>
 
+#define DARR_IMPLEMENTATION
+#include <re/darr.h>
+
 #define RE_FILE_IMPLEMENTATION
 #include <re/file.h>
 
 #define RE_PATH_IMPLEMENTATION
 #include <re/path.h>
+

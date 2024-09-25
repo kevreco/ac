@@ -1,13 +1,31 @@
 #include "compiler.h"
 
+#include <re/darr.h>
 #include <re/dstr.h>
+#include <re/path.h>
 
+#include "global.h"
 #include "parser_c.h"
 #include "converter_c.h"
 
 void ac_compiler_options_init_default(ac_compiler_options* o)
 {
     o->step = ac_compilation_step_ALL;
+
+    darrT_init(&o->files);
+    o->output_extension = strv_make_from_str(".c.g");
+    dstr_init(&o->config_file_memory);
+    darrT_init(&o->config_file_args);
+}
+
+void ac_compiler_options_destroy(ac_compiler_options* o)
+{
+    o->step = ac_compilation_step_NONE;
+
+    darrT_destroy(&o->files);
+
+    dstr_destroy(&o->config_file_memory);
+    darrT_destroy(&o->config_file_args);
 }
 
 void ac_compiler_init(struct ac_compiler* c, ac_compiler_options options)
@@ -24,9 +42,13 @@ void ac_compiler_destroy(struct ac_compiler* c)
     ac_manager_destroy(&c->mgr);
 }
 
-bool ac_compiler_compile(struct ac_compiler* c, const char* source_file, const char* c_file)
+bool ac_compiler_compile(struct ac_compiler* c)
 {
-    /* load file into memory */
+    AC_ASSERT(c->options.files.darr.size > 0);
+    AC_ASSERT(c->options.files.darr.size == 1 && "Not supported yet. Cannot compile multiple files.");
+    
+    /* Load file into memory. */
+    const char* source_file = darrT_at(&c->options.files, 0);
     struct ac_source_file* source = ac_manager_load_content(&c->mgr, source_file);
 
     if (!source)
@@ -48,7 +70,7 @@ bool ac_compiler_compile(struct ac_compiler* c, const char* source_file, const c
         return false;
     }
     
-    /*** Type/semantic check ***/
+    /*** Type/semantic check - @TODO ***/
 
     if ((c->options.step & ac_compilation_step_SEMANTIC) == 0)
     {
@@ -57,7 +79,7 @@ bool ac_compiler_compile(struct ac_compiler* c, const char* source_file, const c
     
     /*** Generate ***/
 
-    if ((c->options.step & ac_compilation_step_GENERATING) == 0)
+    if ((c->options.step & ac_compilation_step_GENERATE) == 0)
     {
         return true;
     }
@@ -66,9 +88,15 @@ bool ac_compiler_compile(struct ac_compiler* c, const char* source_file, const c
 
     ac_converter_c_init(&conv, &c->mgr);
 
-    ac_converter_c_convert(&conv, c_file);
+    dstr output_file;
+    dstr_assign_str(&output_file, source_file);
+    re_path_replace_extension(&output_file, c->options.output_extension);
+
+    ac_converter_c_convert(&conv, output_file.data);
 
     ac_converter_c_destroy(&conv);
+
+    dstr_destroy(&output_file);
 
     return true;
 }

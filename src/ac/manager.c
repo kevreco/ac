@@ -55,14 +55,6 @@ struct ac_source_file* ac_manager_load_content(struct ac_manager* m, const char*
 
 bool try_get_file_content(const char* filepath, dstr* content)
 {
-    if (!re_path_is_absolute_str(filepath)) {
-        /* @FIXME check if it's a limitation or a temporary constraints
-        * and document this
-        */
-        ac_report_error("Filepath must be an absolute path.\n");
-        return false;
-    }
-
     if (!re_file_exists_str(filepath)) {
         ac_report_error("File does not exist '%s'.\n", filepath);
         return false;

@@ -58,14 +58,15 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 	}
 }
 
-int build_with(const char* config)
+const char* build_with(const char* config)
 {
 	cb_init();
 
 	const char* toolchain_name = cb_toolchain_default().name;
 
+	/* Library */
 	{
-		my_project("ac", toolchain_name, config);
+		my_project("aclib", toolchain_name, config);
 
 		cb_add_files_recursive("./src/ac", "*.c");
 
@@ -75,47 +76,94 @@ int build_with(const char* config)
 		cb_add(cb_INCLUDE_DIRECTORIES, "./src/external/re.lib/cpp");
 	}
 
-	/* build an exe that use a static library and two dynamic libraries */
+	/* CLI */
 	{
-		my_project("ac_tester", toolchain_name, config);
+		my_project("ac", toolchain_name, config);
 
-		cb_add(cb_LINK_PROJECTS, "ac");
+		cb_add(cb_LINK_PROJECTS, "aclib");
 
-		cb_add_files_recursive("./src/tester", "*.c");
+		cb_add_files_recursive("./src/cli", "*.c");
 		cb_set(cb_BINARY_TYPE, cb_EXE);
 
 		cb_add(cb_INCLUDE_DIRECTORIES, "./src/external/re.lib/c");
+		cb_add(cb_INCLUDE_DIRECTORIES, "./src/");
 	}
 
-	if (!cb_bake("ac"))
+	if (!cb_bake("aclib"))
 	{
-		return -1;
+		exit(1);
 	}
 
-	const char* s = cb_bake("ac_tester");
-	if (cb_run(s) != 0)
+	const char* ac_exe = cb_bake("ac");
+	if (!ac_exe)
 	{
-		return -1;
+		exit(1);
 	}
 
 	cb_destroy();
-	return 0;
 
+	return ac_exe;
 }
+
+void tests(const char* exe);
 
 int main()
 {
-	char* config[] = { "Release", "Debug", NULL };
+	build_with("Release");
 
-	char** c = config;
-	while (*c != 0)
-	{
-		if (build_with(*c) != 0)
-		{
-			return -1;
-		}
-		++c;
-	}
+	const char* exe = build_with("Debug");
+	
+	tests(exe);
 	
 	return 0;
+}
+
+void assert_path(const char* path)
+{
+	if (!cb_path_exists(path))
+	{
+		cb_log_error("Path does not exists: %s", path);
+		exit(1);
+	}
+}
+void assert_subprocess(const char* cmd, const char* starting_directory)
+{
+	if (cb_subprocess(cmd) != 0)
+	{
+		cb_log_error("Subprocess did not exit with 0: %s", cmd);
+		exit(1);
+	}
+}
+
+void test_directory(const char* exe, const char* directory)
+{
+	assert_path(exe);
+	assert_path(directory);
+
+	cb_dstr buffer;
+	cb_dstr_init(&buffer);
+
+	cb_file_it it;
+	cb_file_it_init(&it, directory);
+
+	while (cb_file_it_get_next_glob(&it, "*.c"))
+	{
+		const char* file = cb_file_it_current_file(&it);
+		
+		cb_dstr_assign_f(&buffer, "%s --option-file %soptions.txt %s", exe, directory, file);
+
+		printf("Testing: %s \n", file);
+
+		assert_subprocess(buffer.data, directory);
+
+		printf("OK\n");
+	}
+	
+	cb_file_it_destroy(&it);
+	cb_dstr_destroy(&buffer);
+}
+
+void tests(const char* exe)
+{
+	test_directory(exe, "./testsuits/");
 }
