@@ -390,42 +390,43 @@ static inline void dstr_get_timestamp_YYYY_MM_DD_HH_MM_SS(dstr* str)
 }
 */
 
-static inline size_t strv_tok(strv sv, strv delims, strv* tok)
+/* Returns a strv with zero size onces there is no next token. */
+static inline strv
+strv_tok(strv sv, strv delims)
 {
-	DSTR_ASSERT(tok);
-
-	//size_t result = false;
-	size_t result_size = 0;
+	strv result;
+	result.data = sv.data;
+	result.size = 0;
 
 	if (!sv.size) {
-		return result_size;
+		return result;
 	}
 
 	const char* start = sv.data;
-
-	size_t i = 0;
-
-	while (strv_contains_char(delims, start[i]) && i < sv.size)
-	{
-		++start;
-		++i;
-	}
-
-	if (i == sv.size) {
-		return result_size;
-	}
-
-	tok->data = start;
-	tok->size = 0;
 	const char* end = sv.data + sv.size;
-	while (start < end && !strv_contains_char(delims, *start))
-	{
-		start++;
-		tok->size += 1;
 
+	/* Remove token on the left */
+	while (start < end
+		&& strv_contains_char(delims, start[0]))
+	{
+		start += 1;
 	}
 
-	return tok->size;
+	if (start == end) {
+		return result;
+	}
+
+	/* Remove token on the right */
+	result.data = start;
+
+	while (start < end
+		&& !strv_contains_char(delims, start[0]))
+	{
+		start += 1;
+		result.size += 1;
+	}
+
+	return result;
 }
 
 static inline dstr_bool strv_is_identifier(strv sv)
@@ -525,41 +526,54 @@ static inline void eat_email_suffix(const char** _cursor, const char* _end)
 	*_cursor = cursor;
 }
 
-
-static inline strv* strv_trim(strv* str, strv chars)
+static inline strv
+strv_trimmed(strv sv, strv chars)
 {
-	// String is empty
-	if (str->size == 0) {
+	strv str = sv;
+	/* String is empty */
+	if (str.size == 0) {
 		return str;
 	}
 
-	// No char to trim
+	/* No char to trim */
 	if (chars.size == 0) {
 		return str;
 	}
 
-	const char* end_data = str->data + str->size;
+	const char* end_data = str.data + str.size;
 
-	// Skip chars at left.
-	while (str->data < end_data) {
-		if (!strv_contains_char(chars, (*str->data))) {
+	/* Skip chars at left. */
+	while (str.data < end_data) {
+		if (!strv_contains_char(chars, (*str.data))) {
 			break;
 		}
-		str->data++;
-		str->size--;
+		str.data++;
+		str.size--;
 	}
 
-	// Skip chars at right.
-	while (str->size > 0) {
-		if (!strv_contains_char(chars, str->data[str->size - 1])) {
+	/* Skip chars at right. */
+	while (str.size > 0) {
+		if (!strv_contains_char(chars, str.data[str.size - 1])) {
 			break;
 		}
-		str->size--;
+		str.size--;
 	}
 
 	return str;
 }
 
+static inline strv
+strv_trimmed_str(strv str, const char* chars)
+{
+	return strv_trimmed(str, strv_make_from_str(chars));
+}
+
+static inline strv
+strv_trimmed_whitespaces(strv str)
+{
+	static strv sv = { 6, "\n\r\t \f\v" };
+	return strv_trimmed(str, sv);
+}
 
 // return true if match regex [a-zA-Z0-9_]+
 static dstr_bool dstr__parse_email_subdomain(const char** _cursor, const char* end)
@@ -718,49 +732,65 @@ static inline void dstr_replace(dstr* s, size_t index, size_t count, strv replac
 }
 
 /*-----------------------------------------------------------------------*/
-/* dstr_spliter */
+/* strv_splitter */
 /*-----------------------------------------------------------------------*/
 
-typedef struct dstr_spliter dstr_spliter;
-struct dstr_spliter {
+typedef struct strv_splitter strv_splitter;
+struct strv_splitter {
 	strv str;
 	strv delims;
 };
 
-static inline void dstr_spliter_init(dstr_spliter* s, strv sv, strv delims)
+static inline void strv_splitter_init(strv_splitter* s, strv sv, strv delims)
 {
 	s->str = sv;
 	s->delims = delims;
 }
 
-static inline void dstr_spliter_init_str(dstr_spliter* s, strv sv, const char* delims)
+static inline void strv_splitter_init_str(strv_splitter* s, strv sv, const char* delims)
 {
 	s->str = sv;
 	s->delims = strv_make_from_str(delims);
 }
 
-static inline dstr_spliter dstr_spliter_make(strv sv, strv delims)
+static inline strv_splitter strv_splitter_make(strv sv, strv delims)
 {
-	dstr_spliter s;
-	dstr_spliter_init(&s, sv, delims);
+	strv_splitter s;
+	strv_splitter_init(&s, sv, delims);
 	return s;
 }
 
-static inline dstr_spliter dstr_spliter_make_str(strv sv, const char* delims)
+static inline strv_splitter strv_splitter_make_str(strv sv, const char* delims)
 {
-	strv delims_v = strv_make_from_str(delims);
-	return dstr_spliter_make(sv, delims_v);
+	strv_splitter s;
+	strv_splitter_init_str(&s, sv, delims);
+	return s;
 }
 
-static inline dstr_bool dstr_spliter_get_next(dstr_spliter* s, strv* res) {
-
-	if (strv_tok(s->str, s->delims, res))
+static inline dstr_bool strv_splitter_get_next(strv_splitter* s, strv* res)
+{
+	if (s->str.size > 0)
 	{
-		s->str.size -= (res->data - s->str.data) + res->size;
-		s->str.data = res->data + res->size;
-		return 1;
+		strv sv = strv_tok(s->str, s->delims);
+
+		s->str.size -= ((sv.data - s->str.data) + sv.size);
+		s->str.data = sv.data + sv.size;
+
+		/* If there are remaining char this means a delimiter has been found, in which case we skip it */
+		if (s->str.size)
+		{
+			s->str.size -= 1;
+			s->str.data += 1;
+		}
+
+		if (sv.size)
+		{
+			*res = sv;
+			return (dstr_bool)1;
 	}
-	return 0;
+}
+
+	return (dstr_bool)0;
 }
 
 #ifdef __cplusplus

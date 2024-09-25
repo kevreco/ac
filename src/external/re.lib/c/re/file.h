@@ -114,7 +114,7 @@ re_file_open(const char* path, const char* mode)
 {
 #ifdef WIN32
 	FILE* file = NULL;
-	if (!fopen_s(&file, path, mode))
+	if (fopen_s(&file, path, mode) != 0)
 #else
 	FILE* file = fopen(path, mode);
 	if (!file)
@@ -181,7 +181,7 @@ re_file_read_all(dstr* str, FILE* file)
 
 	size_t read_count = fread(str->data, file_size, 1 , file);
 
-	if (read_count != 1) return (re_file_bool)0;
+	if (read_count != 1 && file_size != 0) return (re_file_bool)0;
 
 	if (feof(file)) return (re_file_bool)0;
 

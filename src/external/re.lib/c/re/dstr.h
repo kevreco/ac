@@ -115,19 +115,21 @@ struct strv {
 	const dstr_char_t* data;
 };
 
-
 DSTR_API strv strv_make();
 /* create a strv from the content between 'data' and 'data + size' */
 DSTR_API strv strv_make_from(const dstr_char_t* data, dstr_size_t size);
 DSTR_API strv strv_make_from_str(const char* str);
-DSTR_API strv strv_make_from_view(strv view);
+DSTR_API strv strv_make_from_view(strv sv);
 
-DSTR_API void      strv_reset(strv* view);
+DSTR_API void      strv_reset(strv* sv);
 
 /* set new value for the string view */
-DSTR_API void      strv_assign      (strv* view, const dstr_char_t* data, dstr_size_t size);
+DSTR_API void      strv_assign      (strv* sv, const dstr_char_t* data, dstr_size_t size);
 /* overload of strv_assign */
-DSTR_API void      strv_assign_str  (strv* view, const dstr_char_t* str);
+DSTR_API void      strv_assign_str  (strv* sv, const dstr_char_t* str);
+
+/* strv is empty */
+DSTR_API dstr_bool strv_empty(strv sv);
 
 /* lexicagraphical comparison */
 DSTR_API int       strv_compare          (strv sv, const dstr_char_t* data, dstr_size_t size);
@@ -463,32 +465,38 @@ strv_make_from_view(strv view)
 }
 
 DSTR_API void
-strv_reset(strv* view)
+strv_reset(strv* sv)
 {
-	view->size = 0;
-	view->data = 0;
+	sv->size = 0;
+	sv->data = 0;
 }
 
 DSTR_API void
-strv_assign(strv* view, const dstr_char_t* data, dstr_size_t size)
+strv_assign(strv* sv, const dstr_char_t* data, dstr_size_t size)
 {
-	view->size = size;
-	view->data = data;
+	sv->size = size;
+	sv->data = data;
 }
 
 DSTR_API void
-strv_assign_str(strv* view, const dstr_char_t* str)
+strv_assign_str(strv* sv, const dstr_char_t* str)
 {
 	if (str == 0) /* Maybe this case shouldn't be possible? */
 	{
-		view->size = 0;
-		view->data = 0;
+		sv->size = 0;
+		sv->data = 0;
 	}
 	else
 	{
-		view->size = strlen(str);
-		view->data = str;
+		sv->size = strlen(str);
+		sv->data = str;
 	}
+}
+
+DSTR_API dstr_bool
+strv_empty(strv sv)
+{
+	return sv.size == 0;
 }
 
 DSTR_API int
