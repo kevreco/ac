@@ -9,13 +9,13 @@ extern "C" {
 
 struct ac_converter_c
 {
-    struct ac_manager* mgr;
+    ac_manager* mgr;
     int indentation_level;
     const char* indent_pattern;
     dstr string_buffer;
 };
 
-void ac_converter_c_init(struct ac_converter_c* c, struct ac_manager* mgr);
+void ac_converter_c_init(struct ac_converter_c* c, ac_manager* mgr);
 void ac_converter_c_destroy(struct ac_converter_c* c);
 
 void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath);

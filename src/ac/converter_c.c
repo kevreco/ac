@@ -11,15 +11,15 @@
 #define CAST_TO(type_, ident_, object_) type_ ident_ = (type_)(object_)
 
 static void print_top_level(struct ac_converter_c* c);
-static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr);
-static void print_identifier(struct ac_converter_c* c, struct ac_ast_identifier* identifier);
-static void print_type_specifier(struct ac_converter_c* c, struct ac_ast_type_specifier* type_specifier);
+static void print_expr(struct ac_converter_c* c, ac_ast_expr* expr);
+static void print_identifier(struct ac_converter_c* c, ac_ast_identifier* identifier);
+static void print_type_specifier(struct ac_converter_c* c, ac_ast_type_specifier* type_specifier);
 static void print_pointers(struct ac_converter_c* c, int count);
-static void print_array_specifier(struct ac_converter_c* c, struct ac_ast_array_specifier* array_specifier);
-static void print_parameters(struct ac_converter_c* c, struct ac_ast_parameters* parameters);
-static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* parameter);
-static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaration* declaration);
-static void print_declarator(struct ac_converter_c* c, struct ac_ast_declarator* declarator);
+static void print_array_specifier(struct ac_converter_c* c, ac_ast_array_specifier* array_specifier);
+static void print_parameters(struct ac_converter_c* c, ac_ast_parameters* parameters);
+static void print_parameter(struct ac_converter_c* c, ac_ast_parameter* parameter);
+static void print_declaration(struct ac_converter_c* c, ac_ast_declaration* declaration);
+static void print_declarator(struct ac_converter_c* c, ac_ast_declarator* declarator);
 
 static void print_fv(struct ac_converter_c* c, const char* fmt, va_list args);
 static void print_f(struct ac_converter_c* c, const char* fmt, ...);
@@ -34,7 +34,7 @@ static void push_brace(struct ac_converter_c* c);
 static void pop_brace(struct ac_converter_c* c);
 static void new_line(struct ac_converter_c* c);
 
-void ac_converter_c_init(struct ac_converter_c* c, struct ac_manager* mgr)
+void ac_converter_c_init(struct ac_converter_c* c, ac_manager* mgr)
 {
     memset(c, 0, sizeof(struct ac_converter_c));
 
@@ -60,20 +60,20 @@ void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath)
 
 static void print_top_level(struct ac_converter_c* c)
 {
-    struct ac_ast_top_level* top_level = c->mgr->top_level;
+    ac_ast_top_level* top_level = c->mgr->top_level;
 
-    struct ac_ast_expr* current = NULL;
+    ac_ast_expr* current = NULL;
     for(EACH_EXPR(current, top_level->block.statements))
     {
         print_expr(c, current);
     }
 }
 
-static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
+static void print_expr(struct ac_converter_c* c, ac_ast_expr* expr)
 {
     if (ac_ast_is_declaration(expr))
     {
-        CAST_TO(struct ac_ast_declaration*, declaration, expr);
+        CAST_TO(ac_ast_declaration*, declaration, expr);
         print_declaration(c, declaration);
     }
     else if (expr->type == ac_ast_type_ARRAY_EMPTY_SIZE)
@@ -82,25 +82,25 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
     }
     else if (expr->type == ac_ast_type_DECLARATOR)
     {
-        CAST_TO(struct ac_ast_declarator*, declarator, expr);
+        CAST_TO(ac_ast_declarator*, declarator, expr);
 
         print_declarator(c, declarator);
     }
     else if (expr->type == ac_ast_type_LITERAL_INTEGER)
     {
         /* handle unsigned integer */
-        CAST_TO(struct ac_ast_literal*, literal, expr);
+        CAST_TO(ac_ast_literal*, literal, expr);
         /* print maximal size possible value of an integer with PRIiMAX */
         print_f(c, "%" PRIiMAX "", literal->u.integer);
     }
     else if (expr->type == ac_ast_type_PARAMETER)
     {
-        CAST_TO(struct ac_ast_parameter*, parameter, expr);
+        CAST_TO(ac_ast_parameter*, parameter, expr);
         print_parameter(c, parameter);
     }
     else if (expr->type == ac_ast_type_RETURN)
     {
-        CAST_TO(struct ac_ast_return*, return_, expr);
+        CAST_TO(ac_ast_return*, return_, expr);
         indent(c);
         print_str(c, "return ");
         print_expr(c, return_->expr);
@@ -108,7 +108,7 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
     }
     else if (expr->type == ac_ast_type_TYPE_SPECIFIER)
     {
-        CAST_TO(struct ac_ast_type_specifier*, type_specifier, expr);
+        CAST_TO(ac_ast_type_specifier*, type_specifier, expr);
         print_type_specifier(c, type_specifier);
     }
     else
@@ -117,12 +117,12 @@ static void print_expr(struct ac_converter_c* c, struct ac_ast_expr* expr)
     }
 }
 
-static void print_identifier(struct ac_converter_c* c, struct ac_ast_identifier* identifier)
+static void print_identifier(struct ac_converter_c* c, ac_ast_identifier* identifier)
 {
     print_strv(c, identifier->name);
 }
 
-static void print_type_specifier(struct ac_converter_c* c, struct ac_ast_type_specifier* type_specifier)
+static void print_type_specifier(struct ac_converter_c* c, ac_ast_type_specifier* type_specifier)
 {
     print_identifier(c, type_specifier->identifier);
 }
@@ -137,18 +137,18 @@ static void print_pointers(struct ac_converter_c* c, int count)
     }
 }
 
-static void print_array_specifier(struct ac_converter_c* c, struct ac_ast_array_specifier* array_specifier)
+static void print_array_specifier(struct ac_converter_c* c, ac_ast_array_specifier* array_specifier)
 {
     print_str(c, "[");
     print_expr(c, array_specifier->size_expression);
     print_str(c, "]");
 }
 
-static void print_parameters(struct ac_converter_c* c, struct ac_ast_parameters* parameters)
+static void print_parameters(struct ac_converter_c* c, ac_ast_parameters* parameters)
 {
     print_str(c, "(");
 
-    struct ac_ast_expr* next = parameters->list.head;
+    ac_ast_expr* next = parameters->list.head;
     while (next)
     {
         print_expr(c, next);
@@ -162,7 +162,7 @@ static void print_parameters(struct ac_converter_c* c, struct ac_ast_parameters*
     print_str(c, ")");
 }
 
-static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* parameter)
+static void print_parameter(struct ac_converter_c* c, ac_ast_parameter* parameter)
 {
     print_identifier(c, parameter->type_name);
 
@@ -177,7 +177,7 @@ static void print_parameter(struct ac_converter_c* c, struct ac_ast_parameter* p
     }
 }
 
-static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaration* declaration)
+static void print_declaration(struct ac_converter_c* c, ac_ast_declaration* declaration)
 {
     /* @OPT: ac_ast_type_DECLARATION_SIMPLE and ac_ast_type_DECLARATION_FUNCTION_DEFINITION are really close to each other
        This can be optimized if it's still true in few years.
@@ -193,7 +193,7 @@ static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaratio
         if (declaration->function_block)
         {
             push_brace(c);
-            struct ac_ast_expr* next = declaration->function_block->statements.head;
+            ac_ast_expr* next = declaration->function_block->statements.head;
             while (next)
             {
                 print_expr(c, next);
@@ -233,7 +233,7 @@ static void print_declaration(struct ac_converter_c* c, struct ac_ast_declaratio
     }
 }
 
-static void print_declarator(struct ac_converter_c* c, struct ac_ast_declarator* declarator)
+static void print_declarator(struct ac_converter_c* c, ac_ast_declarator* declarator)
 {
     if (declarator->pointer_depth)
     {

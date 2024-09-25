@@ -5,40 +5,40 @@
 
 #include "global.h"
 
-static bool is_end_line(const struct ac_lex* l);          /* current char is alphanumeric */
-static bool is_whitespace(const struct ac_lex* l);        /* current char is alphanumeric */
-static bool is_alpha(const struct ac_lex* l);             /* current char is alpha */
-static bool is_alphanum(const struct ac_lex* l);          /* current char is alphanumeric */
-static bool is_utf8(const struct ac_lex* l);              /* current char is utf8 */
-static bool is_eof(const struct ac_lex* l);               /* current char is end of line */
-static bool is_char(const struct ac_lex* l, char c);      /* current char is equal to char  */
-static bool is_not_char(const struct ac_lex* l, char c);  /* current char is not equal to char  */
-static bool is_str(const struct ac_lex* l, const char* str, size_t count); /* current char is equal to string to string */
-static bool next_is(const struct ac_lex* l, char c);      /* next char equal to */
-static bool next_next_is(const struct ac_lex* l, char c); /* next next char equal to */
+static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
+static bool is_whitespace(const ac_lex* l);        /* current char is alphanumeric */
+static bool is_alpha(const ac_lex* l);             /* current char is alpha */
+static bool is_alphanum(const ac_lex* l);          /* current char is alphanumeric */
+static bool is_utf8(const ac_lex* l);              /* current char is utf8 */
+static bool is_eof(const ac_lex* l);               /* current char is end of line */
+static bool is_char(const ac_lex* l, char c);      /* current char is equal to char  */
+static bool is_not_char(const ac_lex* l, char c);  /* current char is not equal to char  */
+static bool is_str(const ac_lex* l, const char* str, size_t count); /* current char is equal to string to string */
+static bool next_is(const ac_lex* l, char c);      /* next char equal to */
+static bool next_next_is(const ac_lex* l, char c); /* next next char equal to */
 
-static void consume_one(struct ac_lex* l);       /* goto next char */
-static char get_next(struct ac_lex* l);          /* goto next char and return it */
+static void consume_one(ac_lex* l);       /* goto next char */
+static char get_next(ac_lex* l);          /* goto next char and return it */
 
-static void skipn(struct ac_lex* l, unsigned n); /* skip n char */
+static void skipn(ac_lex* l, unsigned n); /* skip n char */
 
-static void skip_whitespace(struct ac_lex* l);
-static void skip_whitespaces_and_comments(struct ac_lex* l);
+static void skip_whitespace(ac_lex* l);
+static void skip_whitespaces_and_comments(ac_lex* l);
 
-static const struct ac_token* parse_ascii_char_literal(struct ac_lex* l);
-static const struct ac_token* parse_number(struct ac_lex* l);
+static const ac_token* parse_ascii_char_literal(ac_lex* l);
+static const ac_token* parse_number(ac_lex* l);
 
-static void set_token_value(struct ac_lex* l, const char* data, size_t len);
-static const struct ac_token* token_error(struct ac_lex* l); /* set current token to error and returns it. */
-static const struct ac_token* token_eof(struct ac_lex* l);   /* set current token to eof and returns it. */
-static const struct ac_token* set_token(struct ac_lex* l, enum ac_token_type type);       /* set current token and got to next */
+static void set_token_value(ac_lex* l, const char* data, size_t len);
+static const ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
+static const ac_token* token_eof(ac_lex* l);   /* set current token to eof and returns it. */
+static const ac_token* set_token(ac_lex* l, enum ac_token_type type);       /* set current token and got to next */
 static size_t token_str_len(enum ac_token_type type);
 static bool try_parse_keyword(const char* str, size_t len, enum ac_token_type* type);
 
 static bool token_type_is_literal(enum ac_token_type type);
 
-static void location_increment_row(struct ac_location* l);
-static void location_increment_column(struct ac_location* l);
+static void location_increment_row(ac_location* l);
+static void location_increment_column(ac_location* l);
 
 /*
 -------------------------------------------------------------------------------
@@ -46,9 +46,9 @@ w_lex
 -------------------------------------------------------------------------------
 */
 
-void ac_lex_init(struct ac_lex* l, struct ac_manager* mgr)
+void ac_lex_init(ac_lex* l, ac_manager* mgr)
 {
-    memset(l, 0, sizeof(struct ac_lex));
+    memset(l, 0, sizeof(ac_lex));
 
     l->mgr = mgr;
 
@@ -57,12 +57,12 @@ void ac_lex_init(struct ac_lex* l, struct ac_manager* mgr)
 
 }
 
-void ac_lex_destroy(struct ac_lex* l)
+void ac_lex_destroy(ac_lex* l)
 {
-    memset(l, 0, sizeof(struct ac_lex));
+    memset(l, 0, sizeof(ac_lex));
 }
 
-void ac_lex_set_source(struct ac_lex* l, const char* source_content, size_t source_len, const char* filepath)
+void ac_lex_set_source(ac_lex* l, const char* source_content, size_t source_len, const char* filepath)
 {
     l->filepath = filepath;
 
@@ -80,7 +80,7 @@ void ac_lex_set_source(struct ac_lex* l, const char* source_content, size_t sour
     ac_lex_goto_next(l);
 }
 
-const struct ac_token* ac_lex_goto_next(struct ac_lex* l)
+const ac_token* ac_lex_goto_next(ac_lex* l)
 {
     if (is_eof(l)) {
         return token_eof(l);
@@ -299,7 +299,7 @@ static inline bool _is_end_line(char c) {
     return (c == '\n' || c == '\r');
 }
 
-static inline bool is_end_line(const struct ac_lex* l) {
+static inline bool is_end_line(const ac_lex* l) {
     return _is_end_line(l->cur[0]);
 }
 
@@ -309,7 +309,7 @@ static inline bool _is_whitespace(char c) {
         || c == '\f' || c == '\v');
 }
 
-static inline bool is_whitespace(const struct ac_lex* l) {
+static inline bool is_whitespace(const ac_lex* l) {
     return _is_whitespace(l->cur[0]);
 }
 
@@ -318,7 +318,7 @@ static inline bool _is_alpha(char c) {
         || (c >= 'A' && c <= 'Z');
 }
 
-static inline bool is_alpha(const struct ac_lex* l) {
+static inline bool is_alpha(const ac_lex* l) {
     return _is_alpha(l->cur[0]);
 }
 
@@ -327,7 +327,7 @@ static inline bool _is_alphanum(char c) {
         || (c >= 'A' && c <= 'Z')
         || (c >= '0' && c <= '9');
 }
-static inline bool is_alphanum(const struct ac_lex* l) {
+static inline bool is_alphanum(const ac_lex* l) {
     return _is_alphanum(l->cur[0]);
 }
 
@@ -335,7 +335,7 @@ static inline bool _is_num(char c) {
     return (c >= '0' && c <= '9');
 }
 
-static inline bool is_num(const struct ac_lex* l) {
+static inline bool is_num(const ac_lex* l) {
     return _is_num(l->cur[0]);
 }
 
@@ -344,35 +344,35 @@ static inline bool _is_utf8(char c) {
     return (unsigned char)c >= 128;
 }
 
-static inline bool is_utf8(const struct ac_lex* l) {
+static inline bool is_utf8(const ac_lex* l) {
     return _is_utf8(l->cur[0]);
 }
 
-static inline bool is_eof(const struct ac_lex* l) {
+static inline bool is_eof(const ac_lex* l) {
     return l->cur == l->end || *l->cur == '\0';
 }
 
-static bool is_char(const struct ac_lex* l, char c) {
+static bool is_char(const ac_lex* l, char c) {
     return l->cur[0] == c;
 }
 
-static bool is_not_char(const struct ac_lex* l, char c) {
+static bool is_not_char(const ac_lex* l, char c) {
     return l->cur[0] != c;
 }
 
-static bool is_str(const struct ac_lex* l, const char* str, size_t count) {
+static bool is_str(const ac_lex* l, const char* str, size_t count) {
     return strncmp(l->cur, str, count) == 0;
 }
 
-static bool next_is(const struct ac_lex* l, char c) {
+static bool next_is(const ac_lex* l, char c) {
     return *(l->cur + 1) == c;
 }
 
-static bool next_next_is(const struct ac_lex* l, char c) {
+static bool next_next_is(const ac_lex* l, char c) {
     return *(l->cur + 2) == c;
 }
 
-static inline void consume_one(struct ac_lex* l) {
+static inline void consume_one(ac_lex* l) {
 
     if (is_char(l, '\n') || is_char(l, '\r')) {
 
@@ -397,14 +397,14 @@ static inline void consume_one(struct ac_lex* l) {
     }
 }
 
-static char get_next(struct ac_lex* l) {
+static char get_next(ac_lex* l) {
 
     consume_one(l);
 
     return *l->cur;
 }
 
-static void skipn(struct ac_lex* l, unsigned n) {
+static void skipn(ac_lex* l, unsigned n) {
 
     for (unsigned i = 0; i < n; ++i) {
         consume_one(l);
@@ -415,14 +415,14 @@ static void skipn(struct ac_lex* l, unsigned n) {
     }
 }
 
-static void skip_whitespace(struct ac_lex* l) {
+static void skip_whitespace(ac_lex* l) {
     consume_one(l);
     while (is_whitespace(l)) {
         consume_one(l);
     }
 }
 
-static void skip_whitespaces_and_comments(struct ac_lex* l) {
+static void skip_whitespaces_and_comments(ac_lex* l) {
 
     for (;;) {
 
@@ -465,7 +465,7 @@ static void skip_whitespaces_and_comments(struct ac_lex* l) {
     } /* end for (;;) */
 }
 
-const struct ac_token* parse_ascii_char_literal(struct ac_lex* l) {
+const ac_token* parse_ascii_char_literal(ac_lex* l) {
     assert(is_char(l, '"'));
 
     consume_one(l); /* ignore the quote char */
@@ -577,7 +577,7 @@ static double stb__clex_pow(double base, unsigned int exponent)
     return value;
 }
 
-static const struct ac_token* parse_number(struct ac_lex* l) {
+static const ac_token* parse_number(ac_lex* l) {
 
     enum base_type base = base10;
 
@@ -585,9 +585,9 @@ static const struct ac_token* parse_number(struct ac_lex* l) {
     int acc = 0;
     int temp = 0;
 
-    struct ac_token_float f = {0};
+    ac_token_float f = {0};
 
-    struct ac_token_int i = { 0 };
+    ac_token_int i = { 0 };
 
     /* try parse hex integer */
     if (is_str(l, "0x", 2)
@@ -703,22 +703,22 @@ static const struct ac_token* parse_number(struct ac_lex* l) {
     }
 } /* parse_number */
 
-static void set_token_value(struct ac_lex* l, const char* data, size_t len) {
+static void set_token_value(ac_lex* l, const char* data, size_t len) {
     l->token.text.data = data;
     l->token.text.size = len;
 }
 
-static const struct ac_token* token_error(struct ac_lex* l) {
+static const ac_token* token_error(ac_lex* l) {
     l->token.type = ac_token_type_ERROR;
     return &l->token;
 }
 
-static const struct ac_token* token_eof(struct ac_lex* l) {
+static const ac_token* token_eof(ac_lex* l) {
     l->token.type = ac_token_type_EOF;
     return &l->token;
 }
 
-static const struct ac_token* set_token(struct ac_lex* l, enum ac_token_type type) {
+static const ac_token* set_token(ac_lex* l, enum ac_token_type type) {
     l->token.type = type;
     size_t size = token_str_len(type);
     set_token_value(l, l->cur, size);
@@ -819,7 +819,7 @@ strv ac_token_type_to_strv(enum ac_token_type type) {
     return strv_make_from(keyword.name, keyword.size);
 }
 
-const char* ac_token_to_str(struct ac_token token) {
+const char* ac_token_to_str(ac_token token) {
 
     if (token.type == ac_token_type_IDENTIFIER)
     {
@@ -829,7 +829,7 @@ const char* ac_token_to_str(struct ac_token token) {
     return ac_token_type_to_str(token.type);
 }
 
-strv ac_token_to_strv(struct ac_token token) {
+strv ac_token_to_strv(ac_token token) {
 
     if (token.type == ac_token_type_IDENTIFIER)
     {
@@ -875,13 +875,13 @@ static bool token_type_is_literal(enum ac_token_type type) {
     return false;
 }
 
-static void location_increment_row(struct ac_location* l) {
+static void location_increment_row(ac_location* l) {
     l->row++;
     l->col = 0;
     l->pos++;
 }
 
-static void location_increment_column(struct ac_location* l) {
+static void location_increment_column(ac_location* l) {
     l->col++;
     l->pos++;
 }

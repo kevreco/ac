@@ -28,28 +28,28 @@ void ac_compiler_options_destroy(ac_compiler_options* o)
     darrT_destroy(&o->config_file_args);
 }
 
-void ac_compiler_init(struct ac_compiler* c, ac_compiler_options options)
+void ac_compiler_init(ac_compiler* c, ac_compiler_options options)
 {
-    memset(c, 0, sizeof(struct ac_compiler));
+    memset(c, 0, sizeof(ac_compiler));
 
     c->options = options;
 
     ac_manager_init(&c->mgr);
 }
 
-void ac_compiler_destroy(struct ac_compiler* c)
+void ac_compiler_destroy(ac_compiler* c)
 {
     ac_manager_destroy(&c->mgr);
 }
 
-bool ac_compiler_compile(struct ac_compiler* c)
+bool ac_compiler_compile(ac_compiler* c)
 {
     AC_ASSERT(c->options.files.darr.size > 0);
     AC_ASSERT(c->options.files.darr.size == 1 && "Not supported yet. Cannot compile multiple files.");
     
     /* Load file into memory. */
     const char* source_file = darrT_at(&c->options.files, 0);
-    struct ac_source_file* source = ac_manager_load_content(&c->mgr, source_file);
+    ac_source_file* source = ac_manager_load_content(&c->mgr, source_file);
 
     if (!source)
     {
@@ -58,7 +58,7 @@ bool ac_compiler_compile(struct ac_compiler* c)
 
     /*** Parsing ***/
     
-    struct ac_parser_c parser;
+    ac_parser_c parser;
     ac_parser_c_init(&parser, &c->mgr);
 
     if (!ac_parser_c_parse(&parser,

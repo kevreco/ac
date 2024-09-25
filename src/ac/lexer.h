@@ -80,38 +80,44 @@ enum ac_token_type {
     ac_token_type_COUNT
 };
 
+typedef struct ac_token_float ac_token_float;
 struct ac_token_float {
     double value;
     bool overflow : 1;
     bool is_double : 1;
 };
 
+typedef struct ac_token_int ac_token_int;
 struct ac_token_int {
     int value;
     bool overflow : 1;
 };
 
+typedef struct ac_token_bool ac_token_bool;
 struct ac_token_bool {
     bool value;
 };
 
+typedef struct ac_token ac_token;
 struct ac_token {
     enum ac_token_type type;
     strv text;
     union {
-        struct ac_token_float f;
-        struct ac_token_int i;
-        struct ac_token_bool b;
+        ac_token_float f;
+        ac_token_int i;
+        ac_token_bool b;
     } u;
 };
 
+typedef struct ac_lex_options ac_lex_options;
 struct ac_lex_options {
     bool enable_hex_float;
 };
 
+typedef struct ac_lex ac_lex;
 struct ac_lex {
-    struct ac_manager* mgr;
-    struct ac_lex_options options;
+    ac_manager* mgr;
+    ac_lex_options options;
 
     const char* filepath;
     const char* src;
@@ -120,20 +126,20 @@ struct ac_lex {
 
     int len;
 
-    struct ac_token token; /* current token */
-    struct ac_location location; /* current location */
+    ac_token token; /* current token */
+    ac_location location; /* current location */
 };
 
-void ac_lex_init(struct ac_lex* l, struct ac_manager* mgr);
-void ac_lex_destroy(struct ac_lex* l);
+void ac_lex_init(ac_lex* l, ac_manager* mgr);
+void ac_lex_destroy(ac_lex* l);
 
-void ac_lex_set_source(struct ac_lex* l, const char* source_content, size_t source_len, const char* filepath);
-const struct ac_token* ac_lex_goto_next(struct ac_lex* l);
+void ac_lex_set_source(ac_lex* l, const char* source_content, size_t source_len, const char* filepath);
+const ac_token* ac_lex_goto_next(ac_lex* l);
 
 const char* ac_token_type_to_str(enum ac_token_type type); /* this should be used only for printf */
 strv ac_token_type_to_strv(enum ac_token_type type);
-const char* ac_token_to_str(const struct ac_token t);
-strv ac_token_to_strv(const struct ac_token t);
+const char* ac_token_to_str(const ac_token t);
+strv ac_token_to_strv(const ac_token t);
 
 #ifdef __cplusplus
 } /* extern "C" */

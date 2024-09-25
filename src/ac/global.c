@@ -21,10 +21,10 @@ enum message_type
     message_type_ERROR,
 };
 
-static void display_message_v(FILE* file, enum message_type type, struct ac_location location, int surrounding_lines, const char* fmt, va_list args);
+static void display_message_v(FILE* file, enum message_type type, ac_location location, int surrounding_lines, const char* fmt, va_list args);
 static const char* get_message_prefix(enum message_type type);
 
-static bool location_has_row_and_column(struct ac_location l);
+static bool location_has_row_and_column(ac_location l);
 static void print_underline_cursor(FILE* file, strv line, size_t pos);
 
 static bool os_std_console_setup();
@@ -37,7 +37,7 @@ void ac_report_error(const char* fmt, ...)
     va_list args;
     va_start(args, fmt);
 
-    struct ac_location empty_location = ac_location_empty();
+    ac_location empty_location = ac_location_empty();
     int no_surrounding_lines = 0;
     display_message_v(stderr, message_type_ERROR, empty_location, no_surrounding_lines, fmt, args);
 
@@ -49,14 +49,14 @@ void ac_report_warning(const char* fmt, ...)
     va_list args;
     va_start(args, fmt);
 
-    struct ac_location empty_location = ac_location_empty();
+    ac_location empty_location = ac_location_empty();
     int no_surrounding_lines = 0;
     display_message_v(stderr, message_type_WARNING, empty_location, no_surrounding_lines, fmt, args);
 
     va_end(args);
 }
 
-void ac_report_error_loc(struct ac_location loc, const char* fmt, ...)
+void ac_report_error_loc(ac_location loc, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -66,7 +66,7 @@ void ac_report_error_loc(struct ac_location loc, const char* fmt, ...)
     va_end(args);
 }
 
-void ac_report_warning_loc(struct ac_location loc, const char* fmt, ...)
+void ac_report_warning_loc(ac_location loc, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -76,29 +76,29 @@ void ac_report_warning_loc(struct ac_location loc, const char* fmt, ...)
     va_end(args);
 }
 
-void ac_report_error_expr(struct ac_ast_expr* expr, const char* fmt, ...)
+void ac_report_error_expr(ac_ast_expr* expr, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
 
-    struct ac_location loc = ac_ast_expr_location(expr);
+    ac_location loc = ac_ast_expr_location(expr);
     display_message_v(stderr, message_type_ERROR, loc, options.display_surrounding_lines, fmt, args);
 
     va_end(args);
 }
 
-void ac_report_warning_expr(struct ac_ast_expr* expr, const char* fmt, ...)
+void ac_report_warning_expr(ac_ast_expr* expr, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
 
-    struct ac_location loc = ac_ast_expr_location(expr);
+    ac_location loc = ac_ast_expr_location(expr);
     display_message_v(stderr, message_type_WARNING, loc, options.display_surrounding_lines, fmt, args);
 
     va_end(args);
 }
 
-static void display_message_v(FILE* file, enum message_type type, struct ac_location location, int surrounding_lines, const char* fmt, va_list args)
+static void display_message_v(FILE* file, enum message_type type, ac_location location, int surrounding_lines, const char* fmt, va_list args)
 {
     assert(surrounding_lines >= 0);
 
@@ -193,7 +193,7 @@ static const char* get_message_prefix(enum message_type type)
     return "";
 }
 
-static bool location_has_row_and_column(struct ac_location l) {
+static bool location_has_row_and_column(ac_location l) {
     return l.row > -1 && l.col > -1 && l.pos > -1;
 }
 

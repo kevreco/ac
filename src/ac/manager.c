@@ -9,12 +9,12 @@
 
 bool try_get_file_content(const char* filepath, dstr* content);
 
-void ac_manager_init(struct ac_manager* m)
+void ac_manager_init(ac_manager* m)
 {
-    memset(m, 0, sizeof(struct ac_manager));
+    memset(m, 0, sizeof(ac_manager));
 }
 
-void ac_manager_destroy(struct ac_manager* m)
+void ac_manager_destroy(ac_manager* m)
 {
     if (!dstr_empty(&m->source_file.content))
     {
@@ -22,7 +22,7 @@ void ac_manager_destroy(struct ac_manager* m)
     }
 }
 
-struct ac_source_file* ac_manager_load_content(struct ac_manager* m, const char* filepath)
+ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath)
 {
     if (m->source_file.content.data != 0)
     {

@@ -85,7 +85,7 @@ compile(const struct cmd* cmd, int argc, char** argv)
     
     if (parse_options(&options, &argc, &argv))
     {
-        struct ac_compiler c;
+        ac_compiler c;
 
         ac_compiler_init(&c, options);
 

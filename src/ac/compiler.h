@@ -29,18 +29,19 @@ struct ac_compiler_options {
     darrT(const char*) config_file_args; /* Args parsed from the config file. */
 };
 
+typedef struct ac_compiler ac_compiler;
 struct ac_compiler {
     ac_compiler_options options;
-    struct ac_manager mgr;
+    ac_manager mgr;
 };
 
 void ac_compiler_options_init_default(ac_compiler_options* o);
 void ac_compiler_options_destroy(ac_compiler_options* o);
 
-void ac_compiler_init(struct ac_compiler* c, ac_compiler_options o);
-void ac_compiler_destroy(struct ac_compiler* c);
+void ac_compiler_init(ac_compiler* c, ac_compiler_options o);
+void ac_compiler_destroy(ac_compiler* c);
 
-bool ac_compiler_compile(struct ac_compiler* c);
+bool ac_compiler_compile(ac_compiler* c);
 
 #ifdef __cplusplus
 } /* extern "C" */
