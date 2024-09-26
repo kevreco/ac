@@ -4,6 +4,31 @@
 
 const char* root_dir = "./";
 
+/* Forward declarations */
+
+void assert_path(const char* path);
+void assert_subprocess(const char* cmd, const char* starting_directory);
+const char* build_with(const char* config);
+void my_project(const char* project_name, const char* toolchain, const char* config);
+void test_directory(const char* exe, const char* directory);
+void tests(const char* exe);
+
+int main()
+{
+	cb_init();
+
+	build_with("Release");
+
+	const char* exe = build_with("Debug");
+
+	tests(exe);
+
+	cb_destroy();
+
+	return 0;
+}
+
+
 /* Shortcut to create a project with default config flags. */
 void my_project(const char* project_name, const char* toolchain, const char* config)
 {
@@ -103,23 +128,6 @@ const char* build_with(const char* config)
 	return ac_exe;
 }
 
-void tests(const char* exe);
-
-int main()
-{
-	cb_init();
-
-	build_with("Release");
-
-	const char* exe = build_with("Debug");
-	
-	tests(exe);
-	
-	cb_destroy();
-
-	return 0;
-}
-
 void assert_path(const char* path)
 {
 	if (!cb_path_exists(path))
@@ -128,6 +136,7 @@ void assert_path(const char* path)
 		exit(1);
 	}
 }
+
 void assert_subprocess(const char* cmd, const char* starting_directory)
 {
 	if (cb_subprocess(cmd) != 0)
