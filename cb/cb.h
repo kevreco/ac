@@ -88,6 +88,9 @@ typedef struct cb_context cb_context;
 CB_API void cb_init(void);
 CB_API void cb_destroy(void);
 
+/* Delete projects */
+CB_API void cb_clear(void);
+
 /* Set or create current project.  */
 CB_API cb_project_t* cb_project(const char* name); 
 
@@ -153,6 +156,9 @@ CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name
    Returns exit code. Returns -1 if command could not be executed.
 */
 CB_API int cb_run(const char* cmd);
+
+/* Turn on/off debug messages */
+CB_API void cb_debug(cb_bool value);
 
 CB_API cb_toolchain cb_toolchain_default(void);
 
@@ -353,6 +359,8 @@ static cb_context* current_ctx;
 /* utils */
 /*-----------------------------------------------------------------------*/
 
+static cb_bool cb_debug_enabled = cb_false;
+
 #define cb_set_and_goto(result, value, goto_label) \
 	do { \
 		result = (value); \
@@ -379,7 +387,7 @@ cb_log_error(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v
 CB_INTERNAL void
 cb_log_warning(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stderr, "[CB-WARNING] ", fmt, args); va_end(args); }
 CB_INTERNAL void
-cb_log_debug(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stdout, "[CB-DEBUG] ", fmt, args); va_end(args); }
+cb_log_debug(const char* fmt, ...) { va_list args; va_start(args, fmt); if (cb_debug_enabled) { cb_log_v(stdout, "[CB-DEBUG] ", fmt, args); } va_end(args); }
 CB_INTERNAL void
 cb_log_important(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stdout, "", fmt, args); va_end(args); }
 
@@ -1104,7 +1112,7 @@ cb_context_init(cb_context* ctx)
 {
 	memset(ctx, 0, sizeof(cb_context));
 	cb_mmap_init(&ctx->projects);
-	ctx->current_project = 0;
+	ctx->current_project = NULL;
 }
 
 CB_INTERNAL void
@@ -1112,6 +1120,28 @@ cb_context_destroy(cb_context* ctx)
 {
 	cb_mmap_destroy(&ctx->projects);
 	cb_context_init(ctx);
+}
+
+CB_INTERNAL void cb_project_destroy(cb_project_t* project);
+
+CB_INTERNAL void
+cb_context_clear(cb_context* ctx)
+{
+	cb_size i = 0;
+	cb_size size = cb_darrT_size(&ctx->projects);
+	cb_kv kv = { 0 };
+	cb_project_t* p = NULL;
+
+	for (; i < size; ++i)
+	{
+		kv = cb_darrT_at(&ctx->projects, i);
+		p = (cb_project_t*)kv.u.ptr;
+		cb_project_destroy(p);
+	}
+	
+	ctx->projects.darr.size = 0;
+
+	ctx->current_project = NULL;
 }
 
 CB_INTERNAL cb_context*
@@ -1166,6 +1196,7 @@ cb_project_init(cb_project_t* project, cb_strv name)
 CB_INTERNAL void
 cb_project_destroy(cb_project_t* project)
 {
+	CB_ASSERT(project);
 	cb_mmap_destroy(&project->mmap);
 }
 
@@ -1730,7 +1761,14 @@ cb_init(void)
 CB_API void
 cb_destroy(void)
 {
-	cb_context_destroy(&default_ctx);
+	cb_context_destroy(cb_current_context());
+	cb_tmp_reset();
+}
+
+CB_API void
+cb_clear(void)
+{
+	cb_context_clear(cb_current_context());
 	cb_tmp_reset();
 }
 
@@ -1983,6 +2021,12 @@ CB_API int
 cb_run(const char* executable_path)
 {
 	return cb_subprocess(cb_tmp_sprintf("\"%s\"", executable_path));
+}
+
+CB_API void
+cb_debug(cb_bool value)
+{
+	cb_debug_enabled = value;
 }
 
 #if _WIN32

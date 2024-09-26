@@ -60,7 +60,7 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 
 const char* build_with(const char* config)
 {
-	cb_init();
+	cb_clear();
 
 	const char* toolchain_name = cb_toolchain_default().name;
 
@@ -100,8 +100,6 @@ const char* build_with(const char* config)
 		exit(1);
 	}
 
-	cb_destroy();
-
 	return ac_exe;
 }
 
@@ -109,12 +107,16 @@ void tests(const char* exe);
 
 int main()
 {
+	cb_init();
+
 	build_with("Release");
 
 	const char* exe = build_with("Debug");
 	
 	tests(exe);
 	
+	cb_destroy();
+
 	return 0;
 }
 
