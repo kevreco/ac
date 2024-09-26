@@ -8,12 +8,13 @@ const char* root_dir = "./";
 /* Forward declarations */
 
 void assert_path(const char* path);
-void assert_subprocess(const char* cmd, const char* starting_directory);
+void assert_subprocess(const char* cmd);
+void assert_run(const char* exe);
+void build_generated_exe_and_run(const char* file);
 const char* build_with(const char* config);
 void my_project(const char* project_name, const char* toolchain, const char* config);
-void test_directory(const char* exe, const char* directory);
+void test_parse_only(const char* exe, const char* directory);
 void test_c_generation(const char* exe, const char* directory);
-void tests(const char* exe);
 
 int main()
 {
@@ -21,9 +22,11 @@ int main()
 
 	build_with("Release");
 
-	const char* exe = build_with("Debug");
+	const char* ac_exe = build_with("Debug");
 
-	tests(exe);
+	test_parse_only(ac_exe, "./tests/01_parse_only/");
+
+	test_c_generation(ac_exe, "./tests/02_generate_c/");
 
 	cb_destroy();
 
@@ -140,7 +143,7 @@ void assert_path(const char* path)
 	}
 }
 
-void assert_subprocess(const char* cmd, const char* starting_directory)
+void assert_subprocess(const char* cmd)
 {
 	if (cb_subprocess(cmd) != 0)
 	{
@@ -149,7 +152,16 @@ void assert_subprocess(const char* cmd, const char* starting_directory)
 	}
 }
 
-void test_directory(const char* exe, const char* directory)
+void assert_run(const char* exe)
+{
+	if (cb_run(exe) != 0)
+	{
+		cb_log_error("Exe did not exit with 0: %s", exe);
+		exit(1);
+	}
+}
+
+void test_parse_only(const char* exe, const char* directory)
 {
 	assert_path(exe);
 	assert_path(directory);
@@ -168,7 +180,7 @@ void test_directory(const char* exe, const char* directory)
 
 		printf("Testing: %s \n", file);
 
-		assert_subprocess(buffer.data, directory);
+		assert_subprocess(buffer.data);
 
 		printf("OK\n");
 	}
@@ -176,6 +188,32 @@ void test_directory(const char* exe, const char* directory)
 	cb_file_it_destroy(&it);
 	cb_dstr_destroy(&buffer);
 }
+
+
+int str_ends_with(const char* str, const char* suffix)
+{
+	if (!str || !suffix)
+		return 0;
+	size_t lenstr = strlen(str);
+	size_t lensuffix = strlen(suffix);
+	if (lensuffix > lenstr)
+		return 0;
+	return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
+cb_bool next_non_generated_c_file(cb_file_it* it)
+{
+	while (cb_file_it_get_next_glob(it, "*.c"))
+	{
+		const char* file = cb_file_it_current_file(it);
+		if (!str_ends_with(file, ".g.c"))
+		{
+			return cb_true;
+		}
+	}
+	return cb_false;
+}
+
 
 void test_c_generation(const char* exe, const char* directory)
 {
@@ -188,7 +226,10 @@ void test_c_generation(const char* exe, const char* directory)
 	cb_file_it it;
 	cb_file_it_init(&it, directory);
 
-	while (cb_file_it_get_next_glob(&it, "*.c"))
+	cb_strv c_ext = cb_strv_make_str(".c");
+	cb_strv gc_ext = cb_strv_make_str(".g.c");
+
+	while (next_non_generated_c_file(&it))
 	{
 		const char* file = cb_file_it_current_file(&it);
 
@@ -196,12 +237,15 @@ void test_c_generation(const char* exe, const char* directory)
 
 		printf("Testing: %s \n", file);
 
-		assert_subprocess(buffer.data, directory);
+		assert_subprocess(buffer.data);
 
-		cb_dstr_assign_f(&buffer, "%s.g", file);
-	
-		/* @TODO: we check that the path exists but we also need to check the content. */
+		cb_dstr_assign_f(&buffer, "%s", file);
+		/* Replace .c extension with .g.c extension */
+		cb_dstr_append_from(&buffer, buffer.size - c_ext.size, gc_ext.data, gc_ext.size);
+
 		cb_assert_file_exists(buffer.data);
+
+		build_generated_exe_and_run(buffer.data);
 
 		printf("OK\n");
 	}
@@ -210,12 +254,23 @@ void test_c_generation(const char* exe, const char* directory)
 	cb_dstr_destroy(&buffer);
 }
 
-void tests(const char* exe)
+/* Count generated project to have a unique id. */
+static int generated_project_count = 0;
+
+void build_generated_exe_and_run(const char* file)
 {
-	test_directory(exe, "./tests/01_parse_only/");
+	cb_clear();
 
-	/* @TODO */
-	/* test_directory(exe, "./tests/02_check/"); */
+	generated_project_count += 1;
 
-	test_c_generation(exe, "./tests/03_generate_c/");
+	cb_project_f("generated_%d", generated_project_count);
+
+	cb_set(cb_BINARY_TYPE, cb_EXE);
+	cb_add(cb_FILES, file);
+
+	const char* generated_exe = cb_bake();
+
+	cb_assert_file_exists(generated_exe);
+
+	assert_run(generated_exe);
 }

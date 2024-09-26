@@ -13,7 +13,7 @@ void ac_compiler_options_init_default(ac_compiler_options* o)
     o->step = ac_compilation_step_ALL;
 
     darrT_init(&o->files);
-    o->output_extension = strv_make_from_str(".c.g");
+    o->output_extension = strv_make_from_str(".g.c");
     dstr_init(&o->config_file_memory);
     darrT_init(&o->config_file_args);
 }

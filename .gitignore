@@ -2,8 +2,7 @@
 .build/
 
 # generated files
-*.generated
-*.g
+*.g.c
 
 # svn files
 .svn
