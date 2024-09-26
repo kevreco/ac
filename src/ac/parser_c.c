@@ -77,6 +77,7 @@ static bool token_is_unary_operator(const ac_parser_c* p);               /* curr
 static bool token_equal_type(ac_token, enum ac_token_type type);
 static bool expect(const ac_parser_c* p, enum ac_token_type type);
 static bool expect_and_consume(ac_parser_c* p, enum ac_token_type type);
+static bool consume_if(ac_parser_c * p, enum ac_token_type type);
 
 static bool expr_is(ac_ast_expr* expr, enum ac_ast_type type);
 
@@ -424,6 +425,7 @@ static ac_ast_identifier* parse_identifier(ac_parser_c* p) {
 
 static ac_ast_expr* parse_statement_from_identifier(ac_parser_c* p, ac_ast_identifier* identifier)
 {
+    /* Built-in type, struct or typedef */
     ac_ast_type_specifier* parsed_type = try_parse_type(p, identifier);
 
     return to_expr(parse_declaration_list(p, parsed_type));
@@ -577,7 +579,7 @@ static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_typ
 
     enum ac_token_type expected_closing_token = expected_opening_token == ac_token_type_PAREN_L ? ac_token_type_PAREN_R : ac_token_type_SQUARE_R;
 
-    if (token_is(p, ac_token_type_PAREN_R))
+    if (consume_if(p, ac_token_type_PAREN_R))
     {
         return parameters;
     }
@@ -810,6 +812,16 @@ static bool expect_and_consume(ac_parser_c* p, enum ac_token_type type)
     }
 
     return false;
+}
+
+static bool consume_if(ac_parser_c* p, enum ac_token_type type)
+{
+    bool result = token_is(p, type);
+    if (result)
+    {
+        goto_next_token(p);
+    }
+    return result;
 }
 
 static bool expr_is(ac_ast_expr* expr, enum ac_ast_type type)

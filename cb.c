@@ -1,6 +1,7 @@
 #define CB_IMPLEMENTATION
 #include <cb/cb.h>
 #include <cb/cb_add_files.h>
+#include <cb/cb_assert.h>
 
 const char* root_dir = "./";
 
@@ -11,6 +12,7 @@ void assert_subprocess(const char* cmd, const char* starting_directory);
 const char* build_with(const char* config);
 void my_project(const char* project_name, const char* toolchain, const char* config);
 void test_directory(const char* exe, const char* directory);
+void test_c_generation(const char* exe, const char* directory);
 void tests(const char* exe);
 
 int main()
@@ -174,11 +176,45 @@ void test_directory(const char* exe, const char* directory)
 	cb_dstr_destroy(&buffer);
 }
 
+void test_c_generation(const char* exe, const char* directory)
+{
+	assert_path(exe);
+	assert_path(directory);
+
+	cb_dstr buffer;
+	cb_dstr_init(&buffer);
+
+	cb_file_it it;
+	cb_file_it_init(&it, directory);
+
+	while (cb_file_it_get_next_glob(&it, "*.c"))
+	{
+		const char* file = cb_file_it_current_file(&it);
+
+		cb_dstr_assign_f(&buffer, "%s --option-file %soptions.txt %s", exe, directory, file);
+
+		printf("Testing: %s \n", file);
+
+		assert_subprocess(buffer.data, directory);
+
+		cb_dstr_assign_f(&buffer, "%s.g", file);
+	
+		/* @TODO: we check that the path exists but we also need to check the content. */
+		cb_assert_file_exists(buffer.data);
+
+		printf("OK\n");
+	}
+
+	cb_file_it_destroy(&it);
+	cb_dstr_destroy(&buffer);
+}
+
 void tests(const char* exe)
 {
 	test_directory(exe, "./tests/01_parse_only/");
+
 	/* @TODO */
 	/* test_directory(exe, "./tests/02_check/"); */
-	/* @TODO */
-	/* test_directory(exe, "./tests/03_gen/"); */
+
+	test_c_generation(exe, "./tests/03_generate_c/");
 }

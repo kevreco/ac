@@ -3,6 +3,7 @@
 
 # generated files
 *.generated
+*.g
 
 # svn files
 .svn

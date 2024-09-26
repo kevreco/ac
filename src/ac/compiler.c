@@ -89,6 +89,7 @@ bool ac_compiler_compile(ac_compiler* c)
     ac_converter_c_init(&conv, &c->mgr);
 
     dstr output_file;
+    dstr_init(&output_file);
     dstr_assign_str(&output_file, source_file);
     re_path_replace_extension(&output_file, c->options.output_extension);
 
