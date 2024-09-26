@@ -94,16 +94,19 @@ CB_API void cb_clear(void);
 /* Set or create current project.  */
 CB_API cb_project_t* cb_project(const char* name); 
 
+/* Wrapper around cb_project with string formatting. */
+CB_API cb_project_t* cb_project_f(const char* format, ...);
+
 /* Add value for the specific key. */
 CB_API void cb_add(const char* key, const char* value);
 
-/* Wrapper of cb_set with string formatting */
+/* Wrapper around cb_set with string formatting. */
 CB_API void cb_add_f(const char* key, const char* format, ...);
 
-/* Add multiple string values. The last value must be a null value */
+/* Add multiple string values. The last value must be a null value. */
 CB_API void cb_add_many_vnull(const char* key, ...);
 
-/* Add multiple values using var args macro */
+/* Add multiple values using var args macro. */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 or later */
 #define cb_add_many_v(key, ...) \
 	cb_add_many(key \
@@ -114,13 +117,13 @@ CB_API void cb_add_many_vnull(const char* key, ...);
 /* Remove all previous values according to the key and set the new one. */
 CB_API void cb_set(const char* key, const char* value);
 
-/* Wrapper around cb_set with string formatting */
+/* Wrapper around cb_set with string formatting. */
 CB_API void cb_set_f(const char* key, const char* format, ...);
 
-/* Remove all values associated with the key. Returns number of removed values */
+/* Remove all values associated with the key. Returns number of removed values. */
 CB_API cb_size cb_remove_all(const char* key);
 
-/* Wrapper around cb_remove_all with string formatting */
+/* Wrapper around cb_remove_all with string formatting. */
 CB_API cb_size cb_remove_all_f(const char* format, ...);
 
 /* Remove item with the exact key and value. */
@@ -132,12 +135,12 @@ CB_API cb_bool cb_remove_one_f(const char* key, const char* format, ...);
 /* Check if key/value already exists in the current project. */
 CB_API cb_bool cb_contains(const char* key, const char* value);
 
-/* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain */
+/* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain. */
 typedef const char* (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
 
 struct cb_toolchain {
 	cb_toolchain_bake_t bake;
-	/* Name of the toolchain, mostly for debugging purpose */
+	/* Name of the toolchain, mostly for debugging purpose. */
 	const char* name;
 	/* Name of the default directory. */
 	const char* default_directory_base;
@@ -147,10 +150,13 @@ struct cb_toolchain {
    Returns the name of the result, which could be the path of a library or any other value depending on the toolchain.
    Use the default toolchain (gcc or msvc).
 */
-CB_API const char* cb_bake(const char* project_name);
+CB_API const char* cb_bake(void);
+
+/* Same as cb_bake. Using an explicit projectname. */
+CB_API const char* cb_bake_project(const char* project_name);
 
 /* Same as cb_bake. Take an explicit toolchain instead of using the default one. */
-CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name);
+CB_API const char* cb_bake_project_with(cb_toolchain toolchain, const char* project_name);
 
 /* Run executable path. Path is double quoted before being run, in case path contains some space.
    Returns exit code. Returns -1 if command could not be executed.
@@ -1786,6 +1792,20 @@ cb_project(const char* name)
 	return project;
 }
 
+CB_API cb_project_t*
+cb_project_f(const char* format, ...)
+{
+	cb_project_t* p;
+	va_list args;
+	va_start(args, format);
+
+	p = cb_project(cb_tmp_vsprintf(format, args));
+
+	va_end(args);
+
+	return p;
+}
+
 CB_API void
 cb_add_many_core(cb_strv key, cb_strv values[], cb_size count)
 {
@@ -1989,7 +2009,7 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 }
 
 CB_API const char*
-cb_bake_with(cb_toolchain toolchain, const char* project_name)
+cb_bake_project_with(cb_toolchain toolchain, const char* project_name)
 {
 	const char* result = toolchain.bake(&toolchain, project_name);
 	cb_log_important("%s", result);
@@ -1997,9 +2017,16 @@ cb_bake_with(cb_toolchain toolchain, const char* project_name)
 }
 
 CB_API const char*
-cb_bake(const char* project_name)
+cb_bake_project(const char* project_name)
 {
-	return cb_bake_with(cb_toolchain_default(), project_name);
+	return cb_bake_project_with(cb_toolchain_default(), project_name);
+}
+
+CB_API const char*
+cb_bake(void)
+{
+	cb_project_t* p = cb_current_project();
+	return cb_bake_project(p->name.data);
 }
 
 CB_INTERNAL const char*
@@ -2351,7 +2378,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	cb_create_directories(output_dir, strlen(output_dir));
 
 	/* Use /utf-8 by default since it's retrocompatible with utf-8 */
-	cb_dstr_append_str(&str, "cl.exe /utf-8 ");
+	/* Use /nologo to avoid undesirable messages in the command line. */
+	cb_dstr_append_str(&str, "cl.exe /utf-8 /nologo ");
 
 	/* Handle binary type */
 
@@ -2524,8 +2552,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	
 	if (is_static_library)
 	{
-		/* lib.exe /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
-		tmp = cb_tmp_sprintf("lib.exe /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
+		/* lib.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
+		tmp = cb_tmp_sprintf("lib.exe /NOLOGO /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
 		if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
 		{
 			cb_log_error("Could not execute command to build static library\n");

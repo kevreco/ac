@@ -103,6 +103,12 @@ const char* build_with(const char* config)
 		cb_add(cb_INCLUDE_DIRECTORIES, "./src/external/re.lib/cpp");
 	}
 
+	if (!cb_bake())
+	{
+		exit(1);
+	}
+
+
 	/* CLI */
 	{
 		my_project("ac", toolchain_name, config);
@@ -116,12 +122,7 @@ const char* build_with(const char* config)
 		cb_add(cb_INCLUDE_DIRECTORIES, "./src/");
 	}
 
-	if (!cb_bake("aclib"))
-	{
-		exit(1);
-	}
-
-	const char* ac_exe = cb_bake("ac");
+	const char* ac_exe = cb_bake();
 	if (!ac_exe)
 	{
 		exit(1);
