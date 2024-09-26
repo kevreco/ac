@@ -10,16 +10,10 @@ extern "C" {
 
 typedef struct ac_ast_block ac_ast_block;
 
-typedef struct ac_parser_options ac_parser_options;
-struct ac_parser_options {
-    bool debug_verbose;
-};
-
 typedef struct ac_parser_c ac_parser_c;
 struct ac_parser_c {
     ac_manager* mgr;
     ac_lex lex;
-    ac_parser_options options;
 
     ac_ast_block* current_block;
 };

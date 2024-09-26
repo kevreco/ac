@@ -8,11 +8,7 @@
 #include "ast.h"
 #include "location.h"
 
-static struct global_options
-{
-    bool colored_output;
-    bool display_surrounding_lines;
-} options = { true, true};
+global_options_t global_options;
 
 enum message_type
 {
@@ -61,7 +57,7 @@ void ac_report_error_loc(ac_location loc, const char* fmt, ...)
     va_list args;
     va_start(args, fmt);
 
-    display_message_v(stderr, message_type_ERROR, loc, options.display_surrounding_lines, fmt, args);
+    display_message_v(stderr, message_type_ERROR, loc, global_options.display_surrounding_lines, fmt, args);
 
     va_end(args);
 }
@@ -71,7 +67,7 @@ void ac_report_warning_loc(ac_location loc, const char* fmt, ...)
     va_list args;
     va_start(args, fmt);
 
-    display_message_v(stderr, message_type_WARNING, loc, options.display_surrounding_lines, fmt, args);
+    display_message_v(stderr, message_type_WARNING, loc, global_options.display_surrounding_lines, fmt, args);
 
     va_end(args);
 }
@@ -82,7 +78,7 @@ void ac_report_error_expr(ac_ast_expr* expr, const char* fmt, ...)
     va_start(args, fmt);
 
     ac_location loc = ac_ast_expr_location(expr);
-    display_message_v(stderr, message_type_ERROR, loc, options.display_surrounding_lines, fmt, args);
+    display_message_v(stderr, message_type_ERROR, loc, global_options.display_surrounding_lines, fmt, args);
 
     va_end(args);
 }
@@ -93,7 +89,7 @@ void ac_report_warning_expr(ac_ast_expr* expr, const char* fmt, ...)
     va_start(args, fmt);
 
     ac_location loc = ac_ast_expr_location(expr);
-    display_message_v(stderr, message_type_WARNING, loc, options.display_surrounding_lines, fmt, args);
+    display_message_v(stderr, message_type_WARNING, loc, global_options.display_surrounding_lines, fmt, args);
 
     va_end(args);
 }
@@ -104,7 +100,7 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
 
     /* if needed setup console so that it can color the output on errors */
     /* @TODO @FIXME we only need to do it once. */
-    if (options.colored_output) os_std_console_setup();
+    if (global_options.colored_output) os_std_console_setup();
 
     dstr256 message;
     dstr256_init(&message);

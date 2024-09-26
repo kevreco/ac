@@ -16,9 +16,15 @@ extern "C" {
 #endif
 
 static const struct options {
+    strv colored_output;
+    strv debug_parser;
+    strv display_surrounding_lines;
     strv output_extension;
     strv parse_only;
 } options = {
+    .colored_output = STRV("--colored-output"),
+    .debug_parser     = STRV("--debug-parser"),
+    .display_surrounding_lines = STRV("--display-surrounding-lines"),
     .output_extension = STRV("--output-extension"),
     .parse_only       = STRV("--parse-only")
 };
@@ -46,11 +52,26 @@ arg_equals(const char* arg, strv sv)
 }
 
 bool
-parse_compiler_options(ac_compiler_options* o, int* argc, char*** argv)
+parse_from_arguments(ac_options* o, int* argc, char*** argv)
 {
     do {
         const char* arg = pop_args(argc, argv);
-        if (arg_equals(arg, options.output_extension))
+        
+        if (arg_equals(arg, options.colored_output))
+        {
+            o->global.colored_output = true;
+        }
+        else if (arg_equals(arg, options.debug_parser))
+        {
+            /* @FIXME it's already true by default. We need to read "true" or "false" from the input. */
+            o->debug_parser = true;
+        }
+        else if (arg_equals(arg, options.display_surrounding_lines))
+        {
+            /* @FIXME it's already true by default. We need to read "true" or "false" from the input. */
+            o->global.display_surrounding_lines = true;
+        }
+        else if (arg_equals(arg, options.output_extension))
         {
             o->output_extension = strv_make_from_str(arg);
         }
@@ -87,7 +108,7 @@ parse_compiler_options(ac_compiler_options* o, int* argc, char*** argv)
 }
 
 void
-try_parse_config_file(ac_compiler_options* o, int argc, char** argv)
+try_parse_from_file(ac_options* o, int argc, char** argv)
 {
     char* option_file_path = NULL;
     char* arg;
@@ -145,17 +166,17 @@ try_parse_config_file(ac_compiler_options* o, int argc, char** argv)
 
     if (config_argc > 0)
     {
-        parse_compiler_options(o, &config_argc, &config_argv);
+        parse_from_arguments(o, &config_argc, &config_argv);
     }
 }
 
 bool
-parse_options(ac_compiler_options* o, int* argc, char*** argv)
+parse_options(ac_options* o, int* argc, char*** argv)
 {
     AC_ASSERT(argc && *argc && "There should be at least one argument to parse.");
 
-    try_parse_config_file(o, *argc, *argv);
-    return parse_compiler_options(o, argc, argv);
+    try_parse_from_file(o, *argc, *argv);
+    return parse_from_arguments(o, argc, argv);
 }
 
 #ifdef __cplusplus

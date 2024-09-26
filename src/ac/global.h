@@ -14,6 +14,15 @@
 extern "C" {
 #endif
 
+typedef struct global_options_t global_options_t;
+struct global_options_t {
+    bool colored_output;
+    bool display_surrounding_lines;
+};
+
+/* global_option set at the entry point of compilation. */
+extern global_options_t global_options;
+
 typedef struct ac_ast_expr ac_ast_expr;
 
 void ac_report_error(const char* fmt, ...);

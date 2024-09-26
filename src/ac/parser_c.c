@@ -44,6 +44,8 @@
 
 typedef bool (*ensure_expr_t)(ac_ast_expr* expr);
 
+static ac_options* options(ac_parser_c* p);
+
 static ac_ast_top_level* parse_top_level(ac_parser_c* p);
 static ac_ast_expr* parse_expr(ac_parser_c* p, ac_ast_expr* lhs);
 static ac_ast_expr* parse_primary(ac_parser_c* p);
@@ -95,8 +97,6 @@ void ac_parser_c_init(ac_parser_c* p, ac_manager* mgr)
     ac_lex_init(&p->lex, mgr);
 
     p->mgr = mgr;
-
-    p->options.debug_verbose = true;
 }
 
 void ac_parser_c_destroy(ac_parser_c* p)
@@ -114,6 +114,11 @@ bool ac_parser_c_parse(ac_parser_c* p, const char* content, size_t content_size,
     p->mgr->top_level = top_level;
 
     return top_level != 0;
+}
+
+static ac_options* options(ac_parser_c* p)
+{
+    return &p->mgr->options;
 }
 
 static ac_ast_top_level* parse_top_level(ac_parser_c* p)
@@ -136,7 +141,7 @@ static ac_ast_top_level* parse_top_level(ac_parser_c* p)
 
 static ac_ast_expr* parse_expr(ac_parser_c* p, ac_ast_expr* lhs)
 {
-    if_printf(p->options.debug_verbose, "parse_expression\n");
+    if_printf(options(p)->debug_parser, "parse_expression\n");
 
     if (token_is(p, ac_token_type_EOF))
     {
@@ -163,7 +168,7 @@ static ac_ast_expr* parse_expr(ac_parser_c* p, ac_ast_expr* lhs)
 
 static ac_ast_expr* parse_primary(ac_parser_c* p)
 {
-    if_printf(p->options.debug_verbose, "parse_primary\n");
+    if_printf(options(p)->debug_parser, "parse_primary\n");
 
     ac_ast_expr* result = 0;
 
@@ -225,7 +230,7 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
 
 static ac_ast_block* parse_block(ac_parser_c* p)
 {
-    if_printf(p->options.debug_verbose, "parse_block\n");
+    if_printf(options(p)->debug_parser, "parse_block\n");
 
     AST_NEW_CTOR(ac_ast_block, block, location(p), ac_ast_block_init);
 
@@ -277,7 +282,7 @@ static ac_ast_block* parse_block_or_inline_block(ac_parser_c* p)
 
 static bool parse_statements(ac_parser_c* p, ensure_expr_t post_check, const char* message)
 {
-    if_printf(p->options.debug_verbose, "parse_statements\n");
+    if_printf(options(p)->debug_parser, "parse_statements\n");
 
     /* no statement if there is already a closing brace */
     if (token_is(p, ac_token_type_BRACE_R))
@@ -309,7 +314,7 @@ static bool parse_statements(ac_parser_c* p, ensure_expr_t post_check, const cha
 
 static ac_ast_expr* parse_statement(ac_parser_c* p)
 {
-    if_printf(p->options.debug_verbose, "parse_statement\n");
+    if_printf(options(p)->debug_parser, "parse_statement\n");
 
     ac_ast_expr* result = 0;
 
@@ -374,7 +379,7 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
 }
 
 static ac_ast_expr* parse_unary(ac_parser_c* p) {
-    if_printf(p->options.debug_verbose, "parse_unary\n");
+    if_printf(options(p)->debug_parser, "parse_unary\n");
 
     assert(token_is_unary_operator(p));
 
@@ -402,7 +407,7 @@ static ac_ast_type_specifier* try_parse_type(ac_parser_c* p, ac_ast_identifier* 
 }
 
 static ac_ast_expr* parse_rhs(ac_parser_c* p, ac_ast_expr* lhs, int lhs_precedence) {
-    if_printf(p->options.debug_verbose, "parse_rhs\n");
+    if_printf(options(p)->debug_parser, "parse_rhs\n");
 
     /* @TODO: handle precedence, binary operators etc.*/
     (void)lhs_precedence;
@@ -563,7 +568,7 @@ static ac_ast_declarator* parse_declarator_for_parameter(ac_parser_c* p)
 
 static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_type expected_opening_token)
 {
-    if_printf(p->options.debug_verbose, "parse_parameter_list\n");
+    if_printf(options(p)->debug_parser, "parse_parameter_list\n");
 
     AST_NEW_CTOR(ac_ast_parameters, parameters, location(p), ac_ast_parameters_init);
 
@@ -609,7 +614,7 @@ static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_typ
 
 static ac_ast_parameter* parse_parameter(ac_parser_c* p)
 {
-    if_printf(p->options.debug_verbose, "parse_parameter\n");
+    if_printf(options(p)->debug_parser, "parse_parameter\n");
 
     AST_NEW_CTOR(ac_ast_parameter, param, location(p), ac_ast_parameter_init);
 

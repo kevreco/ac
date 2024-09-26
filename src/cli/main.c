@@ -80,21 +80,21 @@ compile(const struct cmd* cmd, int argc, char** argv)
     int result = 1;
     (void)cmd;
 
-    ac_compiler_options options;
-    ac_compiler_options_init_default(&options);
+    ac_options options;
+    ac_options_init_default(&options);
     
     if (parse_options(&options, &argc, &argv))
     {
         ac_compiler c;
 
-        ac_compiler_init(&c, options);
+        ac_compiler_init(&c, &options);
 
         result = ac_compiler_compile(&c) ? 0 : 1;
 
         ac_compiler_destroy(&c);
     }
 
-    ac_compiler_options_destroy(&options);
+    ac_options_destroy(&options);
 
     return result;
 }
