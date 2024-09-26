@@ -8,7 +8,7 @@ int value3, value4 = 0;
 int value5 = 0, value6;
 
 /* function forward declaration */
-int main(int, int);
+int main(int, char);
 
 /* function definition with char argument */
 int main(int argc, char argv)
