@@ -70,10 +70,6 @@ version(const struct cmd* cmd, int argc, char** argv)
     return 0;
 }
 
-#define MAX_FILENAME 2048 /* arbitrary limit for path, adjust this if needed */
-
-char output_file_name[MAX_FILENAME];
-
 int
 compile(const struct cmd* cmd, int argc, char** argv)
 {

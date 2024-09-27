@@ -1,8 +1,9 @@
 #ifndef AC_LOCATION_H
 #define AC_LOCATION_H
 
-#include <re/dstr.h>
 #include <stdbool.h>
+
+#include "re_lib.h"
 
 #ifdef __cplusplus
 extern "C" {

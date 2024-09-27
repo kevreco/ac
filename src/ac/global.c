@@ -3,10 +3,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#include <re/dstr_util.h>
-
 #include "ast.h"
 #include "location.h"
+#include "re_lib.h"
 
 global_options_t global_options;
 

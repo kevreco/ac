@@ -3,10 +3,9 @@
 #include <stdio.h> /* FILE */
 #include <inttypes.h> /* PRIiMAX, PRIuMAX */
 
-#include <re/file.h>
-
 #include "ast.h"
 #include "manager.h"
+#include "re_lib.h"
 
 #define CAST_TO(type_, ident_, object_) type_ ident_ = (type_)(object_)
 

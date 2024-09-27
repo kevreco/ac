@@ -199,11 +199,12 @@ void ac_ast_top_level_init(ac_ast_top_level* file);
 /* For expression's like "int[]" we need a valid value for the array size expression, null means that there was an issue somewhere .
    Hence, this ac_ast_empty_array_size was creaed.
 */
+typedef struct ac_ast_array_empty_size ac_ast_array_empty_size;
 struct ac_ast_array_empty_size {
     INCLUDE_AST_EXPR_BASE
 };
 
-void ac_ast_array_empty_size_init(struct ac_ast_array_empty_size* node);
+void ac_ast_array_empty_size_init(ac_ast_array_empty_size* node);
 
 ac_location ac_ast_expr_location(ac_ast_expr* expr);
 

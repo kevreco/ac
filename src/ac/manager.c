@@ -41,12 +41,16 @@ void ac_manager_init(ac_manager* m, ac_options* o)
     AC_ASSERT(o);
     memset(m, 0, sizeof(ac_manager));
 
+    ac_allocator_arena_init(&m->ast_arena, 16 * 1024);
+
     m->options = *o;
     global_options = o->global;
 }
 
 void ac_manager_destroy(ac_manager* m)
 {
+    ac_allocator_arena_destroy(&m->ast_arena);
+
     if (!dstr_empty(&m->source_file.content))
     {
         dstr_destroy(&m->source_file.content);

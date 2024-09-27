@@ -797,5 +797,4 @@ static inline dstr_bool strv_splitter_get_next(strv_splitter* s, strv* res)
 } /* extern "C" */
 #endif
 
-
 #endif /* RE_DSTR_UTIL_H */

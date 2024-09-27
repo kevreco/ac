@@ -1,8 +1,6 @@
 #include "compiler.h"
 
-#include <re/darr.h>
-#include <re/dstr.h>
-#include <re/path.h>
+#include "re_lib.h"
 
 #include "global.h"
 #include "parser_c.h"

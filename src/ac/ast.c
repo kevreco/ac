@@ -101,9 +101,9 @@ void ac_ast_top_level_init(ac_ast_top_level* node)
     ac_ast_block_init(&node->block);
 }
 
-void ac_ast_array_empty_size_init(struct ac_ast_array_empty_size* node)
+void ac_ast_array_empty_size_init(ac_ast_array_empty_size* node)
 {
-    memset(node, 0, sizeof(struct ac_ast_array_empty_size));
+    memset(node, 0, sizeof(ac_ast_array_empty_size));
     node->type = ac_ast_type_ARRAY_EMPTY_SIZE;
 }
 

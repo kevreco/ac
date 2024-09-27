@@ -3,10 +3,9 @@
 
 #include "stdbool.h"
 
+#include "alloc.h"
 #include "global.h"
-
-#include <re/darr.h>
-#include <re/dstr.h>
+#include "re_lib.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,9 +55,15 @@ void ac_options_destroy(ac_options* o);
 /* manager */
 
 typedef struct ac_manager ac_manager;
-struct ac_manager
-{
+struct ac_manager {
     ac_options options;
+
+    /*
+       Arena allocator to create new ast-related objects.
+       We dont't free them until this manager is destroyed.
+    */
+    ac_allocator_arena ast_arena;
+
     /* keep reference to destroy it. */
     ac_source_file source_file;
     ac_ast_top_level* top_level;

@@ -3,10 +3,7 @@
 
 #include <ac/global.h>
 #include <ac/compiler.h>
-
-#include <re/file.h>
-#include <re/darr.h>
-#include <re/dstr_util.h>
+#include <ac/re_lib.h>
 
 #define STRV(x)\
     { sizeof(x)-1 , (const char*)(x)  }
@@ -21,7 +18,7 @@ static const struct options {
     strv display_surrounding_lines;
     strv output_extension;
     strv parse_only;
-} options = {
+} cli_options = {
     .colored_output = STRV("--colored-output"),
     .debug_parser     = STRV("--debug-parser"),
     .display_surrounding_lines = STRV("--display-surrounding-lines"),
@@ -57,25 +54,25 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
     do {
         const char* arg = pop_args(argc, argv);
         
-        if (arg_equals(arg, options.colored_output))
+        if (arg_equals(arg, cli_options.colored_output))
         {
             o->global.colored_output = true;
         }
-        else if (arg_equals(arg, options.debug_parser))
+        else if (arg_equals(arg, cli_options.debug_parser))
         {
             /* @FIXME it's already true by default. We need to read "true" or "false" from the input. */
             o->debug_parser = true;
         }
-        else if (arg_equals(arg, options.display_surrounding_lines))
+        else if (arg_equals(arg, cli_options.display_surrounding_lines))
         {
             /* @FIXME it's already true by default. We need to read "true" or "false" from the input. */
             o->global.display_surrounding_lines = true;
         }
-        else if (arg_equals(arg, options.output_extension))
+        else if (arg_equals(arg, cli_options.output_extension))
         {
             o->output_extension = strv_make_from_str(arg);
         }
-        else if (arg_equals(arg, options.parse_only))
+        else if (arg_equals(arg, cli_options.parse_only))
         {
             o->step = ac_compilation_step_PARSE;
         }

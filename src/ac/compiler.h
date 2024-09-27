@@ -1,8 +1,6 @@
 #ifndef AC_COMPILER_H
 #define AC_COMPILER_H
 
-#include <re/darr.h>
-
 #include "manager.h"
 
 #ifdef __cplusplus
