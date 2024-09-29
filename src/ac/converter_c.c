@@ -53,7 +53,7 @@ void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath)
     print_top_level(c);
 
     FILE* f = re_file_open_readwrite(filepath);
-    write_to_file(dstr_to_view(&c->string_buffer), f);
+    write_to_file(dstr_to_strv(&c->string_buffer), f);
     re_file_close(f);
 }
 

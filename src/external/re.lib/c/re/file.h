@@ -1,13 +1,13 @@
 #ifndef RE_FILE_H
 #define RE_FILE_H
 
-#include <re/dstr_util.h>
+#include <re/dstr.h>
 
 #if _WIN32
 #include <windows.h>
 #else
-#include <sys/stat.h> /* mkdir, fstat */
-#include <fcntl.h>    /* open, close */
+#include <sys/stat.h>     /* mkdir, fstat */
+#include <fcntl.h>        /* open, close */
 #include <sys/sendfile.h> /* sendfile */
 #endif
 
@@ -211,7 +211,7 @@ re_file_get_until(dstr* str, FILE* fp, re_file_predicate_t predicate)
 	file_lock(fp);
 	while ((ch = file_nolock_getc(fp)) != EOF) {
 		dstr_append_char(str, ch);
-		if (predicate.check(predicate.data, dstr_to_view(str), ch))
+		if (predicate.check(predicate.data, dstr_to_strv(str), ch))
 			break;
 	}
 	file_unlock(fp);

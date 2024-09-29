@@ -133,7 +133,7 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
         size_t next_line_count;
         strv partial_source = strv_get_surrounding_lines(
             location.content,
-            location.content.data + location.pos - 1,
+            location.pos - 1,
             surrounding_lines,
             &previous_line_count,
             &next_line_count
@@ -150,7 +150,7 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
         fprintf(file, "\n");
         strv current_line;
 
-        while (strv_pop_line(&partial_source, &current_line))
+        while ((current_line = strv_pop_line(&partial_source)).size != 0)
         {
             fprintf(file, margin_format, line_counter, current_line.size, current_line.data);
 
@@ -174,7 +174,7 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
     }
     else
     {
-        if (!strv_ends_with_str(dstr_to_view(&message.dstr), "\n")) printf("\n"); /* print end of line if necessary after last line */
+        if (!strv_ends_with_str(dstr_to_strv(&message.dstr), "\n")) printf("\n"); /* print end of line if necessary after last line */
     }
 
     dstr256_destroy(&message);

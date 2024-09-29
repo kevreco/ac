@@ -5,9 +5,6 @@
 #include <ac/compiler.h>
 #include <ac/re_lib.h>
 
-#define STRV(x)\
-    { sizeof(x)-1 , (const char*)(x)  }
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -141,14 +138,14 @@ try_parse_from_file(ac_options* o, int argc, char** argv)
     }
 
     /* Split file content by line, empty values are ignored. */
-    strv_splitter splitter = strv_splitter_make_str(dstr_to_view(&o->config_file_memory), "\n\r");
+    strv_splitter splitter = strv_splitter_make_str(dstr_to_strv(&o->config_file_memory), "\n\r");
     strv line;
     while (strv_splitter_get_next(&splitter, &line))
     {
-        strv trimmed = strv_trimmed_whitespaces(line);
+        strv trimmed = strv_trimmed(line);
         
         if (strv_empty(trimmed)
-            || strv_begins_with_str(trimmed, "#"))
+            || strv_starts_with_str(trimmed, "#"))
         {
             continue;
         }

@@ -1,8 +1,10 @@
 #ifndef RE_C_LIB_H
 #define RE_C_LIB_H
 
+#include <re/strv.h>
+#include <re/strv_extensions.h>
+
 #include <re/dstr.h>
-#include <re/dstr_util.h>
 
 #include <re/darr.h>
 

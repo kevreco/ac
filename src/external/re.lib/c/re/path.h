@@ -1,7 +1,7 @@
 #ifndef RE_PATH_H
 #define RE_PATH_H
 
-#include <re/dstr_util.h>
+#include <re/dstr.h>
 
 #ifndef RE_PATH_API
 #ifdef RE_PATH_STATIC
@@ -74,7 +74,7 @@ re_path_combine(dstr* str, strv path)
 	// but maybe we don't want the system slash, so save the one we found in the strings
 	dstr_char_t slash = re_path_system_slash();
 	strv mutable_path = path;
-	strv str_view = dstr_to_view(str);
+	strv str_view = dstr_to_strv(str);
 
 	if (str->size > 0
 		&& details__is_slash(strv_back(str_view)))
@@ -94,14 +94,14 @@ re_path_combine(dstr* str, strv path)
 	if (str->size > 0) /* Only add separator if str is already a path (tested as non empty string here) */
 		dstr_append_char(str, slash); /* add needed separator */
 
-	dstr_append_view(str, mutable_path);
+	dstr_append(str, mutable_path);
 }
 
 RE_PATH_API void
 re_path_combine_str(dstr* str, const dstr_char_t* path)
 {
-	strv view = strv_make_from_str(path);
-	re_path_combine(str, view);
+	strv sv = strv_make_from_str(path);
+	re_path_combine(str, sv);
 }
 
 RE_PATH_API re_path_bool
@@ -157,26 +157,26 @@ re_path_replace_extension(dstr* path, strv ext)
 		return;
 	if (ext.size <= 0)
 		return;
-	if (strv_equals_str(dstr_to_view(path), "."))
+	if (strv_equals_str(dstr_to_strv(path), "."))
 		return;
-	if (strv_equals_str(dstr_to_view(path), ".."))
+	if (strv_equals_str(dstr_to_strv(path), ".."))
 		return;
 	
-	strv without_ext = re_path_without_extension(dstr_to_view(path));
+	strv without_ext = re_path_without_extension(dstr_to_strv(path));
 
-	dstr_assign_view(path, without_ext);
+	dstr_assign(path, without_ext);
 	
 	if (ext.data[0] != '.') /* if ext does not start with a dot, appends one. */
 		dstr_append_char(path, '.');
 
-	dstr_append_view(path, ext);
+	dstr_append(path, ext);
 }
 
 RE_PATH_API void
 re_path_replace_extension_str(dstr* str, const dstr_char_t* ext)
 {
-	strv view = strv_make_from_str(ext);
-	re_path_replace_extension(str, view);
+	strv sv = strv_make_from_str(ext);
+	re_path_replace_extension(str, sv);
 }
 
 RE_PATH_API strv
@@ -348,15 +348,15 @@ re_path_get_current(dstr* str)
 RE_PATH_API re_path_bool
 re_path_get_absolute(dstr* path)
 {
-	if (re_path_is_absolute(dstr_to_view(path)))
+	if (re_path_is_absolute(dstr_to_strv(path)))
 		return (re_path_bool)(0);
 
 	dstr current;
 	dstr_init(&current);
 	re_path_get_current(&current);
 
-	re_path_combine(&current, dstr_to_view(path));
-	dstr_assign_view(path, dstr_to_view(&current));
+	re_path_combine(&current, dstr_to_strv(path));
+	dstr_assign(path, dstr_to_strv(&current));
 
 	dstr_destroy(&current);
 

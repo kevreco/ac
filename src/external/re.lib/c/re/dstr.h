@@ -35,10 +35,6 @@ CHANGES (DD/MM/YYYY):
 #ifndef RE_DSTR_H
 #define RE_DSTR_H
 
-#ifdef DSTR_USE_CONFIG
-#include "dstr_config.h"
-#endif
-
 #ifndef DSTR_API
     #ifdef DSTR_STATIC
     #define DSTR_API static
@@ -88,6 +84,8 @@ CHANGES (DD/MM/YYYY):
 #define DSTR_CHAR_T char
 #endif
 
+#include "strv.h"
+
 #include <string.h> /* strlen, memcpy, memmove, memset */
 #include <stdlib.h> /* size_t malloc free */
 #include <stdarg.h> /* ..., va_list  */
@@ -105,76 +103,6 @@ typedef dstr_char_t*    dstr_it;
 typedef int             dstr_bool;
 
 static const dstr_size_t DSTR_NPOS = (dstr_size_t)-1;
-
-/*-----------------------------------------------------------------------*/
-/* strv - API */
-/*-----------------------------------------------------------------------*/
-typedef struct strv strv;
-struct strv {
-	dstr_size_t        size;
-	const dstr_char_t* data;
-};
-
-DSTR_API strv strv_make();
-/* create a strv from the content between 'data' and 'data + size' */
-DSTR_API strv strv_make_from(const dstr_char_t* data, dstr_size_t size);
-DSTR_API strv strv_make_from_str(const char* str);
-DSTR_API strv strv_make_from_view(strv sv);
-
-DSTR_API void      strv_reset(strv* sv);
-
-/* set new value for the string view */
-DSTR_API void      strv_assign      (strv* sv, const dstr_char_t* data, dstr_size_t size);
-/* overload of strv_assign */
-DSTR_API void      strv_assign_str  (strv* sv, const dstr_char_t* str);
-
-/* strv is empty */
-DSTR_API dstr_bool strv_empty(strv sv);
-
-/* lexicagraphical comparison */
-DSTR_API int       strv_compare          (strv sv, const dstr_char_t* data, dstr_size_t size);
-/* overload of strv_compare */
-DSTR_API int       strv_compare_view     (strv sv, strv other);
-/* overload of strv_compare */
-DSTR_API int       strv_compare_str      (strv sv, const dstr_char_t* str);
-/* equivalent of strv_compare == 0 */
-DSTR_API dstr_bool strv_equals           (strv sv, strv other);
-/* overload of strv_equals_str */
-DSTR_API dstr_bool strv_equals_str       (strv sv, const dstr_char_t* str);
-/* equivalent of strv_compare < 0 */
-DSTR_API dstr_bool strv_less_than        (strv sv, strv other);
-/* overload of strv_less_than */
-DSTR_API dstr_bool strv_less_than_str    (strv sv, const dstr_char_t* str);
-/* equivalent of strv_compare > 0 */
-DSTR_API dstr_bool strv_greater_than     (strv sv, strv other);
-/* overload of strv_greater_than_str */
-DSTR_API dstr_bool strv_greater_than_str (strv sv, const dstr_char_t* str);
-
-/* to mimic iterator behavior - cpp-style */
-DSTR_API dstr_it strv_begin(strv sv);
-DSTR_API dstr_it strv_end(strv sv);
-
-/* get first char - cpp-style */
-DSTR_API dstr_char_t strv_front(strv view);
-/* get last char - cpp-style */
-DSTR_API dstr_char_t strv_back(strv view);
-
-/* find sub string in string */
-DSTR_API dstr_size_t strv_find(strv sv, dstr_size_t pos, const dstr_char_t* sub_data, dstr_size_t sub_size);
-/* overload of strv_find */
-DSTR_API dstr_size_t strv_find_str(strv sv, dstr_size_t pos, const dstr_char_t* sub);
-/* overload of strv_find */
-DSTR_API dstr_size_t strv_find_char(strv sv, dstr_size_t pos, dstr_char_t ch);
-/* overload of strv_find */
-DSTR_API dstr_size_t strv_find_view(strv sv, dstr_size_t pos, strv sub);
-
-/* Returns empty string if pos == s->size */
-/* Returns empty string if pos > s->size. */
-DSTR_API strv strv_substr(strv sv, const dstr_it pos, dstr_size_t count);
-/* get substring from from index  + count */
-DSTR_API strv strv_substr_from(strv sv, dstr_size_t index, dstr_size_t count);
-
-DSTR_API void strv_swap(strv* s, strv* other);
 
 /*-----------------------------------------------------------------------*/
 /* dstr - API */
@@ -208,7 +136,7 @@ DSTR_API dstr dstr_make_from_str    (const dstr_char_t* str);
 /* overload of dstr_make_from */
 DSTR_API dstr dstr_make_from_char   (dstr_char_t ch);
 /* overload of dstr_make_from */
-DSTR_API dstr dstr_make_from_view   (strv view);
+DSTR_API dstr dstr_make_from_strv   (strv sv);
 /* overload of dstr_make_from */
 DSTR_API dstr dstr_make_from_dstr   (const dstr* str);
 
@@ -218,26 +146,26 @@ DSTR_API dstr dstr_make_from_nchar  (dstr_size_t count, dstr_char_t ch);
 DSTR_API dstr dstr_make_from_fmt    (const char* fmt, ...);
 DSTR_API dstr dstr_make_from_vfmt   (const char* fmt, va_list args);
 
-DSTR_API strv dstr_to_view(const dstr* s);
+DSTR_API strv dstr_to_strv(const dstr* s);
 
 /* Use the strv counterpart */
-DSTR_API int       dstr_compare(const dstr* s, const dstr_char_t* data, dstr_size_t size);
+DSTR_API int       dstr_compare(const dstr* s, strv sv);
 /* Use the strv counterpart */
 DSTR_API int       dstr_compare_str(const dstr* s, const dstr_char_t* str);
 /* Use the strv counterpart */
 DSTR_API int       dstr_compare_dstr(const dstr* s, const dstr* str);
 /* Use the strv counterpart */
-DSTR_API dstr_bool dstr_equals(const dstr* s, const dstr_char_t* data, dstr_size_t size);
+DSTR_API dstr_bool dstr_equals(const dstr* s, strv sv);
 /* Use the strv counterpart */
 DSTR_API dstr_bool dstr_equals_str(const dstr* s, const dstr_char_t* other);
 /* Use the strv counterpart */
 DSTR_API dstr_bool dstr_equals_dstr(const dstr* s, const dstr* str);
 /* Use the strv counterpart */
-DSTR_API dstr_bool dstr_less_than(const dstr* s, const dstr_char_t* data, dstr_size_t size);
+DSTR_API dstr_bool dstr_less_than(const dstr* s, strv sv);
 /* Use the strv counterpart */
 DSTR_API dstr_bool dstr_less_than_str(const dstr* s, const dstr_char_t* str);
 /* Use the strv counterpart */
-DSTR_API dstr_bool dstr_greater_than(const dstr* s, const dstr_char_t* data, dstr_size_t size);
+DSTR_API dstr_bool dstr_greater_than(const dstr* s, strv sv);
 /* Use the strv counterpart */
 DSTR_API dstr_bool dstr_greater_than_str(const dstr* s, const dstr_char_t* str);
 
@@ -252,13 +180,11 @@ DSTR_API dstr_char_t* dstr_c_str(dstr* s);
 DSTR_API void dstr_reserve(dstr* s, dstr_size_t new_string_capacity);
 
 /* Append data from data pointer and size */
-DSTR_API void dstr_append        (dstr* s, const dstr_char_t* data, dstr_size_t size);
+DSTR_API void dstr_append        (dstr* s, strv sv);
 /* Overload of dstr_append */
 DSTR_API void dstr_append_str    (dstr* s, const dstr_char_t* str);
 /* Overload of dstr_append */
 DSTR_API void dstr_append_char   (dstr* s, const dstr_char_t ch);
-/* Overload of dstr_append */
-DSTR_API void dstr_append_view   (dstr* s, strv view);
 /* Overload of dstr_append */
 DSTR_API void dstr_append_dstr   (dstr* s, const dstr* dstr);
 DSTR_API void dstr_append_nchar  (dstr* s, dstr_size_t count, const dstr_char_t ch);
@@ -267,13 +193,11 @@ DSTR_API int dstr_append_fv (dstr* s, const char* fmt, va_list args);
 DSTR_API int dstr_append_f  (dstr* s, const char* fmt, ...);
 
 /* append string at a certain index all content after index will be lost */
-DSTR_API void dstr_append_from      (dstr* s, int index, const dstr_char_t* data, dstr_size_t size);
+DSTR_API void dstr_append_from      (dstr* s, int index, strv sv);
 /* Overload of dstr_append_from */
 DSTR_API void dstr_append_str_from  (dstr* s, int index, const dstr_char_t* str);
 /* Overload of dstr_append_from */
 DSTR_API void dstr_append_char_from (dstr*s, int index, char ch);
-/* Overload of dstr_append_from */
-DSTR_API void dstr_append_view_from (dstr* s, int index, strv view);
 /* Overload of dstr_append_from */
 DSTR_API void dstr_append_dstr_from (dstr* s, int index, const dstr* str);
 
@@ -283,13 +207,11 @@ DSTR_API int dstr_append_from_fv   (dstr* s, int index, const char* fmt, va_list
 DSTR_API void dstr_push_back(dstr* s, const dstr_char_t ch);
 
 /* Replaces content with the content from a string defined the data pointer and the size */
-DSTR_API void dstr_assign           (dstr* s, const dstr_char_t* data, dstr_size_t size);
+DSTR_API void dstr_assign           (dstr* s, strv sv);
 /* Overload of dstr_assign */
 DSTR_API void dstr_assign_str       (dstr* s, const dstr_char_t* str);
 /* Overload of dstr_assign */
 DSTR_API void dstr_assign_char      (dstr* s, dstr_char_t ch);
-/* Overload of dstr_assign */
-DSTR_API void dstr_assign_view      (dstr* s, strv view);
 /* Overload of dstr_assign */
 DSTR_API void dstr_assign_dstr      (dstr* s, const dstr* str);
 /* Overload of dstr_assign */
@@ -310,10 +232,9 @@ DSTR_API dstr_size_t dstr_capacity(const dstr* s);
 DSTR_API dstr_it dstr_begin(const dstr* s);
 DSTR_API dstr_it dstr_end(const dstr* s);
 
-DSTR_API dstr_it dstr_insert(dstr* s, const dstr_it index, const dstr_char_t* data, dstr_size_t size);
+DSTR_API dstr_it dstr_insert(dstr* s, const dstr_it index, strv sv);
 DSTR_API dstr_it dstr_insert_str(dstr* s, const dstr_it index, const dstr_char_t* str);
 DSTR_API dstr_it dstr_insert_char(dstr* s, const dstr_it index, const dstr_char_t value);
-DSTR_API dstr_it dstr_insert_view(dstr* s, const dstr_it index, strv view);
 DSTR_API dstr_it dstr_insert_dstr(dstr* s, const dstr_it index, const dstr* str);
 
 DSTR_API dstr_it dstr_erase(dstr* s, const dstr_it data, dstr_size_t size);
@@ -329,44 +250,21 @@ DSTR_API void dstr_resize               (dstr* s, dstr_size_t size);
 /* Resizes and fills extra spaces with 'ch' value */
 DSTR_API void dstr_resize_fill          (dstr* s, dstr_size_t size, dstr_char_t ch);
 
-/* Replace the content between the interval [index - (index + count)] with the content of[r_data - (r_data + r_size)] */
-DSTR_API void dstr_replace_with       (dstr* s, dstr_size_t index, dstr_size_t count, const dstr_char_t* r_data, dstr_size_t r_size);
-/* Overload of dstr_replace_with */
-DSTR_API void dstr_replace_with_str   (dstr* s, dstr_size_t index, dstr_size_t count, const dstr_char_t* replacing);
-/* Overload of dstr_replace_with */
-DSTR_API void dstr_replace_with_char  (dstr* s, dstr_size_t index, dstr_size_t count, const dstr_char_t ch);
-/* Overload of dstr_replace_with */
-DSTR_API void dstr_replace_with_view  (dstr* s, dstr_size_t index, dstr_size_t count, strv replacing);
-/* Overload of dstr_replace_with */
-DSTR_API void dstr_replace_with_dstr  (dstr* s, dstr_size_t index, dstr_size_t count, const dstr* replacing);
-
-/* Wrapper around strv_find */
-DSTR_API dstr_size_t dstr_find(const dstr* s, dstr_size_t pos, const dstr_char_t* sub_data, dstr_size_t sub_size);
-/* Wrapper around strv_find */
-DSTR_API dstr_size_t dstr_find_str     (const dstr* s, dstr_size_t pos, const dstr_char_t* sub);
-/* Wrapper around strv_find */
-DSTR_API dstr_size_t dstr_find_char    (const dstr* s, dstr_size_t pos, dstr_char_t ch);
-/* Wrapper around strv_find */
-DSTR_API dstr_size_t dstr_find_view    (const dstr* s, dstr_size_t pos, strv sub);
-/* Wrapper around strv_find */
-DSTR_API dstr_size_t dstr_find_dstr    (const dstr* s, dstr_size_t pos, const dstr* sub);
+/* Replace the content between the range [index - (index + count)] with the content of 'replacing'. */
+DSTR_API void dstr_replace_range       (dstr* s, dstr_size_t index, dstr_size_t count, strv replacing);
 
 DSTR_API void dstr_copy_to  (const dstr* s, dstr* dest);
 DSTR_API void dstr_swap     (dstr* s, dstr* other);
-
 
 /*-----------------------------------------------------------------------*/
 /* dstr - Extended API */
 /*-----------------------------------------------------------------------*/
 
-DSTR_API void dstr_trim     (dstr* s);
-DSTR_API void dstr_ltrim    (dstr* s);
-DSTR_API void dstr_rtrim    (dstr* s);
+DSTR_API strv dstr_trimmed (dstr* s);
 
-/* @TODO create tests for dstr_substitute_view */
-DSTR_API void dstr_substitute_view      (dstr* s, strv to_replaced, strv with);
-DSTR_API void dstr_substitute_dstr      (dstr* s, const dstr* to_replaced, const dstr* with);
-DSTR_API void dstr_substitute_str       (dstr* s, const dstr_char_t* to_replaced, const dstr_char_t* with);
+DSTR_API void dstr_replace      (dstr* s, strv to_replace, strv with);
+DSTR_API void dstr_replace_dstr (dstr* s, const dstr* to_replaced, const dstr* with);
+DSTR_API void dstr_replace_str  (dstr* s, const dstr_char_t* to_replaced, const dstr_char_t* with);
 
 #define DSTR_DEFINETYPE(TYPENAME, LOCAL_BUFFER_SIZE)          \
 typedef struct TYPENAME TYPENAME;                             \
@@ -414,11 +312,6 @@ DSTR_DEFINETYPE(dstr1024, 1024);
 
 DSTR_INTERNAL void  dstr__reserve_no_preserve_data(dstr* s, dstr_size_t new_string_capacity);
 DSTR_INTERNAL void  dstr__reserve_internal(dstr* s, dstr_size_t new_string_capacity, dstr_bool preserve_data);
-/* DSTR_API is used instead of DSTR_INTERNAL because other libaries also use it. */
-DSTR_API void* dstr__memory_find(const void* memory_ptr, dstr_size_t mem_len, const void* pattern_ptr, dstr_size_t pattern_len);
-
-/* Equivalent of strncmp, this implementation does not stop on null termination char */
-DSTR_INTERNAL int dstr__lexicagraphical_cmp(const dstr_char_t* left, size_t count_left, const dstr_char_t* right, size_t count_right);
 
 DSTR_INTERNAL int dstr__is_allocated      (dstr* s);
 
@@ -432,222 +325,7 @@ DSTR_INTERNAL dstr_bool    dstr__is_using_local_buffer (dstr* s);
 
 #ifdef DSTR_IMPLEMENTATION
 
-DSTR_INTERNAL DSTR_SIZE_T sizeof_nchar(int count) { return count * sizeof(dstr_char_t); }
-
-DSTR_API strv
-strv_make()
-{
-	strv sv;
-	sv.data = 0;
-	sv.size = 0;
-	return sv;
-}
-
-DSTR_API strv
-strv_make_from(const dstr_char_t* data, dstr_size_t size)
-{
-	strv sv;
-	sv.data = data;
-	sv.size = size;
-	return sv;
-}
-
-DSTR_API strv
-strv_make_from_str(const char* str)
-{
-	return strv_make_from(str, strlen(str));
-}
-
-DSTR_API strv
-strv_make_from_view(strv view)
-{
-	return strv_make_from(view.data, view.size);
-}
-
-DSTR_API void
-strv_reset(strv* sv)
-{
-	sv->size = 0;
-	sv->data = 0;
-}
-
-DSTR_API void
-strv_assign(strv* sv, const dstr_char_t* data, dstr_size_t size)
-{
-	sv->size = size;
-	sv->data = data;
-}
-
-DSTR_API void
-strv_assign_str(strv* sv, const dstr_char_t* str)
-{
-	if (str == 0) /* Maybe this case shouldn't be possible? */
-	{
-		sv->size = 0;
-		sv->data = 0;
-	}
-	else
-	{
-		sv->size = strlen(str);
-		sv->data = str;
-	}
-}
-
-DSTR_API dstr_bool
-strv_empty(strv sv)
-{
-	return sv.size == 0;
-}
-
-DSTR_API int
-strv_compare(strv sv, const dstr_char_t* data, dstr_size_t size)
-{
-	return dstr__lexicagraphical_cmp(sv.data, sv.size, data, size);
-}
-
-DSTR_API int
-strv_compare_view(strv sv, strv other)
-{
-	return strv_compare(sv, other.data, other.size);
-}
-
-DSTR_API int
-strv_compare_str(strv sv, const dstr_char_t* str)
-{
-	return strv_compare(sv, str, strlen(str));
-}
-
-DSTR_API dstr_bool
-strv_equals(strv sv, strv other)
-{
-	return strv_compare_view(sv, other) == 0;
-}
-
-DSTR_API dstr_bool
-strv_equals_str(strv sv, const dstr_char_t* str)
-{
-	return strv_compare_str(sv, str) == 0;
-}
-
-DSTR_API dstr_bool
-strv_less_than(strv sv, strv other)
-{
-	return strv_compare_view(sv, other) < 0;
-}
-
-DSTR_API dstr_bool
-strv_less_than_str(strv sv, const dstr_char_t* str)
-{
-	return strv_compare_str(sv, str) < 0;
-}
-
-DSTR_API dstr_bool
-strv_greater_than(strv sv, strv other)
-{
-	return strv_compare_view(sv, other) > 0;
-}
-
-DSTR_API dstr_bool
-strv_greater_than_str(strv sv, const dstr_char_t* str)
-{
-	return strv_compare_str(sv, str) > 0;
-}
-
-DSTR_API dstr_it
-strv_begin(strv sv)
-{
-	return (dstr_it)(sv.data);
-}
-
-DSTR_API dstr_it
-strv_end(strv sv)
-{
-	return (dstr_it)(sv.data + sv.size);
-}
-
-DSTR_API dstr_char_t
-strv_front(strv view)
-{
-	DSTR_ASSERT(view.size > 0);
-	return view.data[0];
-}
-
-DSTR_API dstr_char_t
-strv_back(strv view)
-{
-	DSTR_ASSERT(view.size > 0);
-	return view.data[view.size - 1];
-}
-
-DSTR_API dstr_size_t
-strv_find(strv sv, dstr_size_t pos, const dstr_char_t* sub_data, dstr_size_t sub_size)
-{
-	dstr_size_t result = DSTR_NPOS;
-
-	int worth_a_try = sub_size
-		&& (pos <= sv.size)
-		&& (pos <= (sv.size - sub_size));
-
-	if (worth_a_try) {
-
-		void* found = dstr__memory_find(sv.data + pos, sv.size, sub_data, sub_size);
-
-		if (found) {
-			result = (dstr_char_t*)found - sv.data;
-		}
-	}
-
-	return result;
-}
-
-DSTR_API dstr_size_t
-strv_find_str(strv sv, dstr_size_t pos, const dstr_char_t* sub)
-{
-	return strv_find(sv, pos, sub, strlen(sub));
-}
-
-DSTR_API dstr_size_t
-strv_find_char(strv sv, dstr_size_t pos, dstr_char_t ch)
-{
-	return strv_find(sv, pos, &ch, 1);
-}
-
-DSTR_API dstr_size_t
-strv_find_view(strv sv, dstr_size_t pos, strv sub)
-{
-	return strv_find(sv, pos, sub.data, sub.size);
-}
-
-DSTR_API strv
-strv_substr(strv sv, const dstr_it pos, dstr_size_t count)
-{
-	const dstr_it last = pos + count;
-
-	DSTR_ASSERT(pos >= strv_begin(sv) && pos < strv_end(sv));
-	DSTR_ASSERT(last >= pos && last <= strv_end(sv));
-
-	strv result;
-
-	result.data = pos;
-	result.size = count;
-
-	return result;
-}
-
-DSTR_API strv
-strv_substr_from(strv sv, dstr_size_t index, dstr_size_t count)
-{
-	const dstr_it it = (const dstr_it)(sv.data + index);
-	return strv_substr(sv, it, count);
-}
-
-DSTR_API void
-strv_swap(strv* s, strv* other)
-{
-	const strv tmp = *s;
-	*s = *other;
-	*other = tmp;
-}
+DSTR_INTERNAL dstr_size_t sizeof_nchar(int count) { return count * sizeof(dstr_char_t); }
 
 /* Shared default value to ensure that s->data is always valid with a '\0' char when a dstr is initialized */
 static dstr_char_t DSTR__DEFAULT_DATA[1] = { '\0' };
@@ -744,18 +422,13 @@ dstr_make_reserve(dstr_size_t capacity) {
 DSTR_API dstr
 dstr_make_from(const dstr_char_t* data, dstr_size_t size)
 {
-	dstr result;
-
-	dstr_init(&result);
-	dstr_assign(&result, data, size);
-
-	return result;
+	return dstr_make_from_strv(strv_make_from(data, size));
 }
 
 DSTR_API dstr
 dstr_make_from_str(const dstr_char_t* str)
 {
-	return dstr_make_from(str, strlen(str));
+	return dstr_make_from_strv(strv_make_from_str(str));
 }
 
 DSTR_API dstr
@@ -765,15 +438,20 @@ dstr_make_from_char(dstr_char_t ch)
 }
 
 DSTR_API dstr
-dstr_make_from_view(strv view)
+dstr_make_from_strv(strv sv)
 {
-	return dstr_make_from(view.data, view.size);
+	dstr result;
+
+	dstr_init(&result);
+	dstr_assign(&result, sv);
+
+	return result;
 }
 
 DSTR_API dstr
-dstr_make_from_dstr(const dstr* str)
+dstr_make_from_dstr(const dstr* s)
 {
-	return dstr_make_from(str->data, str->size);
+	return dstr_make_from_strv(dstr_to_strv(s));
 }
 
 DSTR_API dstr
@@ -815,69 +493,69 @@ dstr_make_from_vfmt(const char* fmt, va_list args)
 }
 
 DSTR_API strv
-dstr_to_view(const dstr* s)
+dstr_to_strv(const dstr* s)
 {
 	return strv_make_from(s->data, s->size);
 }
 
 DSTR_API int
-dstr_compare(const dstr* s, const dstr_char_t* data, dstr_size_t size)
+dstr_compare(const dstr* s, strv sv)
 {
-	return strv_compare(dstr_to_view(s), data, size);
+	return strv_compare(dstr_to_strv(s), sv);
 }
 
 DSTR_API int
 dstr_compare_str(const dstr* s, const dstr_char_t* str)
 {
-	return dstr_compare(s, str, strlen(str));
+	return strv_compare_str(dstr_to_strv(s), str);
 }
 
 DSTR_API int
-dstr_compare_dstr(const dstr* s, const dstr* str)
+dstr_compare_dstr(const dstr* s, const dstr* other)
 {
-	return dstr_compare(s, str->data, str->size);
+	return strv_compare(dstr_to_strv(s), dstr_to_strv(other));
 }
 
 DSTR_API dstr_bool
-dstr_equals(const dstr* s, const dstr_char_t* data, dstr_size_t size)
+dstr_equals(const dstr* s, strv sv)
 {
-	return dstr_compare(s, data, size) == 0;
+	return strv_equals(dstr_to_strv(s), sv);
 }
 
 DSTR_API dstr_bool
 dstr_equals_str(const dstr* s, const dstr_char_t* str)
 {
-	return dstr_compare(s, str, strlen(str)) == 0;
+	return strv_equals_str(dstr_to_strv(s), str);
 }
 
 DSTR_API dstr_bool
-dstr_equals_dstr(const dstr* s, const dstr* str)
+dstr_equals_dstr(const dstr* s, const dstr* other)
 {
-	return dstr_compare(s, str->data, str->size) == 0;
+	return strv_equals(dstr_to_strv(s), dstr_to_strv(other));
 }
 
 DSTR_API dstr_bool
-dstr_less_than(const dstr* s, const dstr_char_t* data, dstr_size_t size)
+dstr_less_than(const dstr* s, strv sv)
 {
-	return dstr_compare(s, data, size) < 0;
+	return strv_less_than(dstr_to_strv(s), sv);
 }
 
 DSTR_API dstr_bool
 dstr_less_than_str(const dstr* s, const dstr_char_t* str)
 {
-	return dstr_compare(s, str, strlen(str)) < 0;
+	return strv_less_than_str(dstr_to_strv(s), str);
 }
 
 DSTR_API dstr_bool
-dstr_greater_than(const dstr* s, const dstr_char_t* data, dstr_size_t size)
+dstr_greater_than(const dstr* s, strv sv)
 {
-	return dstr_compare(s, data, size) > 0;
+	return strv_greater_than(dstr_to_strv(s), sv);
 }
 
 DSTR_API dstr_bool
 dstr_greater_than_str(const dstr* s, const dstr_char_t* str)
 {
-	return dstr_compare(s, str, strlen(str)) > 0;
+	return strv_greater_than_str(dstr_to_strv(s), str);
 }
 
 DSTR_API dstr_char_t
@@ -906,32 +584,27 @@ dstr_reserve(dstr* s, dstr_size_t new_string_capacity)
 }
 
 DSTR_API void
-dstr_append(dstr* s, const dstr_char_t* data, dstr_size_t size)
+dstr_append(dstr* s, strv sv)
 {
-	dstr_append_from(s, s->size, data, size);
+	dstr_append_from(s, s->size, sv);
 }
 
 DSTR_API void
 dstr_append_str(dstr* s, const dstr_char_t* str)
 {
-	dstr_append(s, str, strlen(str));
+	dstr_append(s, strv_make_from_str(str));
 }
 
-DSTR_API void dstr_append_char(dstr* s, const dstr_char_t ch)
+DSTR_API void
+dstr_append_char(dstr* s, const dstr_char_t ch)
 {
 	dstr_append_char_from(s, s->size, ch);
 }
 
 DSTR_API void
-dstr_append_view(dstr* s, strv view)
-{
-	dstr_append(s, view.data, view.size);
-}
-
-DSTR_API void
 dstr_append_dstr(dstr* s, const dstr* other)
 {
-	dstr_append(s, other->data, other->size);
+	dstr_append(s, dstr_to_strv(other));
 }
 
 DSTR_API void
@@ -968,37 +641,31 @@ dstr_append_f(dstr* s, const char* fmt, ...)
 }
 
 DSTR_API void
-dstr_append_from(dstr* s, int index, const dstr_char_t* data, dstr_size_t size)
+dstr_append_from(dstr* s, int index, strv sv)
 {
-	dstr__grow_if_needed(s, index + size);
+	dstr__grow_if_needed(s, index + sv.size);
 
-	DSTR_MEMCPY(s->data + index, (const void*)data, sizeof_nchar(size));
-	s->size = index + size;
+	DSTR_MEMCPY(s->data + index, sv.data, sizeof_nchar(sv.size));
+	s->size = index + sv.size;
 	s->data[s->size] = '\0';
 }
 
 DSTR_API void
 dstr_append_str_from(dstr* s, int index, const dstr_char_t* str)
 {
-	dstr_append_from(s, index, str, strlen(str));
+	dstr_append_from(s, index, strv_make_from_str(str));
 }
 
 DSTR_API void
 dstr_append_char_from(dstr*s, int index, char c)
 {
-	dstr_append_from(s, index, &c, 1);
+	dstr_append_from(s, index, strv_make_from(&c, 1));
 }
 
 DSTR_API void
-dstr_append_view_from(dstr* s, int index, strv view)
+dstr_append_dstr_from(dstr* s, int index, const dstr* other)
 {
-	dstr_append_from(s, index, view.data, view.size);
-}
-
-DSTR_API void
-dstr_append_dstr_from(dstr* s, int index, const dstr* str)
-{
-	dstr_append_from(s, index, str->data, str->size);
+	dstr_append_from(s, index, dstr_to_strv(other));
 }
 
 DSTR_API int
@@ -1035,33 +702,27 @@ dstr_pop_back(dstr* s)
 }
 
 DSTR_API void
-dstr_assign(dstr* s, const dstr_char_t* data, dstr_size_t size)
+dstr_assign(dstr* s, strv sv)
 {
-	dstr_append_from(s, 0, data, size);
+	dstr_append_from(s, 0, sv);
 }
 
 DSTR_API void
 dstr_assign_char(dstr* s, dstr_char_t ch)
 {
-	dstr_assign(s, &ch, 1);
+	dstr_assign(s, strv_make_from(&ch, 1));
 }
 
 DSTR_API void
 dstr_assign_str(dstr* s, const dstr_char_t* str)
 {
-	dstr_assign(s, str, strlen(str));
+	dstr_assign(s, strv_make_from_str(str));
 }
 
 DSTR_API void
-dstr_assign_view(dstr* s, strv view)
+dstr_assign_dstr(dstr* s, const dstr* other)
 {
-	dstr_assign(s, view.data, view.size);
-}
-
-DSTR_API void
-dstr_assign_dstr(dstr* s, const dstr* str)
-{
-    dstr_assign(s, str->data, str->size);
+    dstr_assign(s, dstr_to_strv(other));
 }
 
 DSTR_API void
@@ -1173,21 +834,21 @@ dstr_capacity(const dstr* s)
 DSTR_API dstr_it
 dstr_begin(const dstr* s)
 {
-	return strv_begin(dstr_to_view(s));
+	return strv_begin(dstr_to_strv(s));
 }
 
 DSTR_API dstr_it
 dstr_end(const dstr* s)
 {
-	return strv_end(dstr_to_view(s));
+	return strv_end(dstr_to_strv(s));
 }
 
 DSTR_API dstr_it
-dstr_insert(dstr* s, const dstr_it index, const dstr_char_t* data, dstr_size_t size)
+dstr_insert(dstr* s, const dstr_it index, strv sv)
 {
 	DSTR_ASSERT(index >= dstr_begin(s) && index <= dstr_end(s));
 
-	const dstr_size_t count = size;
+	const dstr_size_t count = sv.size;
 	const ptrdiff_t offset = index - s->data;
 	const dstr_size_t distance_from_index_to_end = (dstr_size_t)(dstr_end(s) - index);
 	const dstr_size_t capacity_needed = s->size + count;
@@ -1204,7 +865,7 @@ dstr_insert(dstr* s, const dstr_it index, const dstr_char_t* data, dstr_size_t s
 		);
 	}
 
-	DSTR_MEMCPY(s->data + offset, data, sizeof_nchar(count));
+	DSTR_MEMCPY(s->data + offset, sv.data, sizeof_nchar(count));
 
 	s->size += count;
 	s->data[s->size] = '\0';
@@ -1215,25 +876,19 @@ dstr_insert(dstr* s, const dstr_it index, const dstr_char_t* data, dstr_size_t s
 DSTR_API dstr_it
 dstr_insert_str(dstr* s, const dstr_it index, const dstr_char_t* str)
 {
-	return dstr_insert(s, index, str, strlen(str));
+	return dstr_insert(s, index, strv_make_from_str(str));
 }
 
 DSTR_API dstr_it
 dstr_insert_char(dstr* s, const dstr_it index, const dstr_char_t ch)
 {
-	return dstr_insert(s, index, &ch, 1);
+	return dstr_insert(s, index, strv_make_from(&ch, 1));
 }
 
 DSTR_API dstr_it
-dstr_insert_view(dstr* s, const dstr_it index, strv view)
+dstr_insert_dstr(dstr* s, const dstr_it index, const dstr* other)
 {
-	return dstr_insert(s, index, view.data, view.size);
-}
-
-DSTR_API dstr_it
-dstr_insert_dstr(dstr* s, const dstr_it index, const dstr* str)
-{
-	return dstr_insert(s, index, str->data, str->size);
+	return dstr_insert(s, index, dstr_to_strv(other));
 }
 
 DSTR_API dstr_it
@@ -1359,112 +1014,14 @@ dstr_resize_fill(dstr* s, dstr_size_t size, dstr_char_t ch)
 }
 
 DSTR_API void
-dstr_replace_with(dstr* s, dstr_size_t index, dstr_size_t count, const dstr_char_t* r_data, dstr_size_t r_size)
+dstr_replace_range(dstr* s, dstr_size_t index, dstr_size_t count, strv sv)
 {
 	DSTR_ASSERT(index <= s->size);
 	DSTR_ASSERT(count <= s->size);
 	DSTR_ASSERT(index + count <= s->size);
 
-	if (r_size < count) /* mem replacing <  mem to replace */
-	{ 
-		char* first = s->data + index;
-		char* last = (s->data + index + count);
-
-		dstr_size_t count_to_move = s->size - (index + count);
-		dstr_size_t count_removed = count - r_size;
-
-		if (count_to_move) {
-			DSTR_MEMMOVE(last - count_removed, last, sizeof_nchar(count_to_move));
-		}
-		if (s->size) {
-			DSTR_MEMCPY(first, r_data, sizeof_nchar(r_size));
-		}
-
-		s->size -= count_removed;
-		s->data[s->size] = '\0';
-
-	}
-	else if (r_size > count) /* mem replacing >  mem to replace */
-	{ 
-		dstr_size_t extra_count = r_size - count;
-		dstr_size_t needed_capacity = s->size + extra_count;
-		dstr_size_t count_to_move = s->size - index - count;
-
-		dstr__grow_if_needed(s, needed_capacity);
-
-		/* Need to set this after "grow" because of potential allocation */
-		char* first = s->data + index;
-		char* last = s->data + index + count;
-
-		if (count_to_move) {
-			DSTR_MEMMOVE(last + extra_count, last, sizeof_nchar(count_to_move));
-		}
-
-		DSTR_MEMCPY(first, r_data, sizeof_nchar(r_size));
-
-		s->size += extra_count;
-		s->data[s->size] = '\0';
-
-	}
-	else /* mem replacing == mem to replace */
-	{ 
-		char* first = s->data + index;
-		DSTR_MEMCPY(first, r_data, sizeof_nchar(r_size));
-	}
-}
-
-DSTR_API void
-dstr_replace_with_str(dstr* s, dstr_size_t index, dstr_size_t count, const dstr_char_t* replacing)
-{
-	dstr_replace_with(s, index, count, replacing, strlen(replacing));
-}
-
-DSTR_API void
-dstr_replace_with_char(dstr* s, dstr_size_t index, dstr_size_t count, const dstr_char_t ch)
-{
-	dstr_replace_with(s, index, count, &ch, 1);
-}
-
-DSTR_API void
-dstr_replace_with_view(dstr* s, dstr_size_t index, dstr_size_t count, strv replacing)
-{
-	dstr_replace_with(s, index, count, replacing.data, replacing.size);
-}
-
-DSTR_API void
-dstr_replace_with_dstr(dstr* s, dstr_size_t index, dstr_size_t count, const dstr* replacing)
-{
-	dstr_replace_with(s, index, count, replacing->data, replacing->size);
-}
-
-DSTR_API dstr_size_t
-dstr_find(const dstr* s, dstr_size_t pos, const dstr_char_t* sub_data, dstr_size_t sub_size)
-{
-	return strv_find(dstr_to_view(s), pos, sub_data, sub_size);
-}
-
-DSTR_API dstr_size_t
-dstr_find_str(const dstr* s, dstr_size_t pos, const dstr_char_t* sub)
-{
-	return strv_find_str(dstr_to_view(s), pos, sub);
-}
-
-DSTR_API dstr_size_t
-dstr_find_char(const dstr* s, dstr_size_t pos, dstr_char_t ch)
-{
-	return strv_find_char(dstr_to_view(s), pos, ch);
-}
-
-DSTR_API dstr_size_t
-dstr_find_view(const dstr* s, dstr_size_t pos, strv sub)
-{
-	return strv_find_view(dstr_to_view(s), pos, sub);
-}
-
-DSTR_API dstr_size_t
-dstr_find_dstr(const dstr* s, dstr_size_t pos, const dstr* sub)
-{
-	return strv_find_view(dstr_to_view(s), pos, dstr_to_view(sub));
+	dstr_erase(s, s->data + index, count);
+	dstr_insert(s, s->data + index, sv);
 }
 
 DSTR_API void
@@ -1488,68 +1045,28 @@ dstr_swap(dstr* s, dstr* other)
 /* dstr - Extended Implementation */
 /*-----------------------------------------------------------------------*/
 
-DSTR_API void
-dstr_trim(dstr* s)
+DSTR_API strv
+dstr_trimmed(dstr* s)
 {
-    dstr_char_t* cursor_left  = s->data;
-    dstr_char_t* cursor_right = s->data + (s->size - 1);
-
-    /* Trim right */
-    while (cursor_right >= cursor_left && isspace(*cursor_right)) {
-        --cursor_right;
-    }
-
-	/* Trim left */
-    while (cursor_right > cursor_left && isspace(*cursor_left)) {
-        ++cursor_left;
-    }
-
-    s->size = (cursor_right - cursor_left) + 1;
-    DSTR_MEMMOVE(s->data, cursor_left, sizeof_nchar(s->size));
-
-    s->data[s->size] = '\0';
+	return strv_trimmed(dstr_to_strv(s));
 }
 
 DSTR_API void
-dstr_ltrim(dstr* s)
-{
-    char *cursor = s->data;
-
-    while (s->size > 0 && isspace(*cursor)) {
-        ++cursor;
-        --s->size;
-    }
-
-    DSTR_MEMMOVE(s->data, cursor, sizeof_nchar(s->size));
-    s->data[s->size] = '\0';
-}
-
-DSTR_API void
-dstr_rtrim(dstr* s)
-{
-    while (s->size > 0 && isspace(s->data[s->size - 1])) {
-        --s->size;
-    }
-    s->data[s->size] = '\0';
-}
-
-DSTR_API void
-dstr_substitute_view(dstr* s, strv to_replaced, strv with)
+dstr_replace(dstr* s, strv to_replaced, strv with)
 {
     const void* found;
 
     const dstr_char_t* s_begin = s->data;
     const dstr_char_t* s_end = s->data + s->size;
 
-    while((found = dstr__memory_find(
-               (const void*)s_begin,
-               (dstr_size_t)s_end - (dstr_size_t)s_begin,
-               (void*)to_replaced.data,
-               to_replaced.size)) != 0) {
+    while((found = strv_memory_find(
+				strv_make_from(s_begin, (dstr_size_t)s_end - (dstr_size_t)s_begin),
+				strv_make_from(to_replaced.data, to_replaced.size)
+		)) != 0) {
 
         dstr_size_t index = (dstr_char_t*)found - s->data;
 
-        dstr_replace_with_view(s, index, to_replaced.size, with);
+        dstr_replace_range(s, index, to_replaced.size, with);
 
         /* reset begin and end, could be invalidated due to reallocation */
 	    /* put the next position to index + found word length */
@@ -1559,25 +1076,18 @@ dstr_substitute_view(dstr* s, strv to_replaced, strv with)
 }
 
 DSTR_API void
-dstr_substitute_dstr(dstr* s, const dstr* to_replaced, const dstr* with)
+dstr_replace_dstr(dstr* s, const dstr* to_replaced, const dstr* with)
 {
-	dstr_substitute_view(s, dstr_to_view(to_replaced), dstr_to_view(with));
+	dstr_replace(s, dstr_to_strv(to_replaced), dstr_to_strv(with));
 }
 
 DSTR_API void
-dstr_substitute_str(dstr* s, const dstr_char_t* to_replaced, const dstr_char_t* with)
+dstr_replace_str(dstr* s, const dstr_char_t* to_replaced, const dstr_char_t* with)
 {
-    const strv tmp_to_replaced = {
-        strlen(to_replaced),
-		(dstr_char_t*)to_replaced,
-    };
+	const strv tmp_to_replaced = strv_make_from_str(to_replaced);
+	const strv tmp_with = strv_make_from_str(with);
 
-    const strv tmp_with = {
-        strlen(with),
-		(dstr_char_t*)with,
-    };
-
-    dstr_substitute_view(s, tmp_to_replaced, tmp_with);
+    dstr_replace(s, tmp_to_replaced, tmp_with);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -1623,60 +1133,10 @@ dstr__reserve_internal(dstr* s, dstr_size_t new_string_capacity, dstr_bool prese
 }
 
 DSTR_INTERNAL int
-dstr__lexicagraphical_cmp(const dstr_char_t* str_left, size_t count_left, const dstr_char_t* str_right, size_t count_right)
-{
-	dstr_char_t c1, c2;
-	dstr_size_t min_size = count_left < count_right ? count_left : count_right;
-	while (min_size-- > 0)
-	{
-		c1 = *str_left++;
-		c2 = *str_right++;
-		if (c1 != c2)
-			return c1 < c2 ? 1 : -1;
-	};
-
-	return count_left - count_right;
-}
-
-DSTR_INTERNAL int
 dstr__is_allocated(dstr* s)
 {
     return s->data != dstr__get_local_buffer(s) && s->data != DSTR__DEFAULT_DATA;
 }
-
-DSTR_API void*
-dstr__memory_find(const void* memory_ptr, dstr_size_t mem_len, const void* pattern_ptr, dstr_size_t pattern_len)
-{
-    const char *mem_ptr = (const char *)memory_ptr;
-    const char *patt_ptr = (const char *)pattern_ptr;
-
-	/* pattern_len can't be greater than mem_len */
-    if ((mem_len == 0) || (pattern_len == 0) || pattern_len > mem_len) {
-        return 0;
-    }
-
-	/* pattern is a char */
-    if (pattern_len == 1) {
-        return memchr((void*)mem_ptr, *patt_ptr, mem_len);
-    }
-
-    /* Last possible position */
-    const char* cur = mem_ptr;
-    const char* last = mem_ptr + mem_len - pattern_len;
-
-    while(cur <= last)
-	{
-		/* Test the first char before calling a function */
-        if (*cur == *patt_ptr && DSTR_MEMCMP(cur, pattern_ptr, pattern_len) == 0)
-		{
-            return (void*)cur;
-        }
-        ++cur;
-    }
-
-    return 0;
-}
-
 
 /* Returns true if the dstr has been built originally with a local buffer */
 DSTR_INTERNAL dstr_bool
