@@ -324,7 +324,7 @@ eat_email_suffix(const char** cursor, const char* end)
 	while (current < end)
 	{
 		dstr_bool valid = !!(char_is_alphanum(*current)
-			|| strv_contains_char(strv_make_from_str(".!#$%&’*+/=?^_`{|}~-"), *current))
+			|| strv_contains_char(strv_make_from_str(".!#$%&â€™*+/=?^_`{|}~-"), *current))
 			;
 
 		if (!valid) {
