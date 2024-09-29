@@ -219,7 +219,9 @@ os_std_console
 
 #if defined(WIN32)
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+
 #include <IntSafe.h>
 bool os_std_console_setup()
 {
