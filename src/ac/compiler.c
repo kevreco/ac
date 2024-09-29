@@ -64,7 +64,7 @@ bool ac_compiler_compile(ac_compiler* c)
         return true;
     }
 
-    struct ac_converter_c conv;
+    ac_converter_c conv;
 
     ac_converter_c_init(&conv, &c->mgr);
 

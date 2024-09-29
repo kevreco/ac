@@ -9,33 +9,33 @@
 
 #define CAST_TO(type_, ident_, object_) type_ ident_ = (type_)(object_)
 
-static void print_top_level(struct ac_converter_c* c);
-static void print_expr(struct ac_converter_c* c, ac_ast_expr* expr);
-static void print_identifier(struct ac_converter_c* c, ac_ast_identifier* identifier);
-static void print_type_specifier(struct ac_converter_c* c, ac_ast_type_specifier* type_specifier);
-static void print_pointers(struct ac_converter_c* c, int count);
-static void print_array_specifier(struct ac_converter_c* c, ac_ast_array_specifier* array_specifier);
-static void print_parameters(struct ac_converter_c* c, ac_ast_parameters* parameters);
-static void print_parameter(struct ac_converter_c* c, ac_ast_parameter* parameter);
-static void print_declaration(struct ac_converter_c* c, ac_ast_declaration* declaration);
-static void print_declarator(struct ac_converter_c* c, ac_ast_declarator* declarator);
+static void print_top_level(ac_converter_c* c);
+static void print_expr(ac_converter_c* c, ac_ast_expr* expr);
+static void print_identifier(ac_converter_c* c, ac_ast_identifier* identifier);
+static void print_type_specifier(ac_converter_c* c, ac_ast_type_specifier* type_specifier);
+static void print_pointers(ac_converter_c* c, int count);
+static void print_array_specifier(ac_converter_c* c, ac_ast_array_specifier* array_specifier);
+static void print_parameters(ac_converter_c* c, ac_ast_parameters* parameters);
+static void print_parameter(ac_converter_c* c, ac_ast_parameter* parameter);
+static void print_declaration(ac_converter_c* c, ac_ast_declaration* declaration);
+static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator);
 
-static void print_fv(struct ac_converter_c* c, const char* fmt, va_list args);
-static void print_f(struct ac_converter_c* c, const char* fmt, ...);
-static void print_str(struct ac_converter_c* c, const char* str);
-static void print_strv(struct ac_converter_c* c, strv view);
+static void print_fv(ac_converter_c* c, const char* fmt, va_list args);
+static void print_f(ac_converter_c* c, const char* fmt, ...);
+static void print_str(ac_converter_c* c, const char* str);
+static void print_strv(ac_converter_c* c, strv view);
 
 static size_t write_to_file(strv str, FILE* f);
-static void push_indent(struct ac_converter_c* c);
-static void pop_indent(struct ac_converter_c* c);
-static void indent(struct ac_converter_c* c);
-static void push_brace(struct ac_converter_c* c);
-static void pop_brace(struct ac_converter_c* c);
-static void new_line(struct ac_converter_c* c);
+static void push_indent(ac_converter_c* c);
+static void pop_indent(ac_converter_c* c);
+static void indent(ac_converter_c* c);
+static void push_brace(ac_converter_c* c);
+static void pop_brace(ac_converter_c* c);
+static void new_line(ac_converter_c* c);
 
-void ac_converter_c_init(struct ac_converter_c* c, ac_manager* mgr)
+void ac_converter_c_init(ac_converter_c* c, ac_manager* mgr)
 {
-    memset(c, 0, sizeof(struct ac_converter_c));
+    memset(c, 0, sizeof(ac_converter_c));
 
     c->mgr = mgr;
     dstr_init(&c->string_buffer);
@@ -43,12 +43,12 @@ void ac_converter_c_init(struct ac_converter_c* c, ac_manager* mgr)
     c->indent_pattern = "    ";
 }
 
-void ac_converter_c_destroy(struct ac_converter_c* c)
+void ac_converter_c_destroy(ac_converter_c* c)
 {
     dstr_destroy(&c->string_buffer);
 }
 
-void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath)
+void ac_converter_c_convert(ac_converter_c* c, const char* filepath)
 {
     print_top_level(c);
 
@@ -57,7 +57,7 @@ void ac_converter_c_convert(struct ac_converter_c* c, const char* filepath)
     re_file_close(f);
 }
 
-static void print_top_level(struct ac_converter_c* c)
+static void print_top_level(ac_converter_c* c)
 {
     ac_ast_top_level* top_level = c->mgr->top_level;
 
@@ -68,7 +68,7 @@ static void print_top_level(struct ac_converter_c* c)
     }
 }
 
-static void print_expr(struct ac_converter_c* c, ac_ast_expr* expr)
+static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
 {
     if (ac_ast_is_declaration(expr))
     {
@@ -116,17 +116,17 @@ static void print_expr(struct ac_converter_c* c, ac_ast_expr* expr)
     }
 }
 
-static void print_identifier(struct ac_converter_c* c, ac_ast_identifier* identifier)
+static void print_identifier(ac_converter_c* c, ac_ast_identifier* identifier)
 {
     print_strv(c, identifier->name);
 }
 
-static void print_type_specifier(struct ac_converter_c* c, ac_ast_type_specifier* type_specifier)
+static void print_type_specifier(ac_converter_c* c, ac_ast_type_specifier* type_specifier)
 {
     print_identifier(c, type_specifier->identifier);
 }
 
-static void print_pointers(struct ac_converter_c* c, int count)
+static void print_pointers(ac_converter_c* c, int count)
 {
     if (count)
     {
@@ -136,14 +136,14 @@ static void print_pointers(struct ac_converter_c* c, int count)
     }
 }
 
-static void print_array_specifier(struct ac_converter_c* c, ac_ast_array_specifier* array_specifier)
+static void print_array_specifier(ac_converter_c* c, ac_ast_array_specifier* array_specifier)
 {
     print_str(c, "[");
     print_expr(c, array_specifier->size_expression);
     print_str(c, "]");
 }
 
-static void print_parameters(struct ac_converter_c* c, ac_ast_parameters* parameters)
+static void print_parameters(ac_converter_c* c, ac_ast_parameters* parameters)
 {
     print_str(c, "(");
 
@@ -161,7 +161,7 @@ static void print_parameters(struct ac_converter_c* c, ac_ast_parameters* parame
     print_str(c, ")");
 }
 
-static void print_parameter(struct ac_converter_c* c, ac_ast_parameter* parameter)
+static void print_parameter(ac_converter_c* c, ac_ast_parameter* parameter)
 {
     print_identifier(c, parameter->type_name);
 
@@ -176,7 +176,7 @@ static void print_parameter(struct ac_converter_c* c, ac_ast_parameter* paramete
     }
 }
 
-static void print_declaration(struct ac_converter_c* c, ac_ast_declaration* declaration)
+static void print_declaration(ac_converter_c* c, ac_ast_declaration* declaration)
 {
     /* @OPT: ac_ast_type_DECLARATION_SIMPLE and ac_ast_type_DECLARATION_FUNCTION_DEFINITION are really close to each other
        This can be optimized if it's still true in few years.
@@ -232,7 +232,7 @@ static void print_declaration(struct ac_converter_c* c, ac_ast_declaration* decl
     }
 }
 
-static void print_declarator(struct ac_converter_c* c, ac_ast_declarator* declarator)
+static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator)
 {
     if (declarator->pointer_depth)
     {
@@ -264,12 +264,12 @@ static void print_declarator(struct ac_converter_c* c, ac_ast_declarator* declar
     }
 }
 
-static void print_fv(struct ac_converter_c* c, const char* fmt, va_list args)
+static void print_fv(ac_converter_c* c, const char* fmt, va_list args)
 {
     dstr_append_fv(&c->string_buffer, fmt, args);
 }
 
-static void print_f(struct ac_converter_c* c, const char* fmt, ...)
+static void print_f(ac_converter_c* c, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -277,12 +277,12 @@ static void print_f(struct ac_converter_c* c, const char* fmt, ...)
     va_end(args);
 }
 
-static void print_str(struct ac_converter_c* c, const char* str)
+static void print_str(ac_converter_c* c, const char* str)
 {
     print_f(c, "%s", str);
 }
 
-static void print_strv(struct ac_converter_c* c, strv view)
+static void print_strv(ac_converter_c* c, strv view)
 {
     print_f(c, "%.*s", view.size, view.data);
 }
@@ -292,17 +292,17 @@ static size_t write_to_file(strv str, FILE* f)
     return fwrite(str.data, str.size, 1, f);
 }
 
-static void push_indent(struct ac_converter_c* c)
+static void push_indent(ac_converter_c* c)
 {
     c->indentation_level += 1;
 }
 
-static void pop_indent(struct ac_converter_c* c)
+static void pop_indent(ac_converter_c* c)
 {
     c->indentation_level -= 1;
 }
 
-static void indent(struct ac_converter_c* c)
+static void indent(ac_converter_c* c)
 {
     int remaining = c->indentation_level;
     while (remaining > 0)
@@ -313,7 +313,7 @@ static void indent(struct ac_converter_c* c)
     }
 }
 
-static void push_brace(struct ac_converter_c* c)
+static void push_brace(ac_converter_c* c)
 {
     new_line(c);
     print_str(c, "{");
@@ -321,7 +321,7 @@ static void push_brace(struct ac_converter_c* c)
     new_line(c);
 }
 
-static void pop_brace(struct ac_converter_c* c)
+static void pop_brace(ac_converter_c* c)
 {
     pop_indent(c);
 
@@ -330,7 +330,7 @@ static void pop_brace(struct ac_converter_c* c)
     new_line(c);
 }
 
-static void new_line(struct ac_converter_c* c)
+static void new_line(ac_converter_c* c)
 {
     print_str(c, "\n");
 }
