@@ -67,7 +67,7 @@ ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath)
 
     if (!re_file_exists_str(filepath))
     {
-        ac_report_error("w_manager_load_content: file '%s' does not exist.", filepath);
+        ac_report_error("File '%s' does not exist.", filepath);
         return 0;
     }
 
