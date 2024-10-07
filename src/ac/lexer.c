@@ -22,18 +22,16 @@ static char get_next(ac_lex* l);          /* goto next char and return it */
 
 static void skipn(ac_lex* l, unsigned n); /* skip n char */
 
-static void skip_whitespace(ac_lex* l);
-static void skip_whitespaces_and_comments(ac_lex* l);
-
 static const ac_token* parse_ascii_char_literal(ac_lex* l);
 static const ac_token* parse_number(ac_lex* l);
 
-static void set_token_value(ac_lex* l, const char* data, size_t len);
+static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text); /* set current token and got to next */
 static const ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
 static const ac_token* token_eof(ac_lex* l);   /* set current token to eof and returns it. */
-static const ac_token* set_token(ac_lex* l, enum ac_token_type type);       /* set current token and got to next */
+static const ac_token* token_from_type_and_consume(ac_lex* l, enum ac_token_type type); /* set current token and got to next */
 static size_t token_str_len(enum ac_token_type type);
-static bool try_parse_keyword(const char* str, size_t len, enum ac_token_type* type);
+/* Hack to use 'is_keyword' on some string pointers to static keywords. */
+static bool try_parse_keyword(strv* text, enum ac_token_type* type);
 
 static bool token_type_is_literal(enum ac_token_type type);
 
@@ -46,38 +44,39 @@ w_lex
 -------------------------------------------------------------------------------
 */
 
-void ac_lex_init(ac_lex* l, ac_manager* mgr)
+void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
 {
-    memset(l, 0, sizeof(ac_lex));
+    AC_ASSERT(content.data);
+    AC_ASSERT(content.size);
 
-    l->mgr = mgr;
+    /* Construct. */
+    {
+        memset(l, 0, sizeof(ac_lex));
 
-    l->options.enable_hex_float = true;
+        l->mgr = mgr;
 
+        l->options.enable_hex_float = true;
 
+    }
+
+    /* Initialize source. */
+    {
+        l->filepath = filepath;
+
+        ac_location_init_with_file(&l->location, filepath, content);
+
+        if (content.data && content.size) {
+            l->src = content.data;
+            l->end = content.data + content.size;
+            l->cur = content.data;
+            l->len = content.size;
+        }
+    }
 }
 
 void ac_lex_destroy(ac_lex* l)
 {
     memset(l, 0, sizeof(ac_lex));
-}
-
-void ac_lex_set_source(ac_lex* l, const char* source_content, size_t source_len, const char* filepath)
-{
-    l->filepath = filepath;
-
-    strv content = strv_make_from(source_content, source_len);
-    ac_location_init_with_file(&l->location, filepath, content);
-
-    if (source_content && source_len) {
-        l->src = source_content;
-        l->end = source_content + source_len;
-        l->cur = source_content;
-        l->len = source_len;
-    }
-
-    /* Go to the first token already */
-    ac_lex_goto_next(l);
 }
 
 const ac_token* ac_lex_goto_next(ac_lex* l)
@@ -86,153 +85,179 @@ const ac_token* ac_lex_goto_next(ac_lex* l)
         return token_eof(l);
     }
 
-    skip_whitespaces_and_comments(l);
-
-    if (is_eof(l)) {
-        return token_eof(l);
-    }
-
     switch (l->cur[0]) {
 
     case ' ':
-    case '\n':
-    case '\r':
     case '\t':
     case '\f':
     case '\v': {
-        assert(0 && "internal error unreachable. spaces should have been handled differently.");
+        /* Parse group of whitespace. */
+        const char* start = l->cur;
+        consume_one(l);
+        while (is_whitespace(l)) {
+            consume_one(l);
+        }
+        return token_from_text(l, ac_token_type_HORIZONTAL_WHITESPACE, strv_make_from(start, l->cur - start));
     }
-    case '#': return set_token(l, ac_token_type_HASH);
-    case '[': return set_token(l, ac_token_type_SQUARE_L);
-    case ']': return set_token(l, ac_token_type_SQUARE_R);
-    case '(': return set_token(l, ac_token_type_PAREN_L);
-    case ')': return set_token(l, ac_token_type_PAREN_R);
-    case '{': return set_token(l, ac_token_type_BRACE_L);
-    case '}': return set_token(l, ac_token_type_BRACE_R);
-    case ';': return set_token(l, ac_token_type_SEMI_COLON);
-    case ',': return set_token(l, ac_token_type_COMMA);
-    case '?': return set_token(l, ac_token_type_QUESTION);
+
+    case '\n':
+    case '\r':
+    {
+        /* Parse single line ending. */
+        const char* start = l->cur;
+        consume_one(l);
+        return token_from_text(l, ac_token_type_NEW_LINE, strv_make_from(start, l->cur - start));
+    }
+    case '#': return token_from_type_and_consume(l, ac_token_type_HASH);
+    case '[': return token_from_type_and_consume(l, ac_token_type_SQUARE_L);
+    case ']': return token_from_type_and_consume(l, ac_token_type_SQUARE_R);
+    case '(': return token_from_type_and_consume(l, ac_token_type_PAREN_L);
+    case ')': return token_from_type_and_consume(l, ac_token_type_PAREN_R);
+    case '{': return token_from_type_and_consume(l, ac_token_type_BRACE_L);
+    case '}': return token_from_type_and_consume(l, ac_token_type_BRACE_R);
+    case ';': return token_from_type_and_consume(l, ac_token_type_SEMI_COLON);
+    case ',': return token_from_type_and_consume(l, ac_token_type_COMMA);
+    case '?': return token_from_type_and_consume(l, ac_token_type_QUESTION);
 
     case '=': {
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_DOUBLE_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_DOUBLE_EQUAL);
         }
-        return set_token(l, ac_token_type_EQUAL);
+        return token_from_type_and_consume(l, ac_token_type_EQUAL);
     }
 
     case '!': {
 
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_NOT_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_NOT_EQUAL);
         }
-        return set_token(l, ac_token_type_EXCLAM);
+        return token_from_type_and_consume(l, ac_token_type_EXCLAM);
     }
 
     case '<': {
         if (next_is(l, '<')) {
-            return set_token(l, ac_token_type_DOUBLE_LESS);
+            return token_from_type_and_consume(l, ac_token_type_DOUBLE_LESS);
         }
         else if (next_is(l, '=')) {
-            return set_token(l,  ac_token_type_LESS_EQUAL);
+            return token_from_type_and_consume(l,  ac_token_type_LESS_EQUAL);
         }
-        return set_token(l,  ac_token_type_LESS);
+        return token_from_type_and_consume(l,  ac_token_type_LESS);
     }
 
     case '>': {
 
         if (next_is(l, '>')) {
-            return set_token(l, ac_token_type_DOUBLE_GREATER);
+            return token_from_type_and_consume(l, ac_token_type_DOUBLE_GREATER);
         }
         else if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_GREATER_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_GREATER_EQUAL);
         }
 
-        return set_token(l, ac_token_type_GREATER);
+        return token_from_type_and_consume(l, ac_token_type_GREATER);
     }
 
     case '&': {
         if (next_is(l, '&')) {
-            return set_token(l, ac_token_type_DOUBLE_AMP);
+            return token_from_type_and_consume(l, ac_token_type_DOUBLE_AMP);
         }
         else if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_AMP_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_AMP_EQUAL);
         }
-        return set_token(l, ac_token_type_AMP);
+        return token_from_type_and_consume(l, ac_token_type_AMP);
     }
 
     case '|': {
         if (next_is(l, '|')) {
-            return set_token(l, ac_token_type_DOUBLE_PIPE);
+            return token_from_type_and_consume(l, ac_token_type_DOUBLE_PIPE);
         }
         else if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_PIPE_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_PIPE_EQUAL);
         }
-        return set_token(l, ac_token_type_PIPE);
+        return token_from_type_and_consume(l, ac_token_type_PIPE);
     }
 
     case '+': {
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_PLUS_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_PLUS_EQUAL);
         }
-        return set_token(l, ac_token_type_PLUS);
+        return token_from_type_and_consume(l, ac_token_type_PLUS);
     }
     case '-': {
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_MINUS_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_MINUS_EQUAL);
         }
         else if (next_is(l, '>')) {
-            return set_token(l, ac_token_type_ARROW);
+            return token_from_type_and_consume(l, ac_token_type_ARROW);
         }
-        return set_token(l, ac_token_type_MINUS);
+        return token_from_type_and_consume(l, ac_token_type_MINUS);
     }
 
     case '*': {
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_STAR_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_STAR_EQUAL);
         }
-        return set_token(l, ac_token_type_STAR);
+        return token_from_type_and_consume(l, ac_token_type_STAR);
     }
 
     case '/': {
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_SLASH_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_SLASH_EQUAL);
         }
-        else if (next_is(l, '/')) {
-            assert(0 && "internal error: unreachable opening comments is handled in another place");
+        else if (next_is(l, '/')) {  /* Parse inline comment. */
+            const char* start = l->cur;
+            skipn(l, 2); /* Skip '//' */
+            
+            while (!is_eof(l) && !is_end_line(l)) {
+                consume_one(l);
+            }
+            return token_from_text(l, ac_token_type_COMMENT, strv_make_from(start, l->cur - start));
         }
-        else if (next_is(l, '*')) {
-            assert(0 && "internal error: unreachable opening comments is handled in another place");
+        else if (next_is(l, '*')) {  /* Parse C comment. */
+            const char* start = l->cur;
+            skipn(l, 2); /* Skip opening comment tag. */
+            
+            ac_location location = l->location;
+            /* Skip until closing comment tag. */
+            while (!is_eof(l) && !(is_char(l, '*') && next_is(l, '/'))) {
+                consume_one(l);
+            }
+
+            if (is_eof(l)) {
+                ac_report_error_loc(location, "Cannot find closing comment tag '*/'.\n");
+            }
+            skipn(l, 2); /* Skip closing comment tag. */
+            return token_from_text(l, ac_token_type_COMMENT, strv_make_from(start, l->cur - start));;
         }
 
-        return set_token(l, ac_token_type_SLASH);
+        return token_from_type_and_consume(l, ac_token_type_SLASH);
     }
 
     case '%': {
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_PERCENT_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_PERCENT_EQUAL);
         }
-        return set_token(l, ac_token_type_PERCENT);
+        return token_from_type_and_consume(l, ac_token_type_PERCENT);
     }
 
     case '^': {
         if (next_is(l, '=')) {
-            return set_token(l, ac_token_type_CARET_EQUAL);
+            return token_from_type_and_consume(l, ac_token_type_CARET_EQUAL);
         }
 
-        return set_token(l, ac_token_type_CARET);
+        return token_from_type_and_consume(l, ac_token_type_CARET);
     }
 
     case '.': {
         if (next_is(l, '.')) {
             if (next_next_is(l, '.')) {
-                return set_token(l, ac_token_type_TRIPLE_DOT);
+                return token_from_type_and_consume(l, ac_token_type_TRIPLE_DOT);
             }
-            return set_token(l, ac_token_type_DOUBLE_DOT);
+            return token_from_type_and_consume(l, ac_token_type_DOUBLE_DOT);
         }
-        return set_token(l, ac_token_type_DOT);
+        return token_from_type_and_consume(l, ac_token_type_DOT);
     }
 
-    case ':' : return set_token(l, ac_token_type_COLON);
+    case ':' : return token_from_type_and_consume(l, ac_token_type_COLON);
     case '"' : return parse_ascii_char_literal(l);
     case '\0': return token_eof(l);
 
@@ -259,28 +284,31 @@ const ac_token* ac_lex_goto_next(ac_lex* l)
 
             } while ((is_alphanum(l) || is_char(l, '_') || is_utf8(l)));
 
-            set_token_value(l, start, n);
+            enum ac_token_type type;
+            strv text = strv_make_from(start, n);
 
-            if (strv_equals_str(l->token.text, "true"))
+            if (strv_equals_str(text, "true"))
             {
                 l->token.type = ac_token_type_LITERAL_BOOL;
                 l->token.u.b.value = true;
+                return &l->token;
             }
-            else if (strv_equals_str(l->token.text, "false"))
+            else if (strv_equals_str(text, "false"))
             {
                 l->token.type = ac_token_type_LITERAL_BOOL;
                 l->token.u.b.value = false;
+                return &l->token;
             }
-            else if (try_parse_keyword(start, n, &l->token.type)) /* if keyword is parsed token type is also retrieved */
+            else if (try_parse_keyword(&text, &type)) /* if keyword is parsed token type is also retrieved */
             {
-                /* do nothing */
+                /* Do nothing, the type as been retrieved already. */
             }
             else
             {
-                l->token.type = ac_token_type_IDENTIFIER;
+                type = ac_token_type_IDENTIFIER;
             }
 
-            return &l->token;
+            return token_from_text(l, type, text);
         } /* end if (is_alpha(l) || is(l, '_') || is_utf8(l)) */
         else
         {
@@ -293,6 +321,32 @@ const ac_token* ac_lex_goto_next(ac_lex* l)
     } /* end switch */
 
     return token_error(l);
+}
+
+ac_token ac_lex_token(ac_lex* l) {
+    return l->token;
+}
+
+const ac_token* ac_lex_token_ptr(ac_lex* l) {
+    return &l->token;
+}
+
+bool ac_lex_expect(ac_lex* l, enum ac_token_type type) {
+    ac_location current_location = l->location;
+    ac_token current = l->token;
+    if (current.type != type)
+    {
+        strv expected = ac_token_type_to_strv(type);
+        strv actual = ac_token_to_strv(current);
+
+        ac_report_error_loc(current_location, "Syntax error: expected '%.*s', actual '%.*s'\n"
+            , expected.size, expected.data
+            , actual.size, actual.data
+        );
+
+        return false;
+    }
+    return true;
 }
 
 static inline bool _is_end_line(char c) {
@@ -415,84 +469,28 @@ static void skipn(ac_lex* l, unsigned n) {
     }
 }
 
-static void skip_whitespace(ac_lex* l) {
-    consume_one(l);
-    while (is_whitespace(l)) {
-        consume_one(l);
-    }
-}
-
-static void skip_whitespaces_and_comments(ac_lex* l) {
-
-    for (;;) {
-
-        /* Skip Whitespaces */
-        if (is_whitespace(l)) {
-
-            skip_whitespace(l);
-            continue;
-        }
-
-        /* Skip comments */
-        if (is_char(l, '/')) {
-            /* Skip c comment */
-            if (next_is(l, '*')) {
-                consume_one(l); /*  Skip '/'  */
-                consume_one(l); /*  Skip '*'  */
-                while (!(is_char(l, '*') && next_is(l, '/')) && !is_eof(l)) {
-                    consume_one(l);
-                }
-
-                if (is_char(l, '*') && next_is(l, '/')) {
-                    consume_one(l); /* Skip '*' and set the cursor on the char after */
-                    consume_one(l); /* Skip '/' and set the cursor on the char after */
-                }
-
-                continue;
-            }
-            else if (next_is(l, '/')) { /* Skip cpp comment */
-
-                while (!is_eof(l) && !is_end_line(l)) {
-                    consume_one(l);
-                }
-                /* We are on the the end of line char, continue will consume this char and  */
-                /* potential whitespaces could be skipped */
-                continue;
-            }
-        }
-        /* If we reach here there is no more space or comment */
-        break;
-    } /* end for (;;) */
-}
-
 const ac_token* parse_ascii_char_literal(ac_lex* l) {
     assert(is_char(l, '"'));
 
     consume_one(l); /* ignore the quote char */
 
     const char* start = l->cur;
+    ac_location loc = l->location;
     int n = 0;
+    /* @TODO replace with is_not_eof? */
     while (l->cur[0] && is_not_char(l, '"') && is_not_char(l, '\n')) {
         consume_one(l);
         ++n;
     }
 
     if (is_not_char(l, '"')) {
-        fprintf(stderr, "Lexer Error: literal string is not well terminated with '\"'\n");
+        ac_report_error_loc(loc, "String literal is not well terminated with '\"'\n");
         return token_error(l);
     }
     else {
         consume_one(l);
     }
-
-    l->token.type = ac_token_type_LITERAL_STRING;
-    if (n == 0) {
-        set_token_value(l, 0, 0);  /* clear token data */
-    }
-    else {
-        set_token_value(l, start, n);
-    }
-    return &l->token;
+    return token_from_text(l, ac_token_type_LITERAL_STRING, strv_make_from(start, n));
 }
 
 enum base_type
@@ -703,9 +701,11 @@ static const ac_token* parse_number(ac_lex* l) {
     }
 } /* parse_number */
 
-static void set_token_value(ac_lex* l, const char* data, size_t len) {
-    l->token.text.data = data;
-    l->token.text.size = len;
+static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) {
+    l->token.type = type;
+    l->token.text = text;
+   
+    return &l->token;
 }
 
 static const ac_token* token_error(ac_lex* l) {
@@ -718,12 +718,11 @@ static const ac_token* token_eof(ac_lex* l) {
     return &l->token;
 }
 
-static const ac_token* set_token(ac_lex* l, enum ac_token_type type) {
-    l->token.type = type;
+static const ac_token* token_from_type_and_consume(ac_lex* l, enum ac_token_type type) {
     size_t size = token_str_len(type);
-    set_token_value(l, l->cur, size);
+    const ac_token* t = token_from_text(l, type, strv_make_from(l->cur, size));
     skipn(l, size);
-    return &l->token;
+    return t;
 }
 
 /*
@@ -734,89 +733,92 @@ ac_token
 
 struct keyword_item {
     enum ac_token_type type;
-    const char* name;
-    size_t size;
+    strv name;
 };
+
+#define KEYWORD_ITEM_COUNT (sizeof(keyword_items) / sizeof(keyword_items[0]))
 
 static struct keyword_item keyword_items[] = {
 
-    { ac_token_type_NONE, "<none>", 6 },
-    { ac_token_type_AMP, "&", 1 },
-    { ac_token_type_AMP_EQUAL, "&=", 2 },
-    { ac_token_type_ARROW, "->", 2 },
-    { ac_token_type_BACKSLASH, "\\", 1},
-    { ac_token_type_BRACE_L, "{", 1},
-    { ac_token_type_BRACE_R, "}", 1 },
-    { ac_token_type_CARET , "^", 1 },
-    { ac_token_type_CARET_EQUAL, "^=", 2 },
-    { ac_token_type_COLON, ":", 1 },
-    { ac_token_type_COMMA, ",", 1 },
-    { ac_token_type_DOLLAR, "$", 1 },
-    { ac_token_type_DOT, ".", 1 },
-    { ac_token_type_DOUBLE_AMP, "&&", 2 },
-    { ac_token_type_DOUBLE_DOT, "..", 2 },
-    { ac_token_type_DOUBLE_EQUAL, "==", 2 },
-    { ac_token_type_DOUBLE_GREATER, ">>", 2 },
-    { ac_token_type_DOUBLE_LESS, "<<", 2 },
-    { ac_token_type_DOUBLE_PIPE, "||", 2 },
-    { ac_token_type_DOUBLE_QUOTE , "\"", 1 },
-    { ac_token_type_ELSE, "else", 4 },
-    { ac_token_type_ENUM, "enum", 4 },
-    { ac_token_type_EOF, "end-of-line", 11},
-    { ac_token_type_EQUAL, "=", 1 },
-    { ac_token_type_ERROR, "<error>", 7 },
-    { ac_token_type_EXCLAM, "!", 1 },
-    { ac_token_type_FOR, "for", 3 },
-    { ac_token_type_GREATER, ">", 1 },
-    { ac_token_type_GREATER_EQUAL, ">=", 2 },
-    { ac_token_type_HASH, "#", 1 },
-    { ac_token_type_IDENTIFIER, "<identifier>", 12 },
-    { ac_token_type_IF, "if", 2 },
-    { ac_token_type_LESS, "<", 1 },
-    { ac_token_type_LESS_EQUAL, "<=", 2 },
-    { ac_token_type_LITERAL_BOOL, "<literal-bool>", 14 },
-    { ac_token_type_LITERAL_CHAR, "<literal-char>", 14 },
-    { ac_token_type_LITERAL_FLOAT, "<literal-float>", 14 },
-    { ac_token_type_LITERAL_INTEGER, "<literal-integer>", 17 },
-    { ac_token_type_LITERAL_STRING, "<literal-string>", 16 },
-    { ac_token_type_MINUS, "-", 1 },
-    { ac_token_type_MINUS_EQUAL, "-=", 2 },
-    { ac_token_type_NOT_EQUAL, "!=", 2 },
-    { ac_token_type_PAREN_L, "(", 1 },
-    { ac_token_type_PAREN_R, ")", 1 },
-    { ac_token_type_PERCENT, "%", 1 },
-    { ac_token_type_PERCENT_EQUAL, "%=", 2 },
-    { ac_token_type_PIPE, "|", 1 },
-    { ac_token_type_PIPE_EQUAL, "|=", 2 },
-    { ac_token_type_PLUS, "+", 1 },
-    { ac_token_type_PLUS_EQUAL, "+=", 2 },
-    { ac_token_type_QUESTION, "?", 1 },
-    { ac_token_type_QUOTE, "'", 1 },
-    { ac_token_type_RETURN, "return", 6 },
-    { ac_token_type_SEMI_COLON, ";", 1 },
-    { ac_token_type_SIZEOF, "sizeof", 6 },
-    { ac_token_type_SLASH, "/", 1 },
-    { ac_token_type_SLASH_EQUAL, "/=", 2 },
-    { ac_token_type_SQUARE_L, "[", 1 },
-    { ac_token_type_SQUARE_R, "]", 1 },
-    { ac_token_type_STAR, "*", 1 },
-    { ac_token_type_STAR_EQUAL, "*=", 2 },
-    { ac_token_type_STRUCT, "struct", 6 },
-    { ac_token_type_TILDE, "~", 1 },
-    { ac_token_type_TILDE_EQUAL, "~=", 2 },
-    { ac_token_type_TRIPLE_DOT, "...", 3 },
-    { ac_token_type_TYPEOF, "typeof", 5 },
-    { ac_token_type_WHILE, "while", 5 },
+    { ac_token_type_NONE, STRV("<none>") },
+    { ac_token_type_AMP,  STRV("&") },
+    { ac_token_type_AMP_EQUAL, STRV("&=") },
+    { ac_token_type_ARROW, STRV("->") },
+    { ac_token_type_BACKSLASH, STRV("\\") },
+    { ac_token_type_BRACE_L, STRV("{") },
+    { ac_token_type_BRACE_R, STRV("}") },
+    { ac_token_type_CARET , STRV("^") },
+    { ac_token_type_CARET_EQUAL, STRV("^=") },
+    { ac_token_type_COLON, STRV(":") },
+    { ac_token_type_COMMA, STRV(",") },
+    { ac_token_type_COMMENT, STRV("<comment>") },
+    { ac_token_type_DOLLAR, STRV("$") },
+    { ac_token_type_DOT, STRV(".") },
+    { ac_token_type_DOUBLE_AMP, STRV("&&") },
+    { ac_token_type_DOUBLE_DOT, STRV("..") },
+    { ac_token_type_DOUBLE_EQUAL, STRV("==") },
+    { ac_token_type_DOUBLE_GREATER, STRV(">>") },
+    { ac_token_type_DOUBLE_LESS, STRV("<<") },
+    { ac_token_type_DOUBLE_PIPE, STRV("||") },
+    { ac_token_type_DOUBLE_QUOTE , STRV("\"") },
+    { ac_token_type_ELSE, STRV("else") },
+    { ac_token_type_ENUM, STRV("enum") },
+    { ac_token_type_EOF, STRV("end-of-line") },
+    { ac_token_type_EQUAL, STRV("=") },
+    { ac_token_type_ERROR, STRV("<error>") },
+    { ac_token_type_EXCLAM, STRV("!") },
+    { ac_token_type_FOR, STRV("for") },
+    { ac_token_type_GREATER, STRV(">") },
+    { ac_token_type_GREATER_EQUAL, STRV(">=") },
+    { ac_token_type_HASH, STRV("#") },
+    { ac_token_type_HORIZONTAL_WHITESPACE, STRV("<horizontal_whitespace>") },
+    { ac_token_type_IDENTIFIER, STRV("<identifier>") },
+    { ac_token_type_IF, STRV("if") },
+    { ac_token_type_LESS, STRV("<") },
+    { ac_token_type_LESS_EQUAL, STRV("<=") },
+    { ac_token_type_LITERAL_BOOL, STRV("<literal-bool>") },
+    { ac_token_type_LITERAL_CHAR, STRV("<literal-char>") },
+    { ac_token_type_LITERAL_FLOAT, STRV("<literal-float>") },
+    { ac_token_type_LITERAL_INTEGER, STRV("<literal-integer>") },
+    { ac_token_type_LITERAL_STRING, STRV("<literal-string>") },
+    { ac_token_type_MINUS, STRV("-") },
+    { ac_token_type_MINUS_EQUAL, STRV("-=") },
+    { ac_token_type_NEW_LINE, STRV("<new_line>") },
+    { ac_token_type_NOT_EQUAL, STRV("!=") },
+    { ac_token_type_PAREN_L, STRV("(") },
+    { ac_token_type_PAREN_R, STRV(")") },
+    { ac_token_type_PERCENT, STRV("%") },
+    { ac_token_type_PERCENT_EQUAL, STRV("%=") },
+    { ac_token_type_PIPE, STRV("|") },
+    { ac_token_type_PIPE_EQUAL, STRV("|=") },
+    { ac_token_type_PLUS, STRV("+") },
+    { ac_token_type_PLUS_EQUAL, STRV("+=") },
+    { ac_token_type_QUESTION, STRV("?") },
+    { ac_token_type_QUOTE, STRV("'") },
+    { ac_token_type_RETURN, STRV("return") },
+    { ac_token_type_SEMI_COLON, STRV(";") },
+    { ac_token_type_SIZEOF, STRV("sizeof") },
+    { ac_token_type_SLASH, STRV("/") },
+    { ac_token_type_SLASH_EQUAL, STRV("/=") },
+    { ac_token_type_SQUARE_L, STRV("[") },
+    { ac_token_type_SQUARE_R, STRV("]") },
+    { ac_token_type_STAR, STRV("*") },
+    { ac_token_type_STAR_EQUAL, STRV("*=") },
+    { ac_token_type_STRUCT, STRV("struct") },
+    { ac_token_type_TILDE, STRV("~") },
+    { ac_token_type_TILDE_EQUAL, STRV("~=") },
+    { ac_token_type_TRIPLE_DOT, STRV("...") },
+    { ac_token_type_TYPEOF, STRV("typeof") },
+    { ac_token_type_WHILE, STRV("while") }
 };
 
 const char* ac_token_type_to_str(enum ac_token_type type) {
-    return keyword_items[type].name;
+    return keyword_items[type].name.data;
 }
 
 strv ac_token_type_to_strv(enum ac_token_type type) {
 
-    const struct keyword_item keyword = keyword_items[type];
-    return strv_make_from(keyword.name, keyword.size);
+    return keyword_items[type].name;
 }
 
 const char* ac_token_to_str(ac_token token) {
@@ -839,21 +841,38 @@ strv ac_token_to_strv(ac_token token) {
     return ac_token_type_to_strv(token.type);
 }
 
+bool ac_token_is_keyword(ac_token t) {
+    return t.text.data >= keyword_items[0].name.data
+        && t.text.data <= keyword_items[ac_token_type_COUNT-1].name.data;
+}
+
 static size_t token_str_len(enum ac_token_type type) {
     assert(!token_type_is_literal(type));
 
-    return keyword_items[type].size;
+    return keyword_items[type].name.size;
 }
 
-static bool try_parse_keyword(const char* str, size_t len, enum ac_token_type* type) {
+static bool try_parse_keyword(strv* str, enum ac_token_type* type) {
+
+    if (ac_token_type_COUNT > KEYWORD_ITEM_COUNT)
+    {
+        ac_report_error("There are more items in keyword_items (%d) than ac_token_type_COUNT (%d). It should be the same.", KEYWORD_ITEM_COUNT, ac_token_type_COUNT);
+        exit(1);
+    }
+
+    if (ac_token_type_COUNT < KEYWORD_ITEM_COUNT)
+    {
+        ac_report_error("There are more items in  ac_token_type_COUNT (%d) than keyword_items (%d). It should be the same.", ac_token_type_COUNT, KEYWORD_ITEM_COUNT);
+        exit(1);
+    }
 
     const struct keyword_item* keyword_cursor = &keyword_items[0];
     const struct keyword_item* keyword_end = &keyword_items[ac_token_type_COUNT];
 
     while (keyword_cursor < keyword_end)
     {
-        if (len == keyword_cursor->size
-            && strncmp(keyword_cursor->name, str, keyword_cursor->size) == 0) {
+        if (strv_equals(keyword_cursor->name, *str)) {
+            *str = keyword_cursor->name;
             *type = keyword_cursor->type;
             return true;
         }

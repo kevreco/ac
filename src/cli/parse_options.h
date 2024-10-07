@@ -15,12 +15,14 @@ static const struct options {
     strv display_surrounding_lines;
     strv output_extension;
     strv parse_only;
+    strv preprocess;
 } cli_options = {
     .colored_output = STRV("--colored-output"),
     .debug_parser     = STRV("--debug-parser"),
     .display_surrounding_lines = STRV("--display-surrounding-lines"),
     .output_extension = STRV("--output-extension"),
-    .parse_only       = STRV("--parse-only")
+    .parse_only = STRV("--parse-only"),
+    .preprocess = STRV("--preprocess")
 };
 /*
     We don't treat the --option-file option the same way.
@@ -73,6 +75,11 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         {
             o->step = ac_compilation_step_PARSE;
         }
+        else if (arg_equals(arg, cli_options.preprocess))
+        {
+            o->preprocess = true;
+        }
+        
         /* Ignore --option-file since it has been handled at this point */
         else if (arg_equals(arg, option_file))
         {
@@ -101,7 +108,7 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
     return true;
 }
 
-void
+bool
 try_parse_from_file(ac_options* o, int argc, char** argv)
 {
     char* option_file_path = NULL;
@@ -122,19 +129,19 @@ try_parse_from_file(ac_options* o, int argc, char** argv)
 
     if (!option_file_path)
     {
-        return;
+        return true;
     }
 
     if (!re_file_exists_str(option_file_path))
     {
         ac_report_error("File does not exist: %s", option_file_path);
-        return;
+        return false;
     }
 
     if (!re_file_open_and_read(&o->config_file_memory, option_file_path))
     {
         ac_report_error("Could not read file: %s", option_file_path);
-        return;
+        return false;
     }
 
     /* Split file content by line, empty values are ignored. */
@@ -160,8 +167,12 @@ try_parse_from_file(ac_options* o, int argc, char** argv)
 
     if (config_argc > 0)
     {
-        parse_from_arguments(o, &config_argc, &config_argv);
+        if (!parse_from_arguments(o, &config_argc, &config_argv))
+        {
+            return false;
+        }
     }
+    return true;
 }
 
 bool
@@ -169,8 +180,8 @@ parse_options(ac_options* o, int* argc, char*** argv)
 {
     AC_ASSERT(argc && *argc && "There should be at least one argument to parse.");
 
-    try_parse_from_file(o, *argc, *argv);
-    return parse_from_arguments(o, argc, argv);
+    return try_parse_from_file(o, *argc, *argv)
+        && parse_from_arguments(o, argc, argv);
 }
 
 #ifdef __cplusplus

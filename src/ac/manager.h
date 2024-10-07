@@ -46,7 +46,8 @@ struct ac_options {
     /* @FIXME find a better way to debug the parser.
         I don't remember when I last use it so maybe it should be removed.
     */
-    bool debug_parser;                   /* Will print some debugging values in the output. */          
+    bool debug_parser;                   /* Will print some debugging values in the output. */ 
+    bool preprocess;                     /* Print preprocess result in the standard output. */
 };
 
 void ac_options_init_default(ac_options* o);

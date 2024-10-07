@@ -1,0 +1,18 @@
+/* null directive 1 */
+
+
+
+// null directive 2: followed by a comment.
+
+
+
+/* null directive 3: surrounded by comments. */
+ 
+/* Hello */
+
+/* null directive 4: surrounded by spaces. */
+
+/* Hello */ 
+
+/* null directive 5: followed by eof */
+

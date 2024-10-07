@@ -51,7 +51,8 @@ static ac_ast_expr* parse_statement_from_identifier(ac_parser_c* p, ac_ast_ident
 static ac_ast_expr* parse_unary(ac_parser_c* p);
 static ac_ast_type_specifier* try_parse_type(ac_parser_c* p, ac_ast_identifier* identifier);
 
-static const ac_token* token(const ac_parser_c* p); /* current token type */
+static ac_token token(const ac_parser_c* p); /* Current token by value. */
+static const ac_token* token_ptr(const ac_parser_c * p);  /* Current token by pointer. */
 static ac_location location(const ac_parser_c* p);
 static void goto_next_token(ac_parser_c* p);
 static enum ac_token_type token_type(const ac_parser_c* p);              /* current token type */
@@ -59,9 +60,9 @@ static bool token_is(const ac_parser_c* p, enum ac_token_type type);     /* curr
 static bool token_is_not(const ac_parser_c* p, enum ac_token_type type); /* current token is not */
 static bool token_is_unary_operator(const ac_parser_c* p);               /* current token is an unary operator */
 static bool token_equal_type(ac_token, enum ac_token_type type);
-static bool expect(const ac_parser_c* p, enum ac_token_type type);
+static bool expect(ac_parser_c* p, enum ac_token_type type);
 static bool expect_and_consume(ac_parser_c* p, enum ac_token_type type);
-static bool consume_if(ac_parser_c * p, enum ac_token_type type);
+static bool consume_if(ac_parser_c * p, bool value);
 
 static bool expr_is(ac_ast_expr* expr, enum ac_ast_type type);
 
@@ -72,25 +73,23 @@ static void add_to_current_block(ac_parser_c* p, ac_ast_expr* expr);
 static bool only_declaration(ac_ast_expr* expr) { return ac_ast_is_declaration(expr); }
 static bool any_expr(ac_ast_expr* expr) { (void)expr; return true; }
 
-void ac_parser_c_init(ac_parser_c* p, ac_manager* mgr)
+void ac_parser_c_init(ac_parser_c* p, ac_manager* mgr, strv content, const char* filepath)
 {
     memset(p, 0, sizeof(ac_parser_c));
 
-    ac_lex_init(&p->lex, mgr);
-
+    ac_pp_init(&p->pp, mgr, content, filepath);
     p->mgr = mgr;
 }
 
 void ac_parser_c_destroy(ac_parser_c* p)
 {
-    (void)p;
-
-    ac_lex_destroy(&p->lex);
+    ac_pp_destroy(&p->pp);
 }
 
-bool ac_parser_c_parse(ac_parser_c* p, const char* content, size_t content_size, const char* filepath)
+bool ac_parser_c_parse(ac_parser_c* p)
 {
-    ac_lex_set_source(&p->lex, content, content_size, filepath);
+    /* At the point the lexer is not initialized yet. Go to the first token. */
+    goto_next_token(p);
 
     ac_ast_top_level* top_level = parse_top_level(p);
     p->mgr->top_level = top_level;
@@ -178,28 +177,28 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
         }
         case ac_token_type_LITERAL_BOOL: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_BOOL);
-            literal->u.boolean = p->lex.token.u.b.value;
+            literal->u.boolean = token(p).u.b.value;
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_INTEGER: { 
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_INTEGER);
-            literal->u.integer = p->lex.token.u.i.value;
+            literal->u.integer = token(p).u.i.value;
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_FLOAT: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_FLOAT);
-            literal->u._float = p->lex.token.u.f.value;
+            literal->u._float = token(p).u.f.value;
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_STRING: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_STRING);
-            literal->u.str = p->lex.token.text;
+            literal->u.str = token(p).text;
             result = to_expr(literal);
             goto_next_token(p);
             break;
@@ -356,7 +355,7 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
     }
 
     default: {
-        ac_report_error_loc(location(p), "parse_statement, case not handled %d\n", token_type(p));
+        ac_report_error_loc(location(p), "Internal error token type not handled: '%s'", ac_token_type_to_str(token_type(p)));
     }
     }
 
@@ -371,7 +370,7 @@ static ac_ast_expr* parse_unary(ac_parser_c* p) {
     assert(token_is_unary_operator(p));
 
     AST_NEW_CTOR(p,ac_ast_unary, unary, location(p), ac_ast_unary_init);
-    unary->op = p->lex.token.type;
+    unary->op = token_type(p);
 
     goto_next_token(p); /* skip current unary token */
 
@@ -408,7 +407,7 @@ static ac_ast_identifier* parse_identifier(ac_parser_c* p) {
     assert(token_is(p, ac_token_type_IDENTIFIER));
 
     AST_NEW(p, ac_ast_identifier, result, location(p), ac_ast_type_IDENTIFIER);
-    result->name = token(p)->text;
+    result->name = token(p).text;
 
     goto_next_token(p); /* skip identifier */
 
@@ -571,7 +570,7 @@ static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_typ
 
     enum ac_token_type expected_closing_token = expected_opening_token == ac_token_type_PAREN_L ? ac_token_type_PAREN_R : ac_token_type_SQUARE_R;
 
-    if (consume_if(p, ac_token_type_PAREN_R))
+    if (consume_if(p, token_is(p, expected_closing_token)))
     {
         return parameters;
     }
@@ -586,7 +585,7 @@ static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_typ
         }
 
         ac_expr_list_add(&parameters->list, to_expr(param));
-
+        /* @TODO use consume_if here. */
     } while (token_is(p, ac_token_type_COMMA)
         && expect_and_consume(p, ac_token_type_COMMA));
 
@@ -715,28 +714,41 @@ static ac_ast_array_specifier* parse_array_specifier(ac_parser_c* p)
     return first;
 }
 
-static const ac_token* token(const ac_parser_c* p)
+static ac_token token(const ac_parser_c* p)
 {
-    return &p->lex.token;
+    return p->pp.lex.token;
 }
-
+static const ac_token* token_ptr(const ac_parser_c* p)
+{
+    return &p->pp.lex.token;
+}
 static ac_location location(const ac_parser_c* p)
 {
-    return p->lex.location;
+    return p->pp.lex.location;
 }
 
 static void goto_next_token(ac_parser_c* p)
 {
-    ac_lex_goto_next(&p->lex);
+    ac_pp_goto_next(&p->pp);
+
+    const ac_token* token = token_ptr(p);
+
+    while (token->type == ac_token_type_COMMENT
+         || token->type == ac_token_type_NEW_LINE
+         || token->type == ac_token_type_HORIZONTAL_WHITESPACE)
+    {
+        ac_pp_goto_next(&p->pp);
+        token = token_ptr(p);
+    }
 }
 
 static enum ac_token_type token_type(const ac_parser_c* p)
 {
-    return p->lex.token.type;
+    return p->pp.lex.token.type;
 }
 
 static bool token_is(const ac_parser_c* p, enum ac_token_type type) {
-    return token_equal_type(p->lex.token, type);
+    return token_equal_type(p->pp.lex.token, type);
 }
 
 static bool token_is_not(const ac_parser_c* p, enum ac_token_type type)
@@ -746,7 +758,7 @@ static bool token_is_not(const ac_parser_c* p, enum ac_token_type type)
 
 static bool token_is_unary_operator(const ac_parser_c* p)
 {
-    switch (p->lex.token.type) {
+    switch (p->pp.lex.token.type) {
     case ac_token_type_AMP:
     case ac_token_type_DOT:
     case ac_token_type_EXCLAM:
@@ -764,56 +776,47 @@ static bool token_equal_type(ac_token token, enum ac_token_type type)
     return token.type == type;
 }
 
-static bool expect(const ac_parser_c* p, enum ac_token_type type) {
-    ac_location current_location = p->lex.location;
-    ac_token current = p->lex.token;
-    if (current.type != type)
-    {
-        strv expected = ac_token_type_to_strv(type);
-        strv actual = ac_token_to_strv(current);
-
-        ac_report_error_loc(current_location, "Syntax error: expected '%.*s', actual '%.*s'\n"
-            , expected.size, expected.data
-            , actual.size, actual.data
-        );
-
-        return false;
-    }
-    return true;
+static bool expect(ac_parser_c* p, enum ac_token_type type) {
+    return ac_lex_expect(&p->pp.lex, type);
 }
 
 static bool expect_and_consume(ac_parser_c* p, enum ac_token_type type)
 {
-    ac_location current_location = p->lex.location;
-    ac_token current = p->lex.token;
-    if (expect(p, type)) {
+    AC_ASSERT(type != ac_token_type_EOF);
+
+    if (expect(p, type))
+    {
+        ac_location loc = location(p);
+        ac_token previous = token(p);
         goto_next_token(p);
-
-        if (token_is(p, ac_token_type_EOF)
-            && (!token_equal_type(current, ac_token_type_SEMI_COLON) && !token_equal_type(current, ac_token_type_BRACE_R)))
+        /* Special case where the last token should either be a ';' or a '}'. */
         {
-            strv current_string = ac_token_to_strv(current);
+            if (token_ptr(p)->type == ac_token_type_EOF
+                && previous.type != ac_token_type_SEMI_COLON
+                && previous.type != ac_token_type_BRACE_R)
+            {
+                strv current_string = previous.text;
 
-            ac_report_error_loc(current_location, "Syntax error: unexpected end-of-file after: '%.*s'\n"
-                , current_string.size, current_string.data
-            );
+                ac_report_error_loc(loc, "Syntax error: unexpected end-of-file after: '%.*s'\n"
+                    , current_string.size, current_string.data
+                );
 
-            return false;
+                return false;
+            }
         }
         return true;
     }
 
-    return false;
+    return true;
 }
 
-static bool consume_if(ac_parser_c* p, enum ac_token_type type)
+static bool consume_if(ac_parser_c* p, bool value)
 {
-    bool result = token_is(p, type);
-    if (result)
+    if (value)
     {
         goto_next_token(p);
     }
-    return result;
+    return value;
 }
 
 static bool expr_is(ac_ast_expr* expr, enum ac_ast_type type)

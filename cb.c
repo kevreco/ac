@@ -3,17 +3,27 @@
 #include <cb/cb_add_files.h>
 #include <cb/cb_assert.h>
 
+/* STRV_IMPLEMENTATION is defined at the bottom of this file. */
+#include "src/external/re.lib/c/re/strv.h"
+
+/* DSTR_IMPLEMENTATION is defined at the bottom of this file. */
+#include "src/external/re.lib/c/re/dstr.h"
+
+/* RE_FILE_IMPLEMENTATION is defined at the bottom of this file. */
+#include "src/external/re.lib/c/re/file.h"
+
 const char* root_dir = "./";
 
 /* Forward declarations */
 
 void assert_path(const char* path);
-void assert_subprocess(const char* cmd);
+void assert_process(const char* cmd);
 void assert_run(const char* exe);
 void build_generated_exe_and_run(const char* file);
 const char* build_with(const char* config);
 void my_project(const char* project_name, const char* toolchain, const char* config);
 void test_parse_only(const char* exe, const char* directory);
+void test_preprocessor(const char* exe, const char* directory);
 void test_c_generation(const char* exe, const char* directory);
 
 int main()
@@ -24,9 +34,9 @@ int main()
 
 	const char* ac_exe = build_with("Debug");
 
-	test_parse_only(ac_exe, "./tests/01_parse_only/");
-
-	test_c_generation(ac_exe, "./tests/02_generate_c/");
+	test_parse_only(ac_exe,   "./tests/parse_declarations/");
+	test_c_generation(ac_exe, "./tests/generate_c/");
+	test_preprocessor(ac_exe, "./tests/preprocessor/");
 
 	cb_destroy();
 
@@ -138,16 +148,19 @@ void assert_path(const char* path)
 {
 	if (!cb_path_exists(path))
 	{
-		cb_log_error("Path does not exists: %s", path);
+		fprintf(stderr, "Path does not exists: %s\n", path);
 		exit(1);
 	}
 }
 
-void assert_subprocess(const char* cmd)
+void assert_process(const char* cmd)
 {
-	if (cb_subprocess(cmd) != 0)
+	cb_bool also_get_stderr = cb_false;
+	cb_process_handle* process = cb_process_to_string(cmd, NULL, also_get_stderr);
+
+	if (cb_process_end(process) != 0)
 	{
-		cb_log_error("Subprocess did not exit with 0: %s", cmd);
+		fprintf(stderr, "Process did not exit with 0: %s\n", cmd);
 		exit(1);
 	}
 }
@@ -156,7 +169,7 @@ void assert_run(const char* exe)
 {
 	if (cb_run(exe) != 0)
 	{
-		cb_log_error("Exe did not exit with 0: %s", exe);
+		fprintf(stderr, "Exe did not exit with 0: %s\n", exe);
 		exit(1);
 	}
 }
@@ -166,8 +179,8 @@ void test_parse_only(const char* exe, const char* directory)
 	assert_path(exe);
 	assert_path(directory);
 
-	cb_dstr buffer;
-	cb_dstr_init(&buffer);
+	dstr cmd;
+	dstr_init(&cmd);
 
 	cb_file_it it;
 	cb_file_it_init(&it, directory);
@@ -176,17 +189,17 @@ void test_parse_only(const char* exe, const char* directory)
 	{
 		const char* file = cb_file_it_current_file(&it);
 		
-		cb_dstr_assign_f(&buffer, "%s --option-file %soptions.txt %s", exe, directory, file);
+		dstr_assign_f(&cmd, "%s --option-file %soptions.txt %s", exe, directory, file);
 
 		printf("Testing: %s \n", file);
 
-		assert_subprocess(buffer.data);
+		assert_process(cmd.data);
 
 		printf("OK\n");
 	}
 	
 	cb_file_it_destroy(&it);
-	cb_dstr_destroy(&buffer);
+	dstr_destroy(&cmd);
 }
 
 
@@ -214,44 +227,113 @@ cb_bool next_non_generated_c_file(cb_file_it* it)
 	return cb_false;
 }
 
+/* Get output of preprocess and ompare it with the .expect file. */
+void test_preprocessor(const char* exe, const char* directory)
+{
+	assert_path(exe);
+	assert_path(directory);
+
+	dstr cmd;
+	dstr_init(&cmd);
+
+	dstr expected_filename;
+	dstr_init(&expected_filename);
+
+	dstr expected_content;
+	dstr_init(&expected_content);
+
+	dstr preprocessor_content;
+	dstr_init(&preprocessor_content);
+
+	cb_file_it it;
+	cb_file_it_init(&it, directory);
+
+	while (cb_file_it_get_next_glob(&it, "*.c"))
+	{
+		const char* file = cb_file_it_current_file(&it);
+
+		dstr_assign_f(&cmd, "%s --option-file %soptions.txt %s", exe, directory, file);
+
+		printf("Testing: %s \n", file);
+
+		/* Run compiler and get the preprocessor output. */
+		{
+			cb_process_handle* process = cb_process_to_string(cmd.data, NULL, 0);
+
+			dstr_assign_f(&preprocessor_content, "%s", cb_process_stdout_string(process));
+
+			if (cb_process_end(process) != 0) { exit(1); };
+		}
+
+		/* Compare output with the expected content. */
+		{
+			dstr_assign_f(&expected_filename, "%s.expect", file);
+
+			cb_assert_file_exists(expected_filename.data);
+
+			if (!re_file_open_and_read(&expected_content, expected_filename.data))
+			{
+				fprintf(stderr, "Can't open file: %s\n", expected_filename.data);
+				exit(1);
+			}
+
+			if (!strv_equals(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content)))
+			{
+				fprintf(stderr, "Preprocessor contents do not match.\n");
+				exit(1);
+			}
+		}
+
+		printf("OK\n");
+	}
+
+	cb_file_it_destroy(&it);
+	dstr_destroy(&cmd);
+	dstr_destroy(&expected_filename);
+	dstr_destroy(&expected_content);
+	dstr_destroy(&preprocessor_content);
+}
 
 void test_c_generation(const char* exe, const char* directory)
 {
 	assert_path(exe);
 	assert_path(directory);
 
-	cb_dstr buffer;
-	cb_dstr_init(&buffer);
+	dstr cmd;
+	dstr_init(&cmd);
+	dstr generated_file_name;
+	dstr_init(&generated_file_name);
 
 	cb_file_it it;
 	cb_file_it_init(&it, directory);
 
-	cb_strv c_ext = cb_strv_make_str(".c");
-	cb_strv gc_ext = cb_strv_make_str(".g.c");
+	strv c_ext = strv_make_from_str(".c");
+	strv gc_ext = strv_make_from_str(".g.c");
 
 	while (next_non_generated_c_file(&it))
 	{
 		const char* file = cb_file_it_current_file(&it);
 
-		cb_dstr_assign_f(&buffer, "%s --option-file %soptions.txt %s", exe, directory, file);
+		dstr_assign_f(&cmd, "%s --option-file %soptions.txt %s", exe, directory, file);
 
 		printf("Testing: %s \n", file);
 
-		assert_subprocess(buffer.data);
+		assert_process(cmd.data);
 
-		cb_dstr_assign_f(&buffer, "%s", file);
+		dstr_assign_f(&generated_file_name, "%s", file);
 		/* Replace .c extension with .g.c extension */
-		cb_dstr_append_from(&buffer, buffer.size - c_ext.size, gc_ext.data, gc_ext.size);
+		dstr_append_from(&generated_file_name, generated_file_name.size - c_ext.size, gc_ext);
 
-		cb_assert_file_exists(buffer.data);
+		cb_assert_file_exists(generated_file_name.data);
 
-		build_generated_exe_and_run(buffer.data);
+		build_generated_exe_and_run(generated_file_name.data);
 
 		printf("OK\n");
 	}
 
 	cb_file_it_destroy(&it);
-	cb_dstr_destroy(&buffer);
+	dstr_destroy(&generated_file_name);
+	dstr_destroy(&cmd);
 }
 
 /* Count generated project to have a unique id. */
@@ -274,3 +356,12 @@ void build_generated_exe_and_run(const char* file)
 
 	assert_run(generated_exe);
 }
+
+#define STRV_IMPLEMENTATION
+#include "src/external/re.lib/c/re/strv.h"
+
+#define DSTR_IMPLEMENTATION
+#include "src/external/re.lib/c/re/dstr.h"
+
+#define RE_FILE_IMPLEMENTATION
+#include "src/external/re.lib/c/re/file.h"

@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <fcntl.h> /* _O_BINARY */
+#endif
+
 #include <ac/compiler.h>
 
 #include "parse_options.h"
@@ -98,7 +102,16 @@ compile(const struct cmd* cmd, int argc, char** argv)
 int
 main(int argc, char** argv)
 {
-    int result = 0;
+#ifdef _WIN32
+    /* Avoid \n char to be translated into \n\r */
+    if (_setmode(fileno(stdout), _O_BINARY) == -1) perror("Cannot set mode to stdout.");
+    if (_setmode(fileno(stderr), _O_BINARY) == -1) perror("Cannot set mode to stderr.");
+
+    /* @FIXME: Why is this failing? Can't we set this to binary mode when it's running from a console? */
+    (void)_setmode(fileno(stdin), O_BINARY);
+#endif
+
+    int result = 1;
     const struct cmd* c = commands;
 
     if (!*argv) { /* no argument */
@@ -126,7 +139,7 @@ main(int argc, char** argv)
    
     /* No command was found, execute default command. */
     if (c->func == end_command) {
-        default_command.func(&default_command, argc, argv);
+        result = default_command.func(&default_command, argc, argv);
     }
 
     return result;

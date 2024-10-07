@@ -29,6 +29,7 @@ bool ac_compiler_compile(ac_compiler* c)
     
     /* Load file into memory. */
     const char* source_file = darrT_at(&options(c)->files, 0);
+
     ac_source_file* source = ac_manager_load_content(&c->mgr, source_file);
 
     if (!source)
@@ -36,16 +37,30 @@ bool ac_compiler_compile(ac_compiler* c)
         return 0;
     }
 
-    /*** Parsing ***/
-    
-    ac_parser_c parser;
-    ac_parser_c_init(&parser, &c->mgr);
+    /*** Preprocess only ***/
+    if (options(c)->preprocess)
+    {
+        ac_pp pp;
+        ac_pp_init(&pp, &c->mgr, dstr_to_strv(&source->content), source->filepath);
 
-    if (!ac_parser_c_parse(&parser,
-        source->content.data,
-        source->content.size, 
-        source->filepath)
-        )
+        /* Print preprocessed tokens in the standard output. */
+        const ac_token* token = NULL;
+        while ((token = ac_pp_goto_next(&pp)) != NULL
+            && token->type != ac_token_type_EOF)
+        {
+            fprintf(stdout, "%.*s", (int)token->text.size, token->text.data);
+        }
+
+        ac_pp_destroy(&pp);
+        return true;
+    }
+    
+    /*** Parsing ***/
+
+    ac_parser_c parser;
+    ac_parser_c_init(&parser, &c->mgr, dstr_to_strv(&source->content), source->filepath);
+
+    if (!ac_parser_c_parse(&parser))
     {
         return false;
     }
