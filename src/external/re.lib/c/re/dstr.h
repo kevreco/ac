@@ -290,6 +290,17 @@ static inline void TYPENAME ## _assign_f(struct TYPENAME* s, const char* fmt, ..
 	va_start(args, fmt);                 \
 	dstr_assign_fv(&s->dstr, fmt, args); \
 	va_end(args);                        \
+} \
+static inline void TYPENAME ## _append_f(struct TYPENAME* s, const char* fmt, ...)  \
+{                                        \
+	va_list args;                        \
+	va_start(args, fmt);                 \
+	dstr_append_fv(&s->dstr, fmt, args); \
+	va_end(args);                        \
+} \
+static inline void TYPENAME ## _append_fv(struct TYPENAME* s, const char* fmt, va_list args) \
+{                                                                                   \
+	dstr_append_fv(&s->dstr, fmt, args);                                            \
 }
 
 DSTR_DEFINETYPE(dstr16, 16);

@@ -1,7 +1,7 @@
 #ifndef RE_FILE_H
 #define RE_FILE_H
 
-#include <re/dstr.h>
+#include "dstr.h"
 
 #if _WIN32
 #define WIN32_LEAN_AND_MEAN

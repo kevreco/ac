@@ -1,7 +1,7 @@
 #ifndef RE_PATH_H
 #define RE_PATH_H
 
-#include <re/dstr.h>
+#include "dstr.h"
 
 #ifndef RE_PATH_API
 #ifdef RE_PATH_STATIC
