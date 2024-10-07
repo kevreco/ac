@@ -3,6 +3,12 @@
 
 #include "cb_file_it.h"
 
+#if _WIN32
+
+#else
+	#include <dirent.h> /* opendir */
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
