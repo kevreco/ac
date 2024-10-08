@@ -1,4 +1,3 @@
-#define TEST
 /* null directive 1 */
 
 #

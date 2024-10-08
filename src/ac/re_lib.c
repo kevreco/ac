@@ -18,3 +18,6 @@
 
 #define RE_AA_IMPLEMENTATION
 #include <re/arena_alloc.h>
+
+#define HT_IMPLEMENTATION
+#include <re/ht.h>

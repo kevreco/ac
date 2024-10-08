@@ -32,6 +32,8 @@ int main()
 
 	build_with("Release");
 
+	cb_clear(); /* Clear all values of cb. */
+
 	const char* ac_exe = build_with("Debug");
 
 	test_parse_only(ac_exe,   "./tests/parse_declarations/");
@@ -100,8 +102,6 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 
 const char* build_with(const char* config)
 {
-	cb_clear();
-
 	const char* toolchain_name = cb_toolchain_default().name;
 
 	/* Library */
@@ -341,8 +341,6 @@ static int generated_project_count = 0;
 
 void build_generated_exe_and_run(const char* file)
 {
-	cb_clear();
-
 	generated_project_count += 1;
 
 	cb_project_f("generated_%d", generated_project_count);
