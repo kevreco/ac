@@ -9,11 +9,12 @@
 
 typedef struct token_info token_info;
 struct token_info {
+    bool is_supported;
     enum ac_token_type type;
     strv name;
 };
 
-token_info token_infos[ac_token_type_COUNT];
+token_info token_infos[];
 
 static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
 static bool is_horizontal_whitespace(char c);      /* char is alphanumeric */
@@ -98,7 +99,10 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
     for (; i < ac_token_type_COUNT; ++i)
     {
         token_info item = token_infos[i];
-        register_known_identifier(l, item.name, item.type);
+        if (item.is_supported)
+        {
+            register_known_identifier(l, item.name, item.type);
+        }
     }
 }
 
@@ -809,101 +813,152 @@ ac_token
 -------------------------------------------------------------------------------
 */
 
-#define KEYWORD_ITEM_COUNT (sizeof(token_infos) / sizeof(token_infos[0]))
+#define TOKEN_INFO_COUNT (sizeof(token_infos) / sizeof(token_infos[0]))
 
 token_info token_infos[] = {
 
-    { ac_token_type_NONE, STRV("<none>") },
-    { ac_token_type_AMP,  STRV("&") },
-    { ac_token_type_AMP_EQUAL, STRV("&=") },
-    { ac_token_type_ARROW, STRV("->") },
-    { ac_token_type_BACKSLASH, STRV("\\") },
-    { ac_token_type_BOOL, STRV("bool") },
-    { ac_token_type_BRACE_L, STRV("{") },
-    { ac_token_type_BRACE_R, STRV("}") },
-    { ac_token_type_CARET , STRV("^") },
-    { ac_token_type_CARET_EQUAL, STRV("^=") },
-    { ac_token_type_COLON, STRV(":") },
-    { ac_token_type_COMMA, STRV(",") },
-    { ac_token_type_COMMENT, STRV("<comment>") },
-    { ac_token_type_DOLLAR, STRV("$") },
-    { ac_token_type_DOT, STRV(".") },
-    { ac_token_type_DOUBLE_AMP, STRV("&&") },
-    { ac_token_type_DOUBLE_DOT, STRV("..") },
-    { ac_token_type_DOUBLE_EQUAL, STRV("==") },
-    { ac_token_type_DOUBLE_GREATER, STRV(">>") },
-    { ac_token_type_DOUBLE_LESS, STRV("<<") },
-    { ac_token_type_DOUBLE_PIPE, STRV("||") },
-    { ac_token_type_DOUBLE_QUOTE , STRV("\"") },
-    { ac_token_type_ELSE, STRV("else") },
-    { ac_token_type_ENUM, STRV("enum") },
-    { ac_token_type_EOF, STRV("<end-of-line>") },
-    { ac_token_type_EQUAL, STRV("=") },
-    { ac_token_type_ERROR, STRV("<error>") },
-    { ac_token_type_EXCLAM, STRV("!") },
-    { ac_token_type_FALSE, STRV("false") },
-    { ac_token_type_FOR, STRV("for") },
-    { ac_token_type_GREATER, STRV(">") },
-    { ac_token_type_GREATER_EQUAL, STRV(">=") },
-    { ac_token_type_HASH, STRV("#") },
-    { ac_token_type_HORIZONTAL_WHITESPACE, STRV("<horizontal_whitespace>") },
-    { ac_token_type_IDENTIFIER, STRV("<identifier>") },
-    { ac_token_type_IF, STRV("if") },
-    { ac_token_type_LESS, STRV("<") },
-    { ac_token_type_LESS_EQUAL, STRV("<=") },
-    { ac_token_type_LITERAL_CHAR, STRV("<literal-char>") },
-    { ac_token_type_LITERAL_FLOAT, STRV("<literal-float>") },
-    { ac_token_type_LITERAL_INTEGER, STRV("<literal-integer>") },
-    { ac_token_type_LITERAL_STRING, STRV("<literal-string>") },
-    { ac_token_type_MINUS, STRV("-") },
-    { ac_token_type_MINUS_EQUAL, STRV("-=") },
-    { ac_token_type_NEW_LINE, STRV("<new_line>") },
-    { ac_token_type_NOT_EQUAL, STRV("!=") },
-    { ac_token_type_PAREN_L, STRV("(") },
-    { ac_token_type_PAREN_R, STRV(")") },
-    { ac_token_type_PERCENT, STRV("%") },
-    { ac_token_type_PERCENT_EQUAL, STRV("%=") },
-    { ac_token_type_PIPE, STRV("|") },
-    { ac_token_type_PIPE_EQUAL, STRV("|=") },
-    { ac_token_type_PLUS, STRV("+") },
-    { ac_token_type_PLUS_EQUAL, STRV("+=") },
-    { ac_token_type_QUESTION, STRV("?") },
-    { ac_token_type_QUOTE, STRV("'") },
-    { ac_token_type_RETURN, STRV("return") },
-    { ac_token_type_SEMI_COLON, STRV(";") },
-    { ac_token_type_SIZEOF, STRV("sizeof") },
-    { ac_token_type_SLASH, STRV("/") },
-    { ac_token_type_SLASH_EQUAL, STRV("/=") },
-    { ac_token_type_SQUARE_L, STRV("[") },
-    { ac_token_type_SQUARE_R, STRV("]") },
-    { ac_token_type_STAR, STRV("*") },
-    { ac_token_type_STAR_EQUAL, STRV("*=") },
-    { ac_token_type_STRUCT, STRV("struct") },
-    { ac_token_type_TILDE, STRV("~") },
-    { ac_token_type_TILDE_EQUAL, STRV("~=") },
-    { ac_token_type_TRIPLE_DOT, STRV("...") },
-    { ac_token_type_TRUE, STRV("true") },
-    { ac_token_type_TYPEOF, STRV("typeof") },
-    { ac_token_type_WHILE, STRV("while") }
+    { false, ac_token_type_NONE, STRV("<none>") },
+
+    /* Keywords */
+
+    { false, ac_token_type_ALIGNAS, STRV("alignas") },
+    { false, ac_token_type_ALIGNAS2, STRV("_Alignas") },
+    { false, ac_token_type_ALIGNOF, STRV("alignof") },
+    { false, ac_token_type_ALIGNOF2, STRV("_Alignof") },
+    { false, ac_token_type_ATOMIC, STRV("_Atomic") },
+    { false, ac_token_type_AUTO, STRV("auto") },
+    { false, ac_token_type_BOOL, STRV("bool") },
+    { false, ac_token_type_BOOL2, STRV("_Bool") },
+    { false, ac_token_type_BITINT, STRV("_BitInt") },
+    { false, ac_token_type_BREAK, STRV("break") },
+    { false, ac_token_type_CASE, STRV("case") },
+    { false, ac_token_type_CHAR, STRV("char") },
+    { false, ac_token_type_CONST, STRV("const") },
+    { false, ac_token_type_CONSTEXPR, STRV("constexpr") },
+    { false, ac_token_type_CONTINUE, STRV("continue") },
+    { false, ac_token_type_COMPLEX, STRV("_Complex") },
+    { false, ac_token_type_DECIMAL128, STRV("_Decimal128") },
+    { false, ac_token_type_DECIMAL32, STRV("_Decimal32") },
+    { false, ac_token_type_DECIMAL64, STRV("_Decimal64") },
+    { false, ac_token_type_DEFAULT, STRV("default") },
+    { false, ac_token_type_DO, STRV("do") },
+    { false, ac_token_type_DOUBLE, STRV("double") },
+    { false, ac_token_type_ELSE, STRV("else") },
+    { false, ac_token_type_ENUM, STRV("enum") },
+    { false, ac_token_type_EXTERN, STRV("extern") },
+    { false, ac_token_type_FALSE, STRV("false") },
+    { false, ac_token_type_FLOAT, STRV("float") },
+    { false, ac_token_type_FOR, STRV("for") },
+    { false, ac_token_type_GENERIC, STRV("_Generic") },
+    { false, ac_token_type_GOTO, STRV("goto") },
+    { false, ac_token_type_IF, STRV("if") },
+    { false, ac_token_type_INLINE, STRV("inline") },
+    /* @TODO properly support int. */
+    { false, ac_token_type_INT, STRV("int") },
+    { false, ac_token_type_IMAGINARY, STRV("_Imaginary") },
+    { false, ac_token_type_LONG, STRV("long") },
+    { false, ac_token_type_NORETURN, STRV("_Noreturn") },
+    { false, ac_token_type_NULLPTR, STRV("nullptr") },
+    { false, ac_token_type_REGISTER, STRV("register") },
+    { false, ac_token_type_RESTRICT, STRV("restrict") },
+    { true,  ac_token_type_RETURN, STRV("return") },
+    { false, ac_token_type_SHORT, STRV("short") },
+    { false, ac_token_type_SIGNED, STRV("signed") },
+    { false, ac_token_type_SIZEOF, STRV("sizeof") },
+    { false, ac_token_type_STATIC, STRV("static") },
+    { false, ac_token_type_STATIC_ASSERT, STRV("static_assert") },
+    { false, ac_token_type_STATIC_ASSERT2, STRV("_Static_assert") },
+    { false, ac_token_type_STRUCT, STRV("struct") },
+    { false, ac_token_type_SWITCH, STRV("switch") },
+    { false, ac_token_type_THREAD_LOCAL, STRV("thread_local") },
+    { false, ac_token_type_THREAD_LOCAL2, STRV("_Thread_local") },
+    { false, ac_token_type_TRUE, STRV("true") },
+    { false, ac_token_type_TYPEDEF, STRV("typedef") },
+    { false, ac_token_type_TYPEOF, STRV("typeof") },
+    { false, ac_token_type_TYPEOF_UNQUAL, STRV("typeof_unqual") },
+    { false, ac_token_type_UNION, STRV("union") },
+    { false, ac_token_type_UNSIGNED, STRV("unsigned") },
+    { false, ac_token_type_VOID, STRV("void") },
+    { false, ac_token_type_VOLATILE, STRV("volatile") },
+    { false, ac_token_type_WHILE, STRV("while") },
+
+    /* Symbols */
+
+    { false, ac_token_type_AMP, STRV("&") },
+    { false, ac_token_type_AMP_EQUAL, STRV("&=") },
+    { false, ac_token_type_ARROW, STRV("->") },
+    { true,  ac_token_type_BACKSLASH, STRV("\\") },
+    { true,  ac_token_type_BRACE_L, STRV("{") },
+    { true,  ac_token_type_BRACE_R, STRV("}") },
+    { false, ac_token_type_CARET, STRV("^") },
+    { false, ac_token_type_CARET_EQUAL, STRV("^=") },
+    { false, ac_token_type_COLON, STRV(":") },
+    { true, ac_token_type_COMMA, STRV(",") },
+    { false, ac_token_type_COMMENT, STRV("<comment>") },
+    { false, ac_token_type_DOLLAR, STRV("$") },
+    { false, ac_token_type_DOT, STRV(".") },
+    { false, ac_token_type_DOUBLE_AMP, STRV("&&") },
+    { false, ac_token_type_DOUBLE_DOT, STRV("..") },
+    { false, ac_token_type_DOUBLE_EQUAL, STRV("==") },
+    { false, ac_token_type_DOUBLE_GREATER, STRV(">>") },
+    { false, ac_token_type_DOUBLE_LESS, STRV("<<") },
+    { false, ac_token_type_DOUBLE_PIPE, STRV("||") },
+    { false, ac_token_type_DOUBLE_QUOTE , STRV("\"") },
+    { true,  ac_token_type_EOF, STRV("<end-of-line>") },
+    { true,  ac_token_type_EQUAL, STRV("=") },
+    { false, ac_token_type_ERROR, STRV("<error>") },
+    { true,  ac_token_type_EXCLAM, STRV("!") },
+    { false, ac_token_type_GREATER, STRV(">") },
+    { false, ac_token_type_GREATER_EQUAL, STRV(">=") },
+    { true,  ac_token_type_HASH, STRV("#") },
+    { false, ac_token_type_HORIZONTAL_WHITESPACE, STRV("<horizontal_whitespace>") },
+    { false, ac_token_type_IDENTIFIER, STRV("<identifier>") },
+    { false, ac_token_type_LESS, STRV("<") },
+    { false, ac_token_type_LESS_EQUAL, STRV("<=") },
+    { false, ac_token_type_LITERAL_CHAR, STRV("<literal-char>") },
+    { false, ac_token_type_LITERAL_FLOAT, STRV("<literal-float>") },
+    { true,  ac_token_type_LITERAL_INTEGER, STRV("<literal-integer>") },
+    { false, ac_token_type_LITERAL_STRING, STRV("<literal-string>") },
+    { true,  ac_token_type_MINUS, STRV("-") },
+    { false, ac_token_type_MINUS_EQUAL, STRV("-=") },
+    { true, ac_token_type_NEW_LINE, STRV("<new_line>") },
+    { false, ac_token_type_NOT_EQUAL, STRV("!=") },
+    { true,  ac_token_type_PAREN_L, STRV("(") },
+    { true,  ac_token_type_PAREN_R, STRV(")") },
+    { false, ac_token_type_PERCENT, STRV("%") },
+    { false, ac_token_type_PERCENT_EQUAL, STRV("%=") },
+    { false, ac_token_type_PIPE, STRV("|") },
+    { false, ac_token_type_PIPE_EQUAL, STRV("|=") },
+    { true,  ac_token_type_PLUS, STRV("+") },
+    { false, ac_token_type_PLUS_EQUAL, STRV("+=") },
+    { false, ac_token_type_QUESTION, STRV("?") },
+    { false, ac_token_type_QUOTE, STRV("'") },
+    { true,  ac_token_type_SEMI_COLON, STRV(";") },
+    { false, ac_token_type_SLASH, STRV("/") },
+    { false, ac_token_type_SLASH_EQUAL, STRV("/=") },
+    { false, ac_token_type_SQUARE_L, STRV("[") },
+    { false, ac_token_type_SQUARE_R, STRV("]") },
+    { false, ac_token_type_STAR, STRV("*") },
+    { false, ac_token_type_STAR_EQUAL, STRV("*=") },
+    { false, ac_token_type_TILDE, STRV("~") },
+    { false, ac_token_type_TILDE_EQUAL, STRV("~=") },
+    { false, ac_token_type_TRIPLE_DOT, STRV("...") }
+
+    /* Other known identifiers like the preprocessor directives . @TODO */
 };
 
 const char* ac_token_type_to_str(enum ac_token_type type) {
-    return token_infos[type].name.data;
+    return ac_token_type_to_strv(type).data;
 }
 
-strv ac_token_type_to_strv(enum ac_token_type type) {
-
+strv ac_token_type_to_strv(enum ac_token_type type)
+{
     return token_infos[type].name;
 }
 
 const char* ac_token_to_str(ac_token token) {
 
-    if (token.type == ac_token_type_IDENTIFIER)
-    {
-        return "identifier";
-    }
-
-    return ac_token_type_to_str(token.type);
+    return ac_token_to_strv(token).data;
 }
 
 strv ac_token_to_strv(ac_token token) {
@@ -916,14 +971,14 @@ strv ac_token_to_strv(ac_token token) {
     return ac_token_type_to_strv(token.type);
 }
 
-bool ac_token_is_keyword(ac_token t) {
+bool ac_token_type_is_keyword(enum ac_token_type t) {
 
-    return t.text.data >= token_infos[0].name.data
-        && t.text.data <= token_infos[ac_token_type_COUNT-1].name.data;
+    return t >= ac_token_type_ALIGNAS
+        && t <= ac_token_type_WHILE;
 }
 
 static size_t token_str_len(enum ac_token_type type) {
-    assert(!token_type_is_literal(type));
+    AC_ASSERT(!token_type_is_literal(type));
 
     return token_infos[type].name.size;
 }

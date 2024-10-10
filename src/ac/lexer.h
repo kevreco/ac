@@ -10,11 +10,74 @@ extern "C" {
 
 enum ac_token_type {
     ac_token_type_NONE,
+
+    /* Keywords */
+
+    ac_token_type_ALIGNAS,
+    ac_token_type_ALIGNAS2,
+    ac_token_type_ALIGNOF,
+    ac_token_type_ALIGNOF2,
+    ac_token_type_ATOMIC,
+    ac_token_type_AUTO,
+    ac_token_type_BITINT,
+    ac_token_type_BOOL,
+    ac_token_type_BOOL2,
+    ac_token_type_BREAK,
+    ac_token_type_CASE,
+    ac_token_type_CHAR,
+    ac_token_type_CONST,
+    ac_token_type_CONSTEXPR,
+    ac_token_type_CONTINUE,
+    ac_token_type_COMPLEX,
+    ac_token_type_DECIMAL128,
+    ac_token_type_DECIMAL32,
+    ac_token_type_DECIMAL64,
+    ac_token_type_DEFAULT,
+    ac_token_type_DO,
+    ac_token_type_DOUBLE,
+    ac_token_type_ELSE,
+    ac_token_type_ENUM,
+    ac_token_type_EXTERN,
+    ac_token_type_FALSE,
+    ac_token_type_FLOAT,
+    ac_token_type_FOR,
+    ac_token_type_GENERIC,
+    ac_token_type_GOTO,
+    ac_token_type_IF,
+    ac_token_type_INLINE,
+    ac_token_type_INT,
+    ac_token_type_IMAGINARY,
+    ac_token_type_LONG,
+    ac_token_type_NORETURN,
+    ac_token_type_NULLPTR,
+    ac_token_type_REGISTER,
+    ac_token_type_RESTRICT,
+    ac_token_type_RETURN,
+    ac_token_type_SHORT,
+    ac_token_type_SIGNED,
+    ac_token_type_SIZEOF,
+    ac_token_type_STATIC,
+    ac_token_type_STATIC_ASSERT,
+    ac_token_type_STATIC_ASSERT2,
+    ac_token_type_STRUCT,
+    ac_token_type_SWITCH,
+    ac_token_type_THREAD_LOCAL,
+    ac_token_type_THREAD_LOCAL2,
+    ac_token_type_TRUE,
+    ac_token_type_TYPEDEF,
+    ac_token_type_TYPEOF,
+    ac_token_type_TYPEOF_UNQUAL,
+    ac_token_type_UNION,
+    ac_token_type_UNSIGNED,
+    ac_token_type_VOID,
+    ac_token_type_VOLATILE,
+    ac_token_type_WHILE,
+
+    /* Symbols */
     ac_token_type_AMP,             /* &  */ 
     ac_token_type_AMP_EQUAL,       /* &= */
     ac_token_type_ARROW,           /* -> */
     ac_token_type_BACKSLASH,       /* \  */
-    ac_token_type_BOOL,
     ac_token_type_BRACE_L,         /* {  */
     ac_token_type_BRACE_R,         /* }  */
     ac_token_type_CARET,           /* ^  */
@@ -31,20 +94,15 @@ enum ac_token_type {
     ac_token_type_DOUBLE_LESS,     /* << */
     ac_token_type_DOUBLE_PIPE,     /* || */
     ac_token_type_DOUBLE_QUOTE,    /* "  */
-    ac_token_type_ELSE,
-    ac_token_type_ENUM,
     ac_token_type_EOF,
     ac_token_type_EQUAL,           /* =  */
     ac_token_type_ERROR,
     ac_token_type_EXCLAM,          /* !  */
-    ac_token_type_FALSE,
-    ac_token_type_FOR,
     ac_token_type_GREATER,         /* >  */
     ac_token_type_GREATER_EQUAL,   /* >= */
     ac_token_type_HASH,            /* #  */
     ac_token_type_HORIZONTAL_WHITESPACE, /* All comon whitespaces but the new line and carriage return */
     ac_token_type_IDENTIFIER,
-    ac_token_type_IF,
     ac_token_type_LESS,            /* <  */
     ac_token_type_LESS_EQUAL,      /* <= */
     ac_token_type_LITERAL_CHAR,
@@ -65,22 +123,19 @@ enum ac_token_type {
     ac_token_type_PLUS_EQUAL,      /* += */
     ac_token_type_QUESTION,        /* ?  */
     ac_token_type_QUOTE,           /* '  */
-    ac_token_type_RETURN,
     ac_token_type_SEMI_COLON,      /* ;  */
-    ac_token_type_SIZEOF,
     ac_token_type_SLASH,           /* /  */
     ac_token_type_SLASH_EQUAL,     /* /= */
     ac_token_type_SQUARE_L,        /* [  */
     ac_token_type_SQUARE_R,        /* ]  */
     ac_token_type_STAR,            /* *  */
     ac_token_type_STAR_EQUAL,      /* *= */
-    ac_token_type_STRUCT,
     ac_token_type_TILDE,           /* ~   */
     ac_token_type_TILDE_EQUAL,     /* ~=  */
     ac_token_type_TRIPLE_DOT,      /* ... */
-    ac_token_type_TRUE,
-    ac_token_type_TYPEOF,
-    ac_token_type_WHILE,
+
+    /* Other known identifiers like the preprocessor directives . @TODO */
+
     ac_token_type_COUNT
 };
 
