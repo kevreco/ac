@@ -2,45 +2,29 @@
 # C Parser and C converter - Stage 0
   
     - [./] Support integer declaration. "int a = 0;"
-	- [./] Support multiple integer declaration. "int a = 0, b = 1;"
-	- [./] Support function definition. "int main() { return 0; }
-	- [./] Suppprt function parameters. "int main(int a, int b) { return 0;}"
-	- [./] Support forward function declaration. "int main(int a);
-	- [./] Support other type char parameter.
-	- [./] Support pointer parameters.
-	- [./] Support array parameters.
-	
+    - [./] Support multiple integer declaration. "int a = 0, b = 1;"
+    - [./] Support function definition. "int main() { return 0; }
+    - [./] Suppprt function parameters. "int main(int a, int b) { return 0;}"
+    - [./] Support forward function declaration. "int main(int a);
+    - [./] Support other type char parameter.
+    - [./] Support pointer parameters.
+    - [./] Support array parameters.
+    
 # C Parser and C converter - Stage 1
 
+    - [] Handle basic macro?
+        - [./] Object-like macro.
+        - [./] Strays '\' between tokens.
+        - [./] Strays '\' for identifiers.
+        - [] Strays '\' for other multiple-char token.
+        - [] Function-like macro.
+        - [] String concatenation.
+        - [] Special macro like __COUNT__, __LINE__, __FILE__ etc.
     - [] Support pointer declaration.
     - [] Support array declaration.
-	- [] Handle typedef.
-	- [] Handle struct
-	- [] Handle basic macro?
+    - [] Handle typedef.
+    - [] Handle struct.
 
 # Type check
 
     - Implement some type check with int8/int16/etc before introducing structure and enum?
-
-# Augmented C
-	- find a good iterator implementation for array, lists etc.
-		See design/iterator.md
-	- add attributes.
-	  ```
-		#pragma AC [attribute_key = attribute_value, attribute_key2]
-	  ```
-	- add prefix to symbols to simulate namespace?
-	- Create compile time evaluation with VM?
-	- Think about how we can augment the C language with metaprogramming.
-		- Serialize/deserialize some data.
-		- Iterate over all types of a compilation unit.
-		- Iterate over alls functions of a compilation unit.
-		- Add members to a struct (for example to add debug info).
-		- Remove members from type?
-		- Insert code to functions at the end of at the begining.
-		- Insert code before or after a function call.
-	- iterate all the symbols in the project (check consistencies)
-    - iterate all the literal strings in the project (wordspell check etc.)
-	
-    - new kind of function to return values conditionaly.
-	See design/conditional_function.md

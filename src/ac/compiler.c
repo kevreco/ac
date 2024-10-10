@@ -62,9 +62,11 @@ bool ac_compiler_compile(ac_compiler* c)
 
     if (!ac_parser_c_parse(&parser))
     {
+        ac_parser_c_destroy(&parser);
         return false;
     }
-    
+    ac_parser_c_destroy(&parser);
+
     /*** Type/semantic check - @TODO ***/
 
     if ((options(c)->step & ac_compilation_step_SEMANTIC) == 0)

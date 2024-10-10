@@ -5,11 +5,11 @@
 
 #include "global.h"
 
+#define AC_EOF ('\0')
+
 static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
-static bool is_whitespace(const ac_lex* l);        /* current char is alphanumeric */
-static bool is_alpha(const ac_lex* l);             /* current char is alpha */
-static bool is_alphanum(const ac_lex* l);          /* current char is alphanumeric */
-static bool is_utf8(const ac_lex* l);              /* current char is utf8 */
+static bool is_horizontal_whitespace(char c);      /* char is alphanumeric */
+static bool is_identifier(char c);          /* char is allowed in identifier */
 static bool is_eof(const ac_lex* l);               /* current char is end of line */
 static bool is_char(const ac_lex* l, char c);      /* current char is equal to char  */
 static bool is_not_char(const ac_lex* l, char c);  /* current char is not equal to char  */
@@ -17,8 +17,14 @@ static bool is_str(const ac_lex* l, const char* str, size_t count); /* current c
 static bool next_is(const ac_lex* l, char c);      /* next char equal to */
 static bool next_next_is(const ac_lex* l, char c); /* next next char equal to */
 
-static void consume_one(ac_lex* l);       /* goto next char */
-static char get_next(ac_lex* l);          /* goto next char and return it */
+enum consumed_type {
+    consumed_char_WAS_SPACE,
+    consumed_char_WAS_NOT_SPACE
+};
+
+static enum consumed_type consume_one(ac_lex* l); /* goto next char */
+static int char_after_stray(ac_lex* l);           /* Get the character after stray such as \\n, \\r or \\r\n */
+static int next_char_without_stray(ac_lex* l, int* c);
 
 static void skipn(ac_lex* l, unsigned n); /* skip n char */
 
@@ -29,6 +35,8 @@ static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv 
 static const ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
 static const ac_token* token_eof(ac_lex* l);   /* set current token to eof and returns it. */
 static const ac_token* token_from_type_and_consume(ac_lex* l, enum ac_token_type type); /* set current token and got to next */
+static strv create_or_reuse_identifier(ac_lex* l, strv sv, size_t hash);
+
 static size_t token_str_len(enum ac_token_type type);
 /* Hack to use 'is_keyword' on some string pointers to static keywords. */
 static bool try_parse_keyword(strv* text, enum ac_token_type* type);
@@ -55,8 +63,8 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
 
         l->mgr = mgr;
 
-        l->options.enable_hex_float = true;
-
+        l->options.reject_hex_float = mgr->options.reject_hex_float;
+        l->options.reject_stray = mgr->options.reject_stray;
     }
 
     /* Initialize source. */
@@ -72,12 +80,17 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
             l->len = content.size;
         }
     }
+
+    dstr_init(&l->tok_buf);
 }
 
 void ac_lex_destroy(ac_lex* l)
 {
+    dstr_destroy(&l->tok_buf);
     memset(l, 0, sizeof(ac_lex));
 }
+
+#define NEXT_CHAR_NO_STRAY(l, c) next_char_without_stray(l, &c)
 
 const ac_token* ac_lex_goto_next(ac_lex* l)
 {
@@ -85,25 +98,39 @@ const ac_token* ac_lex_goto_next(ac_lex* l)
         return token_eof(l);
     }
 
+switch_start:
     switch (l->cur[0]) {
 
+    case '\\':
+        if (l->options.reject_stray)
+            goto before_default;
+        if (!next_is(l, '\n')
+            && !next_is(l, '\r')
+            && !next_is(l, '\0'))
+        {
+            ac_report_error("Stray '\\' in program.");
+            return token_eof(l);
+        }
+
+        char_after_stray(l); /* Skip stray. */
+        goto switch_start;
     case ' ':
     case '\t':
     case '\f':
     case '\v': {
-        /* Parse group of whitespace. */
+        /* Parse group of horizontal whitespace. */
         const char* start = l->cur;
-        consume_one(l);
-        while (is_whitespace(l)) {
+        while (is_horizontal_whitespace(l->cur[0])) {
             consume_one(l);
         }
+        
         return token_from_text(l, ac_token_type_HORIZONTAL_WHITESPACE, strv_make_from(start, l->cur - start));
     }
 
     case '\n':
     case '\r':
     {
-        /* Parse single line ending. */
+        /* Parse single line ending: \n or \r or \r\n */
         const char* start = l->cur;
         consume_one(l);
         return token_from_text(l, ac_token_type_NEW_LINE, strv_make_from(start, l->cur - start));
@@ -127,7 +154,6 @@ const ac_token* ac_lex_goto_next(ac_lex* l)
     }
 
     case '!': {
-
         if (next_is(l, '=')) {
             return token_from_type_and_consume(l, ac_token_type_NOT_EQUAL);
         }
@@ -145,7 +171,6 @@ const ac_token* ac_lex_goto_next(ac_lex* l)
     }
 
     case '>': {
-
         if (next_is(l, '>')) {
             return token_from_type_and_consume(l, ac_token_type_DOUBLE_GREATER);
         }
@@ -261,61 +286,94 @@ const ac_token* ac_lex_goto_next(ac_lex* l)
     case '"' : return parse_ascii_char_literal(l);
     case '\0': return token_eof(l);
 
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9': return parse_number(l);
+    case '0': case '1': case '2': case '3': case '4':
+    case '5': case '6': case '7': case '8': case '9':
+        return parse_number(l);
 
-    default: {
+    case 'a': case 'b': case 'c': case 'd': case 'e':
+    case 'f': case 'g': case 'h': case 'i': case 'j':
+    case 'k': case 'l': case 'm': case 'n': case 'o':
+    case 'p': case 'q': case 'r': case 's': case 't':
+    case 'u': case 'v': case 'w': case 'x': case 'y':
+    case 'z':
+    case 'A': case 'B': case 'C': case 'D': case 'E':
+    case 'F': case 'G': case 'H': case 'I': case 'J':
+    case 'K': case 'L': case 'M': case 'N': case 'O':
+    case 'P': case 'Q': case 'R': case 'S': case 'T':
+    case 'U': case 'V': case 'W': case 'X': case 'Y':
+    case 'Z':
+    case '_':
+    {
+parse_identifier:
+        AC_ASSERT(is_identifier(l->cur[0]));
 
-        if (is_alpha(l) || is_char(l, '_') || is_utf8(l)) {
+        size_t hash = AC_HASH_INIT;
+        hash = AC_HASH(hash, l->cur[0]); /* Calculate hash while we parse the identifier. */
 
-            const char* start = l->cur;
-            int n = 0;
-            do {
-                ++n;
-                consume_one(l);
+        const char* start = l->cur;
+        int n = 0;
+        do {
+            ++n;
+            /* @OPT: If this a "bottleneck", it can be improved.
+            consume_one can be replaced with a more lightweight function
+            that does not care about new_lines. */
+            consume_one(l);
+            hash = AC_HASH(hash, l->cur[0]);
+        } while (is_identifier(l->cur[0]));
 
-            } while ((is_alphanum(l) || is_char(l, '_') || is_utf8(l)));
+        strv text = strv_make_from(start, n);
 
-            enum ac_token_type type;
-            strv text = strv_make_from(start, n);
-
-            if (strv_equals_str(text, "true"))
+        if (is_char(l, '\\')) /* Stray found. We need to create a new string without it and reparse the identifier. */
+        {
+            int c;
+            dstr_assign(&l->tok_buf, strv_make_from(start, l->cur - start));
+            l->cur--; /* Adjust buffer so the current stray is eaten (if it's indeed a stray). */
+            NEXT_CHAR_NO_STRAY(l, c);
+            while (is_identifier(c))
             {
-                l->token.type = ac_token_type_LITERAL_BOOL;
-                l->token.u.b.value = true;
-                return &l->token;
-            }
-            else if (strv_equals_str(text, "false"))
-            {
-                l->token.type = ac_token_type_LITERAL_BOOL;
-                l->token.u.b.value = false;
-                return &l->token;
-            }
-            else if (try_parse_keyword(&text, &type)) /* if keyword is parsed token type is also retrieved */
-            {
-                /* Do nothing, the type as been retrieved already. */
-            }
-            else
-            {
-                type = ac_token_type_IDENTIFIER;
+                hash = AC_HASH(hash, l->cur[0]);
+                dstr_append_char(&l->tok_buf, c);
+                NEXT_CHAR_NO_STRAY(l, c);
             }
 
-            return token_from_text(l, type, text);
-        } /* end if (is_alpha(l) || is(l, '_') || is_utf8(l)) */
+            /* @FIXME this should be also used for keywords and other known tokens. */
+            text = create_or_reuse_identifier(l, dstr_to_strv(&l->tok_buf), hash);
+        }
+        enum ac_token_type type;
+
+        if (strv_equals_str(text, "true"))
+        {
+            l->token.type = ac_token_type_LITERAL_BOOL;
+            l->token.u.b.value = true;
+            return &l->token;
+        }
+        else if (strv_equals_str(text, "false"))
+        {
+            l->token.type = ac_token_type_LITERAL_BOOL;
+            l->token.u.b.value = false;
+            return &l->token;
+        }
+        else if (try_parse_keyword(&text, &type)) /* if keyword is parsed token type is also retrieved */
+        {
+            /* Do nothing, the type as been retrieved already. */
+        }
         else
         {
-            /* @TODO handle this without assert, likely return a EOF or ERROR token */
-            assert(0 && "Illegal char");
+            type = ac_token_type_IDENTIFIER;
         }
-        break;
+
+        return token_from_text(l, type, text);
+    }
+
+    before_default:
+    default: {
+        if (l->cur[0] >= 0x80 && l->cur[0] <= 0xFF) /* Start of utf8 identifiers */
+        {
+            goto parse_identifier;
+        }
+        ac_report_error("Internal error: Unhandled character: %c", l->cur[0]);
+        return token_error(l);
+        
     } /* end default case */
 
     } /* end switch */
@@ -357,49 +415,17 @@ static inline bool is_end_line(const ac_lex* l) {
     return _is_end_line(l->cur[0]);
 }
 
-static inline bool _is_whitespace(char c) {
-    return (c == ' ' || c == '\n'
-        || c == '\t' || c == '\r'
-        || c == '\f' || c == '\v');
+static inline bool is_horizontal_whitespace(char c) {
+    return (c == ' ' || c == '\t' || c == '\f' || c == '\v');
 }
 
-static inline bool is_whitespace(const ac_lex* l) {
-    return _is_whitespace(l->cur[0]);
-}
+static inline bool is_identifier(char c) {
 
-static inline bool _is_alpha(char c) {
-    return (c >= 'a' && c <= 'z')
-        || (c >= 'A' && c <= 'Z');
-}
-
-static inline bool is_alpha(const ac_lex* l) {
-    return _is_alpha(l->cur[0]);
-}
-
-static inline bool _is_alphanum(char c) {
     return (c >= 'a' && c <= 'z')
         || (c >= 'A' && c <= 'Z')
-        || (c >= '0' && c <= '9');
-}
-static inline bool is_alphanum(const ac_lex* l) {
-    return _is_alphanum(l->cur[0]);
-}
-
-static inline bool _is_num(char c) {
-    return (c >= '0' && c <= '9');
-}
-
-static inline bool is_num(const ac_lex* l) {
-    return _is_num(l->cur[0]);
-}
-
-static inline bool _is_utf8(char c) {
-    /* @TODO do it in a better way */
-    return (unsigned char)c >= 128;
-}
-
-static inline bool is_utf8(const ac_lex* l) {
-    return _is_utf8(l->cur[0]);
+        || (c >= '0' && c <= '9')
+        || (c == '_')
+        || (unsigned char)c >= 128; /* Is utf-8 */
 }
 
 static inline bool is_eof(const ac_lex* l) {
@@ -419,14 +445,17 @@ static bool is_str(const ac_lex* l, const char* str, size_t count) {
 }
 
 static bool next_is(const ac_lex* l, char c) {
-    return *(l->cur + 1) == c;
+    return l->cur + 1 < l->end
+        && *(l->cur + 1) == c;
 }
 
 static bool next_next_is(const ac_lex* l, char c) {
-    return *(l->cur + 2) == c;
+    return l->cur + 2 < l->end
+        && *(l->cur + 2) == c;
 }
 
-static inline void consume_one(ac_lex* l) {
+/* We consume one char at a time to handle new lines and row/line numbers which change the location of tokens. */
+static inline enum consumed_type consume_one(ac_lex* l) {
 
     if (is_char(l, '\n') || is_char(l, '\r')) {
 
@@ -435,27 +464,47 @@ static inline void consume_one(ac_lex* l) {
         int num_char = (l->cur[0] + l->cur[1] == '\r' + '\n') ? 2 : 1;
         l->cur += num_char; /* skip newline */
 
-        if (num_char == 1)
-            location_increment_row(&l->location);
+        location_increment_row(&l->location);
 
-        else
-        {
+        if (num_char == 2) /* Increment pos by one extra char. */
             l->location.pos++;
-            location_increment_row(&l->location);
-        }
+
+        return consumed_char_WAS_SPACE;
     }
     else {
 
         l->cur++;
         location_increment_column(&l->location);
+        return consumed_char_WAS_NOT_SPACE;
     }
 }
 
-static char get_next(ac_lex* l) {
+static int char_after_stray(ac_lex* l)
+{
+    AC_ASSERT(l->cur[0] == '\\');
 
+    /* Skip all consecutive backslash. */
+    while (l->cur[0] == '\\')
+    {
+        consume_one(l); /* Skip '\\' */
+
+        if (consume_one(l) != consumed_char_WAS_SPACE)
+        {
+            ac_report_error("Stray '\\' in program ");
+            return AC_EOF;
+        }
+    }
+    return l->cur[0];
+}
+
+static int next_char_without_stray(ac_lex* l, int* c)
+{
     consume_one(l);
-
-    return *l->cur;
+    *c = *l->cur;
+    if (!l->options.reject_stray && *c == '\\') {
+        *c = char_after_stray(l);
+    }
+    return *c;
 }
 
 static void skipn(ac_lex* l, unsigned n) {
@@ -618,7 +667,7 @@ static const ac_token* parse_number(ac_lex* l) {
     };
 
     /* try parse float */
-    if (is_char(l, '.') && (base == base10 || (l->options.enable_hex_float && base == base16)))
+    if (is_char(l, '.') && (base == base10 || (!l->options.reject_hex_float && base == base16)))
     {
         f.is_double = true;
 
@@ -642,7 +691,7 @@ static const ac_token* parse_number(ac_lex* l) {
         f_acc = (double)acc + (f_acc * (1.0 / (double)power_));
 
         bool has_exponent;
-        if (l->options.enable_hex_float && base == base16) {
+        if (!l->options.reject_hex_float && base == base16) {
             /* exponent required for hex float literal */
             if (is_char(l, 'p') && is_char(l, 'P')) {
                 ac_report_error_loc(l->location, "parse_number: internal error while parsing hex_float exponent\n");
@@ -670,7 +719,7 @@ static const ac_token* parse_number(ac_lex* l) {
                 consume_one(l);
             }
 
-            if (l->options.enable_hex_float && base == base16)
+            if (!l->options.reject_hex_float && base == base16)
                 power = stb__clex_pow(2, exponent);
             else
                 power = stb__clex_pow(10, exponent);
@@ -723,6 +772,26 @@ static const ac_token* token_from_type_and_consume(ac_lex* l, enum ac_token_type
     const ac_token* t = token_from_text(l, type, strv_make_from(l->cur, size));
     skipn(l, size);
     return t;
+}
+
+static strv create_or_reuse_identifier(ac_lex* l, strv sv, size_t hash)
+{
+    strv* result;
+    result = (strv*)ht_get_item_h(&l->mgr->identifiers, &sv, hash);
+
+    /* If the identifier is new we create a new entry. */
+    if (result == NULL)
+    {
+        strv s;
+        s.data = ac_allocator_allocate(&l->mgr->identifiers_arena.allocator, sv.size);
+        s.size = sv.size;
+        memcpy((char*)s.data, sv.data, sv.size);
+
+        ht_insert_h(&l->mgr->identifiers, &s, hash);
+        return s;
+    }
+
+    return *result;
 }
 
 /*

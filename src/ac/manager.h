@@ -48,6 +48,8 @@ struct ac_options {
     */
     bool debug_parser;                   /* Will print some debugging values in the output. */ 
     bool preprocess;                     /* Print preprocess result in the standard output. */
+    bool reject_hex_float;               /* Prevent hex float parsing. */
+    bool reject_stray;                   /* Prevent stray parsing */
 };
 
 void ac_options_init_default(ac_options* o);
@@ -64,7 +66,8 @@ struct ac_manager {
        We dont't free them until this manager is destroyed.
     */
     ac_allocator_arena ast_arena;
-
+    ac_allocator_arena identifiers_arena;
+    ht identifiers; /* Hash table with all identifiers to compare them faster with a hash. */
     /* keep reference to destroy it. */
     ac_source_file source_file;
     ac_ast_top_level* top_level;

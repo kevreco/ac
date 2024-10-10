@@ -283,3 +283,16 @@ static const char* os_std_console_color_end()
     return "";
 }
 #endif /* defined(WIN32) */
+
+size_t ac_djb2_hash(char* str, size_t count)
+{
+    size_t hash = AC_HASH_INIT;
+    size_t i = 0;
+    while (i < count)
+    {
+        hash = AC_HASH(hash, str[i]);
+        i++;
+    }
+
+    return hash;
+}

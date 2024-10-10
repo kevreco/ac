@@ -97,16 +97,28 @@ HT_API void* ht_end(const ht* h);
 
 /* Returns true if item was inserted, false if item was replaced. */
 HT_API ht_bool ht_insert(ht* h, void* item);
+/* Same as ht_insert but explicitly provide the hash value. */
+HT_API ht_bool ht_insert_h(ht* h, void* item, ht_hash_t hash);
 
 /* Returns true if item was found according to items_are_same. */
 HT_API ht_bool ht_contains(const ht* h, void* item);
+/* Same as ht_inht_contains but explicitly provide the hash value. */
+HT_API ht_bool ht_contains_h(const ht* h, void* item, ht_hash_t hash);
 
 /* Returns item according to items_are_same implementation, returns null if item was not found. */
 HT_API void* ht_get_item(const ht* h, void* item);
+/* Same as ht_get_item but explicitly provide the hash value. */
+HT_API void* ht_get_item_h(const ht* h, void* item, ht_hash_t hash);
+
 /* Get a copy of the item if it has been found copy the data in result, returns true if item was found */
 HT_API ht_bool ht_get(const ht* h, void* item, void* result);
+/* Same as ht_get but explicitly provide the hash value. */
+HT_API ht_bool ht_get_h(const ht* h, void* item, ht_hash_t hash, void* result);
+
 /* Delete item, returns true if i8t was deleted */
 HT_API ht_bool ht_erase(ht* h, void* item);
+/* Same as ht_erase but explicitly provide the hash value. */
+HT_API ht_bool ht_erase_h(ht* h, void* item, ht_hash_t hash);
 
 HT_API void ht_cursor_init(ht* h, ht_cursor* cursor);
 /* Go to next bucket and return point to it */
@@ -427,12 +439,11 @@ ht_end(const ht* h)
 }
 
 static ht_bool
-ht__try_find_index(const ht* h, const void* item, ht_size_t* index)
+ht__try_find_index(const ht* h, const void* item, ht_hash_t hash, ht_size_t* index)
 {
     if (ht_is_empty(h))
         return 0;
 
-    ht_hash_t hash = ht__do_hash(h, item);
     ht_size_t target_bucket_index = ht__bucket_index(h, hash);
     ht_size_t current_bucket_index = target_bucket_index;
 
@@ -465,16 +476,30 @@ ht__try_find_index(const ht* h, const void* item, ht_size_t* index)
 HT_API ht_bool
 ht_contains(const ht* h, void* item)
 {
+    ht_hash_t hash = ht__do_hash(h, item);
+    return ht_contains_h(h, item, hash);
+}
+
+HT_API ht_bool
+ht_contains_h(const ht* h, void* item, ht_hash_t hash)
+{
     ht_size_t index;
-    return ht__try_find_index(h, item, &index);
+    return ht__try_find_index(h, item, hash , &index);
 }
 
 HT_API void*
 ht_get_item(const ht* h, void* item)
 {
+    ht_hash_t hash = ht__do_hash(h, item);
+    return ht_get_item_h(h, item, hash);
+}
+
+HT_API void*
+ht_get_item_h(const ht* h, void* item, ht_hash_t hash)
+{
     ht_size_t index = 0;
 
-    if (!ht__try_find_index(h, item, &index))
+    if (!ht__try_find_index(h, item, hash , &index))
     {
         return 0;
     }
@@ -486,7 +511,14 @@ ht_get_item(const ht* h, void* item)
 HT_API ht_bool
 ht_get(const ht* h, void* item, void* result_item)
 {
-    void* item_found = ht_get_item(h, item);
+    ht_hash_t hash = ht__do_hash(h, item);
+    return ht_get_h(h, item, hash, result_item);
+}
+
+HT_API ht_bool
+ht_get_h(const ht* h, void* item, ht_hash_t hash, void* result_item)
+{
+    void* item_found = ht_get_item_h(h, item, hash);
     if (!item_found)
     {
         return 0;
@@ -498,7 +530,7 @@ ht_get(const ht* h, void* item, void* result_item)
 }
 
 static ht_bool
-ht__insert(ht* h, void* item, bucket_t** inserted_or_updated)
+ht__insert(ht* h, void* item, ht_hash_t hash, bucket_t** inserted_or_updated)
 {
     if (h->bucket_capacity == 0
         || h->filled_bucket_count + 1 > (h->bucket_capacity * MAX_LOAD))
@@ -509,7 +541,7 @@ ht__insert(ht* h, void* item, bucket_t** inserted_or_updated)
     }
 
     bucket_t* entry = (bucket_t*)h->tmp_entry;
-    ht__change_value(h, entry, ht__do_hash(h, item), item);
+    ht__change_value(h, entry, hash, item);
 
     size_t entry_ideal_bucket_index = ht__bucket_index(h, entry->hash);
     size_t current_bucket_index = entry_ideal_bucket_index;
@@ -566,8 +598,15 @@ ht__insert(ht* h, void* item, bucket_t** inserted_or_updated)
 HT_API ht_bool
 ht_insert(ht* h, void* item)
 {
+    ht_hash_t hash = ht__do_hash(h, item);
+    return ht_insert_h(h, item, hash);
+}
+
+HT_API ht_bool
+ht_insert_h(ht* h, void* item, ht_hash_t hash)
+{
     bucket_t* inserted_or_updated = 0;
-    return ht__insert(h, item, &inserted_or_updated);
+    return ht__insert(h, item, hash , &inserted_or_updated);
 }
 
 HT_API ht_size_t
@@ -604,8 +643,15 @@ ht_erase_at(ht* h, ht_size_t index)
 HT_API ht_bool
 ht_erase(ht* h, void* item)
 {
+    ht_hash_t hash = ht__do_hash(h, item);
+    return ht_erase_h(h, item, hash);
+}
+
+HT_API ht_bool
+ht_erase_h(ht* h, void* item, ht_hash_t hash)
+{
     ht_size_t index;
-    if (ht__try_find_index(h, item, &index))
+    if (ht__try_find_index(h, item, hash , &index))
     {
         ht_erase_at(h, index);
         return 1;

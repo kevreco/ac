@@ -114,7 +114,8 @@ struct ac_token {
 /* @TODO move this to the compiler options. */
 typedef struct ac_lex_options ac_lex_options;
 struct ac_lex_options {
-    bool enable_hex_float;
+    bool reject_hex_float;
+    bool reject_stray;
 };
 
 typedef struct ac_lex ac_lex;
@@ -129,8 +130,9 @@ struct ac_lex {
 
     int len;
 
-    ac_token token; /* current token */
-    ac_location location; /* current location */
+    ac_token token;       /* Current token */
+    ac_location location; /* Current location */
+    dstr tok_buf;         /* Token buffer in case we can't just use a string view to the memory. */
 };
 
 void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath);

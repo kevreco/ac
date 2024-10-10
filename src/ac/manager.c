@@ -9,6 +9,10 @@
 
 static bool try_get_file_content(const char* filepath, dstr* content);
 
+static ht_hash_t identifier_hash(strv* sv);                   /* For the hash table. */
+static ht_bool identifiers_are_same(strv* left, strv* right); /* For the hash table. */
+static void swap_identifiers(strv* left, strv* right);        /* For the hash table. */
+
 void ac_options_init_default(ac_options* o)
 {
     memset(o, 0, sizeof(ac_options));
@@ -42,6 +46,14 @@ void ac_manager_init(ac_manager* m, ac_options* o)
     memset(m, 0, sizeof(ac_manager));
 
     ac_allocator_arena_init(&m->ast_arena, 16 * 1024);
+    ac_allocator_arena_init(&m->identifiers_arena, 16 * 1024);
+
+    ht_init(&m->identifiers,
+        sizeof(strv),
+        (ht_hash_function_t)identifier_hash,
+        (ht_predicate_t)identifiers_are_same,
+        (ht_swap_function_t)swap_identifiers,
+        0);
 
     m->options = *o;
     global_options = o->global;
@@ -49,6 +61,8 @@ void ac_manager_init(ac_manager* m, ac_options* o)
 
 void ac_manager_destroy(ac_manager* m)
 {
+    ht_destroy(&m->identifiers);
+    ac_allocator_arena_destroy(&m->identifiers_arena);
     ac_allocator_arena_destroy(&m->ast_arena);
 
     if (!dstr_empty(&m->source_file.content))
@@ -107,4 +121,22 @@ static bool try_get_file_content(const char* filepath, dstr* content)
     }
 
     return true;
+}
+
+static ht_hash_t identifier_hash(strv* sv)
+{
+    return ac_djb2_hash((char*)sv->data, sv->size);
+}
+
+static ht_bool identifiers_are_same(strv* left, strv* right)
+{
+    return strv_equals(*left, *right);
+}
+
+static void swap_identifiers(strv* left, strv* right)
+{
+    strv tmp;
+    tmp = *left;
+    *left = *right;
+    *right = tmp;
 }

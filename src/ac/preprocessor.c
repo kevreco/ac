@@ -41,8 +41,6 @@ static bool consume_if(ac_pp* pp, bool value);
 /* macro hash table */
 /*------------------*/
 
-/* Slight reworked version of djb2 hash function. Make it take a length. */
-static size_t djb2(char* str, size_t size);
 static ht_hash_t macro_hash(ac_macro* m);
 static ht_bool macros_are_same(ac_macro* left, ac_macro* right);
 static void swap_macros(ac_macro* left, ac_macro* right);
@@ -293,22 +291,9 @@ static bool consume_if(ac_pp* pp, bool value)
     return value;
 }
 
-static ht_hash_t djb2(char* str, ht_size_t count)
-{
-    ht_hash_t hash = 5381;
-    ht_size_t i = 0;
-    while (i < count)
-    {
-        hash = ((hash << 5) + hash) + str[i]; /* hash * 33 + c */
-        i++;
-    }
-
-    return hash;
-}
-
 static ht_hash_t macro_hash(ac_macro* m)
 {
-    return djb2((char*)m->identifier.text.data, m->identifier.text.size);
+    return ac_djb2_hash((char*)m->identifier.text.data, m->identifier.text.size);
 }
 
 static ht_bool macros_are_same(ac_macro* left, ac_macro* right)
