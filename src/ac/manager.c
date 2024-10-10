@@ -6,12 +6,13 @@
 #include "re/path.h"
 
 #include "global.h"
+#include "lexer.h"
 
 static bool try_get_file_content(const char* filepath, dstr* content);
 
-static ht_hash_t identifier_hash(strv* sv);                   /* For the hash table. */
-static ht_bool identifiers_are_same(strv* left, strv* right); /* For the hash table. */
-static void swap_identifiers(strv* left, strv* right);        /* For the hash table. */
+static ht_hash_t identifier_hash(ac_token* sv);                   /* For the hash table. */
+static ht_bool identifiers_are_same(ac_token* left, ac_token* right); /* For the hash table. */
+static void swap_identifiers(ac_token* left, ac_token* right);        /* For the hash table. */
 
 void ac_options_init_default(ac_options* o)
 {
@@ -49,7 +50,7 @@ void ac_manager_init(ac_manager* m, ac_options* o)
     ac_allocator_arena_init(&m->identifiers_arena, 16 * 1024);
 
     ht_init(&m->identifiers,
-        sizeof(strv),
+        sizeof(ac_token),
         (ht_hash_function_t)identifier_hash,
         (ht_predicate_t)identifiers_are_same,
         (ht_swap_function_t)swap_identifiers,
@@ -123,19 +124,19 @@ static bool try_get_file_content(const char* filepath, dstr* content)
     return true;
 }
 
-static ht_hash_t identifier_hash(strv* sv)
+static ht_hash_t identifier_hash(ac_token* sv)
 {
-    return ac_djb2_hash((char*)sv->data, sv->size);
+    return ac_djb2_hash((char*)sv->text.data, sv->text.size);
 }
 
-static ht_bool identifiers_are_same(strv* left, strv* right)
+static ht_bool identifiers_are_same(ac_token* left, ac_token* right)
 {
-    return strv_equals(*left, *right);
+    return strv_equals(left->text, right->text);
 }
 
-static void swap_identifiers(strv* left, strv* right)
+static void swap_identifiers(ac_token* left, ac_token* right)
 {
-    strv tmp;
+    ac_token tmp;
     tmp = *left;
     *left = *right;
     *right = tmp;

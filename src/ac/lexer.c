@@ -7,6 +7,14 @@
 
 #define AC_EOF ('\0')
 
+typedef struct token_info token_info;
+struct token_info {
+    enum ac_token_type type;
+    strv name;
+};
+
+token_info token_infos[ac_token_type_COUNT];
+
 static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
 static bool is_horizontal_whitespace(char c);      /* char is alphanumeric */
 static bool is_identifier(char c);          /* char is allowed in identifier */
@@ -35,11 +43,13 @@ static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv 
 static const ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
 static const ac_token* token_eof(ac_lex* l);   /* set current token to eof and returns it. */
 static const ac_token* token_from_type_and_consume(ac_lex* l, enum ac_token_type type); /* set current token and got to next */
-static strv create_or_reuse_identifier(ac_lex* l, strv sv, size_t hash);
+
+/* Register keywords or known identifier. It helps to retrieve the type of a token from it's text value. */
+static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type);
+/* We only use ac_token becasue we want a string view and a token type. */
+static ac_token create_or_reuse_identifier(ac_lex* l, strv sv, size_t hash);
 
 static size_t token_str_len(enum ac_token_type type);
-/* Hack to use 'is_keyword' on some string pointers to static keywords. */
-static bool try_parse_keyword(strv* text, enum ac_token_type* type);
 
 static bool token_type_is_literal(enum ac_token_type type);
 
@@ -82,6 +92,14 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
     }
 
     dstr_init(&l->tok_buf);
+
+    /* Register keywords and known tokens. */
+    int i = 0;
+    for (; i < ac_token_type_COUNT; ++i)
+    {
+        token_info item = token_infos[i];
+        register_known_identifier(l, item.name, item.type);
+    }
 }
 
 void ac_lex_destroy(ac_lex* l)
@@ -308,20 +326,19 @@ parse_identifier:
         AC_ASSERT(is_identifier(l->cur[0]));
 
         size_t hash = AC_HASH_INIT;
-        hash = AC_HASH(hash, l->cur[0]); /* Calculate hash while we parse the identifier. */
 
         const char* start = l->cur;
         int n = 0;
         do {
             ++n;
-            /* @OPT: If this a "bottleneck", it can be improved.
+            hash = AC_HASH(hash, l->cur[0]); /* Calculate hash while we parse the identifier. */
+            /* @OPT: If this a "bottleneck" of the lexer, it can be improved.
             consume_one can be replaced with a more lightweight function
             that does not care about new_lines. */
             consume_one(l);
-            hash = AC_HASH(hash, l->cur[0]);
         } while (is_identifier(l->cur[0]));
 
-        strv text = strv_make_from(start, n);
+        ac_token token;
 
         if (is_char(l, '\\')) /* Stray found. We need to create a new string without it and reparse the identifier. */
         {
@@ -336,33 +353,14 @@ parse_identifier:
                 NEXT_CHAR_NO_STRAY(l, c);
             }
 
-            /* @FIXME this should be also used for keywords and other known tokens. */
-            text = create_or_reuse_identifier(l, dstr_to_strv(&l->tok_buf), hash);
-        }
-        enum ac_token_type type;
-
-        if (strv_equals_str(text, "true"))
-        {
-            l->token.type = ac_token_type_LITERAL_BOOL;
-            l->token.u.b.value = true;
-            return &l->token;
-        }
-        else if (strv_equals_str(text, "false"))
-        {
-            l->token.type = ac_token_type_LITERAL_BOOL;
-            l->token.u.b.value = false;
-            return &l->token;
-        }
-        else if (try_parse_keyword(&text, &type)) /* if keyword is parsed token type is also retrieved */
-        {
-            /* Do nothing, the type as been retrieved already. */
+            token = create_or_reuse_identifier(l, dstr_to_strv(&l->tok_buf), hash);
         }
         else
         {
-            type = ac_token_type_IDENTIFIER;
+            token = create_or_reuse_identifier(l, strv_make_from(start, n), hash);
         }
 
-        return token_from_text(l, type, text);
+        return token_from_text(l, token.type, token.text);
     }
 
     before_default:
@@ -774,21 +772,32 @@ static const ac_token* token_from_type_and_consume(ac_lex* l, enum ac_token_type
     return t;
 }
 
-static strv create_or_reuse_identifier(ac_lex* l, strv sv, size_t hash)
+static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type)
 {
-    strv* result;
-    result = (strv*)ht_get_item_h(&l->mgr->identifiers, &sv, hash);
+    ac_token t;
+    t.text = sv;
+    t.type = type;
+    ht_insert_h(&l->mgr->identifiers, &t, ac_djb2_hash((char*)sv.data, sv.size));
+}
+
+static ac_token create_or_reuse_identifier(ac_lex* l, strv ident, size_t hash)
+{
+    ac_token token_for_search;
+    token_for_search.type = ac_token_type_NONE;
+    token_for_search.text = ident;
+    ac_token* result = (ac_token*)ht_get_item_h(&l->mgr->identifiers, &token_for_search, hash);
 
     /* If the identifier is new we create a new entry. */
     if (result == NULL)
     {
-        strv s;
-        s.data = ac_allocator_allocate(&l->mgr->identifiers_arena.allocator, sv.size);
-        s.size = sv.size;
-        memcpy((char*)s.data, sv.data, sv.size);
+        ac_token t;
+        t.text.data = ac_allocator_allocate(&l->mgr->identifiers_arena.allocator, ident.size);
+        t.text.size = ident.size;
+        t.type = ac_token_type_IDENTIFIER;
+        memcpy((char*)t.text.data, ident.data, ident.size);
 
-        ht_insert_h(&l->mgr->identifiers, &s, hash);
-        return s;
+        ht_insert_h(&l->mgr->identifiers, &t, hash);
+        return t;
     }
 
     return *result;
@@ -800,20 +809,16 @@ ac_token
 -------------------------------------------------------------------------------
 */
 
-struct keyword_item {
-    enum ac_token_type type;
-    strv name;
-};
+#define KEYWORD_ITEM_COUNT (sizeof(token_infos) / sizeof(token_infos[0]))
 
-#define KEYWORD_ITEM_COUNT (sizeof(keyword_items) / sizeof(keyword_items[0]))
-
-static struct keyword_item keyword_items[] = {
+token_info token_infos[] = {
 
     { ac_token_type_NONE, STRV("<none>") },
     { ac_token_type_AMP,  STRV("&") },
     { ac_token_type_AMP_EQUAL, STRV("&=") },
     { ac_token_type_ARROW, STRV("->") },
     { ac_token_type_BACKSLASH, STRV("\\") },
+    { ac_token_type_BOOL, STRV("bool") },
     { ac_token_type_BRACE_L, STRV("{") },
     { ac_token_type_BRACE_R, STRV("}") },
     { ac_token_type_CARET , STRV("^") },
@@ -832,10 +837,11 @@ static struct keyword_item keyword_items[] = {
     { ac_token_type_DOUBLE_QUOTE , STRV("\"") },
     { ac_token_type_ELSE, STRV("else") },
     { ac_token_type_ENUM, STRV("enum") },
-    { ac_token_type_EOF, STRV("end-of-line") },
+    { ac_token_type_EOF, STRV("<end-of-line>") },
     { ac_token_type_EQUAL, STRV("=") },
     { ac_token_type_ERROR, STRV("<error>") },
     { ac_token_type_EXCLAM, STRV("!") },
+    { ac_token_type_FALSE, STRV("false") },
     { ac_token_type_FOR, STRV("for") },
     { ac_token_type_GREATER, STRV(">") },
     { ac_token_type_GREATER_EQUAL, STRV(">=") },
@@ -845,7 +851,6 @@ static struct keyword_item keyword_items[] = {
     { ac_token_type_IF, STRV("if") },
     { ac_token_type_LESS, STRV("<") },
     { ac_token_type_LESS_EQUAL, STRV("<=") },
-    { ac_token_type_LITERAL_BOOL, STRV("<literal-bool>") },
     { ac_token_type_LITERAL_CHAR, STRV("<literal-char>") },
     { ac_token_type_LITERAL_FLOAT, STRV("<literal-float>") },
     { ac_token_type_LITERAL_INTEGER, STRV("<literal-integer>") },
@@ -877,17 +882,18 @@ static struct keyword_item keyword_items[] = {
     { ac_token_type_TILDE, STRV("~") },
     { ac_token_type_TILDE_EQUAL, STRV("~=") },
     { ac_token_type_TRIPLE_DOT, STRV("...") },
+    { ac_token_type_TRUE, STRV("true") },
     { ac_token_type_TYPEOF, STRV("typeof") },
     { ac_token_type_WHILE, STRV("while") }
 };
 
 const char* ac_token_type_to_str(enum ac_token_type type) {
-    return keyword_items[type].name.data;
+    return token_infos[type].name.data;
 }
 
 strv ac_token_type_to_strv(enum ac_token_type type) {
 
-    return keyword_items[type].name;
+    return token_infos[type].name;
 }
 
 const char* ac_token_to_str(ac_token token) {
@@ -911,49 +917,21 @@ strv ac_token_to_strv(ac_token token) {
 }
 
 bool ac_token_is_keyword(ac_token t) {
-    return t.text.data >= keyword_items[0].name.data
-        && t.text.data <= keyword_items[ac_token_type_COUNT-1].name.data;
+
+    return t.text.data >= token_infos[0].name.data
+        && t.text.data <= token_infos[ac_token_type_COUNT-1].name.data;
 }
 
 static size_t token_str_len(enum ac_token_type type) {
     assert(!token_type_is_literal(type));
 
-    return keyword_items[type].name.size;
-}
-
-static bool try_parse_keyword(strv* str, enum ac_token_type* type) {
-
-    if (ac_token_type_COUNT > KEYWORD_ITEM_COUNT)
-    {
-        ac_report_error("There are more items in keyword_items (%d) than ac_token_type_COUNT (%d). It should be the same.", KEYWORD_ITEM_COUNT, ac_token_type_COUNT);
-        exit(1);
-    }
-
-    if (ac_token_type_COUNT < KEYWORD_ITEM_COUNT)
-    {
-        ac_report_error("There are more items in  ac_token_type_COUNT (%d) than keyword_items (%d). It should be the same.", ac_token_type_COUNT, KEYWORD_ITEM_COUNT);
-        exit(1);
-    }
-
-    const struct keyword_item* keyword_cursor = &keyword_items[0];
-    const struct keyword_item* keyword_end = &keyword_items[ac_token_type_COUNT];
-
-    while (keyword_cursor < keyword_end)
-    {
-        if (strv_equals(keyword_cursor->name, *str)) {
-            *str = keyword_cursor->name;
-            *type = keyword_cursor->type;
-            return true;
-        }
-        ++keyword_cursor;
-    }
-
-    return false;
+    return token_infos[type].name.size;
 }
 
 static bool token_type_is_literal(enum ac_token_type type) {
     switch (type) {
-    case ac_token_type_LITERAL_BOOL:
+    case ac_token_type_TRUE:
+    case ac_token_type_FALSE:
     case ac_token_type_LITERAL_CHAR:
     case ac_token_type_LITERAL_INTEGER:
     case ac_token_type_LITERAL_FLOAT:

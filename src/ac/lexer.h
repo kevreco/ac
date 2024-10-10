@@ -14,6 +14,7 @@ enum ac_token_type {
     ac_token_type_AMP_EQUAL,       /* &= */
     ac_token_type_ARROW,           /* -> */
     ac_token_type_BACKSLASH,       /* \  */
+    ac_token_type_BOOL,
     ac_token_type_BRACE_L,         /* {  */
     ac_token_type_BRACE_R,         /* }  */
     ac_token_type_CARET,           /* ^  */
@@ -36,6 +37,7 @@ enum ac_token_type {
     ac_token_type_EQUAL,           /* =  */
     ac_token_type_ERROR,
     ac_token_type_EXCLAM,          /* !  */
+    ac_token_type_FALSE,
     ac_token_type_FOR,
     ac_token_type_GREATER,         /* >  */
     ac_token_type_GREATER_EQUAL,   /* >= */
@@ -45,7 +47,6 @@ enum ac_token_type {
     ac_token_type_IF,
     ac_token_type_LESS,            /* <  */
     ac_token_type_LESS_EQUAL,      /* <= */
-    ac_token_type_LITERAL_BOOL,
     ac_token_type_LITERAL_CHAR,
     ac_token_type_LITERAL_FLOAT,
     ac_token_type_LITERAL_INTEGER,
@@ -77,6 +78,7 @@ enum ac_token_type {
     ac_token_type_TILDE,           /* ~   */
     ac_token_type_TILDE_EQUAL,     /* ~=  */
     ac_token_type_TRIPLE_DOT,      /* ... */
+    ac_token_type_TRUE,
     ac_token_type_TYPEOF,
     ac_token_type_WHILE,
     ac_token_type_COUNT
@@ -107,7 +109,6 @@ struct ac_token {
     union {
         ac_token_float f;
         ac_token_int i;
-        ac_token_bool b;
     } u;
 };
 

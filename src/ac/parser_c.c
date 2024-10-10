@@ -169,17 +169,17 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
             result = 0;
             return result;
         }
+        case ac_token_type_FALSE: {
+            AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_BOOL);
+            literal->u.boolean = false;
+            result = to_expr(literal);
+            goto_next_token(p);
+            break;
+        }
         case ac_token_type_IDENTIFIER: { /* <identifier> */
             ac_ast_identifier* ident = parse_identifier(p);
             /* @TODO create parse_postfix_expression() to handle function call or array access */
             result = to_expr(ident);
-            break;
-        }
-        case ac_token_type_LITERAL_BOOL: {
-            AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_BOOL);
-            literal->u.boolean = token(p).u.b.value;
-            result = to_expr(literal);
-            goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_INTEGER: { 
@@ -199,6 +199,13 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
         case ac_token_type_LITERAL_STRING: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_STRING);
             literal->u.str = token(p).text;
+            result = to_expr(literal);
+            goto_next_token(p);
+            break;
+        }
+        case ac_token_type_TRUE: {
+            AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_BOOL);
+            literal->u.boolean = true;
             result = to_expr(literal);
             goto_next_token(p);
             break;
