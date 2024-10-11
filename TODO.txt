@@ -16,7 +16,8 @@
         - [./] Object-like macro.
         - [./] Strays '\' between tokens.
         - [./] Strays '\' for identifiers.
-        - [] Strays '\' for other multiple-char token.
+        - [./] Strays '\' for other multiple-char token.
+        - [] Strays '\' in other literal (numbers, boolean, etc.).
         - [] Function-like macro.
         - [] String concatenation.
         - [] Special macro like __COUNT__, __LINE__, __FILE__ etc.
