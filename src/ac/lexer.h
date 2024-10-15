@@ -139,32 +139,24 @@ enum ac_token_type {
     ac_token_type_COUNT
 };
 
-typedef struct ac_token_float ac_token_float;
-struct ac_token_float {
-    double value;
+typedef struct ac_token_number ac_token_number;
+struct ac_token_number {
     bool overflow : 1;
+    bool is_float : 1;
     bool is_double : 1;
-};
-
-typedef struct ac_token_int ac_token_int;
-struct ac_token_int {
-    int value;
-    bool overflow : 1;
-};
-
-typedef struct ac_token_bool ac_token_bool;
-struct ac_token_bool {
-    bool value;
+    bool is_unsigned : 1;
+    int long_depth : 2;
+    union {
+        int int_value;
+        double float_value;
+    } u;
 };
 
 typedef struct ac_token ac_token;
 struct ac_token {
     enum ac_token_type type;
     strv text;
-    union {
-        ac_token_float f;
-        ac_token_int i;
-    } u;
+    ac_token_number number;
 };
 
 /* @TODO move this to the compiler options. */
@@ -187,6 +179,7 @@ struct ac_lex {
     int len;
 
     ac_token token;       /* Current token */
+    ac_location leading_location; /* Location when at the very begining of ac_lex_goto_next. */
     ac_location location; /* Current location */
     dstr tok_buf;         /* Token buffer in case we can't just use a string view to the memory. */
 };
@@ -210,7 +203,6 @@ const char* ac_token_type_to_str(enum ac_token_type type); /* this should be use
 strv ac_token_type_to_strv(enum ac_token_type type);
 const char* ac_token_to_str(ac_token t);
 strv ac_token_to_strv(ac_token t);
-bool ac_token_is_keyword(ac_token t);
 
 #ifdef __cplusplus
 } /* extern "C" */

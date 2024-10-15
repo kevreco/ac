@@ -38,13 +38,13 @@ int main()
 
 	test_parse_only(ac_exe,   "./tests/parse_declarations/");
 	test_c_generation(ac_exe, "./tests/generate_c/");
+	test_preprocessor(ac_exe, "./tests/literals/");
 	test_preprocessor(ac_exe, "./tests/preprocessor/");
 
 	cb_destroy();
 
 	return 0;
 }
-
 
 /* Shortcut to create a project with default config flags. */
 void my_project(const char* project_name, const char* toolchain, const char* config)

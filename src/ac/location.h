@@ -31,7 +31,7 @@ static ac_location ac_location_empty() {
 static void ac_location_init_with_file(ac_location* l, const char* filepath, strv content) {
     l->filepath = filepath;
     l->row = 1;
-    l->col = 0;
+    l->col = 1;
     l->pos = 0;
     l->content = content;
 }

@@ -17,7 +17,8 @@
         - [./] Strays '\' between tokens.
         - [./] Strays '\' for identifiers.
         - [./] Strays '\' for other multiple-char token.
-        - [] Strays '\' in other literal (numbers, boolean, etc.).
+        - [./] Strays '\' in other literal (numbers, boolean, etc.).
+        - [] Strays '\' in string and character literals.
         - [] Function-like macro.
         - [] String concatenation.
         - [] Special macro like __COUNT__, __LINE__, __FILE__ etc.
@@ -29,3 +30,4 @@
 # Type check
 
     - Implement some type check with int8/int16/etc before introducing structure and enum?
+    - Ensure that literal types have the correct size. Example: 64-bit int literal cannot be stored in 32-bit int.

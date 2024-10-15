@@ -152,6 +152,7 @@ static ac_ast_expr* parse_expr(ac_parser_c* p, ac_ast_expr* lhs)
     return rhs;
 }
 
+/* A primary expression can be a constant/literal, an identifier or _Generic. */
 static ac_ast_expr* parse_primary(ac_parser_c* p)
 {
     if_printf(options(p)->debug_parser, "parse_primary\n");
@@ -184,14 +185,14 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
         }
         case ac_token_type_LITERAL_INTEGER: { 
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_INTEGER);
-            literal->u.integer = token(p).u.i.value;
+            literal->u.integer = token(p).number.u.int_value;
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_FLOAT: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_FLOAT);
-            literal->u._float = token(p).u.f.value;
+            literal->u._float = token(p).number.u.float_value;
             result = to_expr(literal);
             goto_next_token(p);
             break;
@@ -208,6 +209,11 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
             literal->u.boolean = true;
             result = to_expr(literal);
             goto_next_token(p);
+            break;
+        }
+        case ac_token_type_GENERIC: {
+            ac_report_error_loc(location(p), "_Generic has not been implemented yet.");
+            return NULL;
             break;
         }
         

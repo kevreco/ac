@@ -7,6 +7,13 @@
 
 #define AC_EOF ('\0')
 
+enum base_type {
+    base2 = 2,
+    base8 = 8,
+    base10 = 10,
+    base16 = 16,
+};
+
 typedef struct token_info token_info;
 struct token_info {
     bool is_supported;
@@ -37,19 +44,32 @@ static int next_char_without_stray(ac_lex* l, int* c);
 
 static void skipn(ac_lex* l, unsigned n); /* skip n char */
 
-static const ac_token* parse_ascii_char_literal(ac_lex* l);
-static const ac_token* parse_number(ac_lex* l);
-
 static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text); /* set current token and got to next */
 static const ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
 static const ac_token* token_eof(ac_lex* l);   /* set current token to eof and returns it. */
 static const ac_token* token_from_type(ac_lex* l, enum ac_token_type type);
 static const ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type); /* set current token and got to next */
 
+static double power(double base, unsigned int exponent);
+static bool is_binary_digit(char c);
+static bool is_octal_digit(char c);
+static bool is_decimal_digit(char c);
+static bool is_hex_digit(char c);
+static const ac_token* parse_ascii_char_literal(ac_lex* l);
+
+static bool parse_integer_suffix(ac_lex* l, ac_token_number* num); /* Parse integer suffix like 'uLL' */
+static bool parse_float_suffix(ac_lex* l, ac_token_number* num);   /* Parse float suffix like 'f' or 'l' */
+static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num); /* Create integer token from parsed value. */
+static const ac_token* token_float_literal(ac_lex* l, ac_token_number num);   /* Create float token from parsed value. */
+static const ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base); /* Parse float after the whole number part. */
+static int hex_to_int(const char* c, size_t len);
+static const ac_token* parse_integer_or_float_literal(ac_lex* l);
+
 /* Register keywords or known identifier. It helps to retrieve the type of a token from it's text value. */
 static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type);
-/* We only use ac_token becasue we want a string view and a token type. */
-static ac_token create_or_reuse_identifier(ac_lex* l, strv sv, size_t hash);
+/* We return a ac_token because we want a string view and a token type. */
+static ac_token create_or_reuse_identifier(ac_lex* l, strv sv);
+static ac_token create_or_reuse_identifier_h(ac_lex* l, strv sv, size_t hash);
 
 static size_t token_str_len(enum ac_token_type type);
 
@@ -117,9 +137,12 @@ void ac_lex_destroy(ac_lex* l)
 
 const ac_token* ac_lex_goto_next(ac_lex* l)
 {
+    l->leading_location = l->location;
+
     if (is_eof(l)) {
         return token_eof(l);
     }
+
     int c;
 switch_start:
     switch (l->cur[0]) {
@@ -278,7 +301,7 @@ switch_start:
         }
         else if (c == '/') {  /* Parse inline comment. */
             const char* start = l->cur - 1;
-            l->cur++; /* Skip '/' */
+            consume_one(l); /* Skip '/' */
             
             while (!is_eof(l) && !is_end_line(l)) {
                 consume_one(l);
@@ -287,7 +310,7 @@ switch_start:
         }
         else if (c == '*') {  /* Parse C comment. */
             const char* start = l->cur - 1;
-            l->cur++; /* Skip opening comment tag. */
+            consume_one(l); /* Skip opening comment tag. */
             
             ac_location location = l->location;
             /* Skip until closing comment tag. */
@@ -325,7 +348,13 @@ switch_start:
     }
 
     case '.': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '.' */
+       
+        /* Float can also starts with a dot. */
+        const ac_token* token = parse_integer_or_float_literal(l);
+        if (token)
+            return token;
+
+        c = l->cur[0];
         if (c == '.') {
             NEXT_CHAR_NO_STRAY(l, c); /* Skip '.' */
             if (c == '.') {
@@ -342,7 +371,7 @@ switch_start:
 
     case '0': case '1': case '2': case '3': case '4':
     case '5': case '6': case '7': case '8': case '9':
-        return parse_number(l);
+        return parse_integer_or_float_literal(l);
 
     case 'a': case 'b': case 'c': case 'd': case 'e':
     case 'f': case 'g': case 'h': case 'i': case 'j':
@@ -389,11 +418,11 @@ parse_identifier:
                 NEXT_CHAR_NO_STRAY(l, c);
             }
 
-            token = create_or_reuse_identifier(l, dstr_to_strv(&l->tok_buf), hash);
+            token = create_or_reuse_identifier_h(l, dstr_to_strv(&l->tok_buf), hash);
         }
         else
         {
-            token = create_or_reuse_identifier(l, strv_make_from(start, n), hash);
+            token = create_or_reuse_identifier_h(l, strv_make_from(start, n), hash);
         }
 
         return token_from_text(l, token.type, token.text);
@@ -517,7 +546,7 @@ static int char_after_stray(ac_lex* l)
 {
     AC_ASSERT(l->cur[0] == '\\');
 
-    /* Skip all consecutive backslash. */
+    /* Skip all consecutive backslashes. */
     while (l->cur[0] == '\\')
     {
         consume_one(l); /* Skip '\\' */
@@ -552,6 +581,59 @@ static void skipn(ac_lex* l, unsigned n) {
     }
 }
 
+static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) {
+    l->token.type = type;
+    l->token.text = text;
+   
+    return &l->token;
+}
+
+static const ac_token* token_error(ac_lex* l) {
+    l->token.type = ac_token_type_ERROR;
+    return &l->token;
+}
+
+static const ac_token* token_eof(ac_lex* l) {
+    l->token.type = ac_token_type_EOF;
+    return &l->token;
+}
+
+static const ac_token* token_from_type(ac_lex* l, enum ac_token_type type) {
+    return token_from_text(l, type, token_infos[type].name);
+}
+
+static const ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type) {
+    const ac_token* t = token_from_type(l, type);
+    consume_one(l);
+    return t;
+}
+
+static double power(double base, unsigned int exponent)
+{
+    double value = 1;
+    for (; exponent; exponent >>= 1) {
+        if (exponent & 1)
+            value *= base;
+        base *= base;
+    }
+    return value;
+}
+
+static bool is_binary_digit(char c) {
+    return c == '0' || c == '1';
+}
+static bool is_octal_digit(char c) {
+    return c >= '0' && c <= '7';
+}
+static bool is_decimal_digit(char c) {
+    return c >= '0' && c <= '9';
+}
+static bool is_hex_digit(char c) {
+    return (c >= '0' && c <= '9')
+        || (c >= 'a' && c <= 'f')
+        || (c >= 'A' && c <= 'F');
+}
+
 const ac_token* parse_ascii_char_literal(ac_lex* l) {
     assert(is_char(l, '"'));
 
@@ -576,239 +658,363 @@ const ac_token* parse_ascii_char_literal(ac_lex* l) {
     return token_from_text(l, ac_token_type_LITERAL_STRING, strv_make_from(start, n));
 }
 
-enum base_type
+/* Get next digit, ignoring quotes and underscores. */
+#define NEXT_DIGIT(l, c) \
+do { \
+    NEXT_CHAR_NO_STRAY(l, c); \
+    while (c == '\'' || c == '_') { \
+        NEXT_CHAR_NO_STRAY(l, c); \
+    } \
+    dstr_append_char(&l->tok_buf, c); \
+} while (0);
+
+static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
 {
-    base2 = 2,
-    base8 = 8,
-    base10 = 10,
-    base16 = 16,
-};
+    int c = l->cur[0];
 
-static inline int atoi_base16(char c) {
-    int result = -1;
+    int U = 0;
+    int L = 0;
 
-    if (c >= 'a' && c <= 'f') {
-        result = c - 'a' + 10;
-    }
-    else if (c >= 'A' && c <= 'F') {
-        result = c - 'A' + 10;
-    }
-    else if (c >= '0' && c <= '9') {
-        result = c - '0';
-    }
-
-    return result;
-}
-
-static inline int atoi_base10(char c) {
-    int result = -1;
-
-    if (c >= '0' && c <= '9') {
-        result = c - '0';
-    }
-
-    return result;
-}
-
-static inline int atoi_base8(char c) {
-    int result = -1;
-
-    if (c >= '0' && c <= '7') {
-        result = c - '0';
-    }
-
-    return result;
-}
-
-static inline int atoi_base2(char c) {
-    int result = -1;
-
-    if (c == '0' || c == '1') {
-        result = c - '0';
-    }
-
-    return result;
-}
-
-
-static inline bool try_atoi_base(char ch, enum base_type base, int* result) {
-    switch (base)
+    while ((c == 'u' || c == 'U' || c == 'l' || c == 'L')
+       && (U + L) <= 3)  /* Maximum number of character is 3 */
     {
-    case base16: *result = atoi_base16(ch);
-        break;
-    case base10: *result = atoi_base10(ch);
-        break;
-    case base8: *result = atoi_base8(ch);
-        break;
-    case base2: *result = atoi_base2(ch);
-        break;
-    }
-
-    return *result != -1;
-}
-
-static double stb__clex_pow(double base, unsigned int exponent)
-{
-    double value = 1;
-    for (; exponent; exponent >>= 1) {
-        if (exponent & 1)
-            value *= base;
-        base *= base;
-    }
-    return value;
-}
-
-static const ac_token* parse_number(ac_lex* l) {
-
-    enum base_type base = base10;
-
-    int previous_acc = 0;
-    int acc = 0;
-    int temp = 0;
-
-    ac_token_float f = {0};
-
-    ac_token_int i = { 0 };
-
-    /* try parse hex integer */
-    if (is_str(l, "0x", 2)
-        || is_str(l, "0X", 2)) {
-        skipn(l, 2); /* skip 0x or 0X */
-        base = base16;
-    }
-    /* try parse binary integer */
-    else if (is_str(l, "0b", 2)
-        || is_str(l, "0B", 2)) {
-        skipn(l, 2); /* skip 0b or 0B */
-        base = base2;
-    }
-    /* try parse octal integer */
-    else if (is_str(l, "0o", 2)
-        || is_str(l, "0o", 2)) {
-        skipn(l, 2); /* skip 0o or 0O */
-        base = base8;
-    }
-
-    while (try_atoi_base(l->cur[0], base, &temp))
-    {
-        previous_acc = acc;
-        acc = acc * base + temp;
-
-        if (acc < previous_acc)
-            f.overflow = true;
-
-        consume_one(l);
-    };
-
-    /* try parse float */
-    if (is_char(l, '.') && (base == base10 || (!l->options.reject_hex_float && base == base16)))
-    {
-        f.is_double = true;
-
-        uint64_t power_ = 1;
-        consume_one(l); /* skip the dot */
-
-        double f_acc = 0;
-        double previous_f_acc = 0;
-        while (try_atoi_base(l->cur[0], base, &temp))
+        switch (c)
         {
-            previous_f_acc = f_acc;
-            f_acc = f_acc * base + (double)temp;
-            power_ *= base;
+        case 'u':
+        case 'U':
+        {
+            U++;
+            if (U > 1) {
+                ac_report_error("Invalid integer suffix. Too many 'u' or 'U'");
+                return false;
+            }
+            num->is_unsigned = true;
+            NEXT_DIGIT(l, c);
+            break;
+        }
+        case 'l':
+        case 'L':
+        {
+            L++;
+            if (L > 2) {
+                ac_report_error("Invalid integer suffix. Too many 'l' or 'L'");
+                return false;
+            }
+            else {
+                num->long_depth += 1;
+            }
 
-            if (f_acc < previous_f_acc)
-                f.overflow = true;
+            NEXT_DIGIT(l, c);
+        }
+        }
+    }
 
-            consume_one(l);
+    if ((U + L) > 3
+        || (c >= '0' && c <= '9')
+        || (c >= 'a' && c <= 'z')
+        || (c >= 'A' && c <= 'Z'))
+    {
+        ac_report_error("Invalid integer suffix: '%c'", c);
+        return false;
+    }
+    return true;
+}
+
+/* @TODO handle DF, DD and DL suffixes.
+   en.cppreference.com/w/c/language/floating_constant#Suffixes */
+static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
+    int c = l->cur[0];
+
+    int F = 0;
+    int L = 0;
+
+    while ((c == 'f' || c == 'F' || c == 'l' || c == 'L')
+        && (F + L) <= 1)  /* Maximum number of character is 1 */
+    {
+        switch (c)
+        {
+        case 'f':
+        case 'F':
+        {
+            F++;
+            if (F > 1) {
+                ac_report_error_loc(l->location, "Invalid float suffix. Too many 'f' or 'F'");
+                return false;
+            }
+            num->is_float = true;
+            NEXT_DIGIT(l, c);
+            break;
+        }
+        case 'l':
+        case 'L':
+        {
+            L++;
+            if (L > 1) {
+                ac_report_error_loc(l->location, "Invalid float suffix. Too many 'l' or 'L'");
+                return false;
+            }
+            else {
+                num->is_double = true;
+            }
+
+            NEXT_DIGIT(l, c);
+        }
+        }
+    }
+
+    if ((c >= '0' && c <= '9')
+        || (c >= 'a' && c <= 'z')
+        || (c >= 'A' && c <= 'Z'))
+    {
+        ac_report_error_loc(l->location, "Invalid float suffix: '%c'", c);
+        return false;
+    }
+    return true;
+}
+
+static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
+{
+    l->token.type = ac_token_type_LITERAL_INTEGER;
+    l->token.number = num;
+
+    if (!parse_integer_suffix(l, &l->token.number))
+    {
+        return token_eof(l);
+    }
+
+    strv text = dstr_to_strv(&l->tok_buf);
+    text.size -= 1; /* Remove 1 to remove last character which is not part of the value. */
+    const ac_token t = create_or_reuse_identifier(l, text);
+    l->token.text = t.text;
+    return &l->token;
+}
+
+static const ac_token* token_float_literal(ac_lex* l, ac_token_number num)
+{
+    l->token.type = ac_token_type_LITERAL_FLOAT;
+    l->token.number = num;
+
+    if (!parse_float_suffix(l, &l->token.number))
+    {
+        return token_eof(l);
+    }
+
+    if (l->token.number.is_float && l->token.number.u.float_value > FLT_MAX)
+    {
+        l->token.number.overflow = true;
+    }
+
+    strv text = dstr_to_strv(&l->tok_buf);
+    text.size -= 1; /* Remove 1 to remove last character which is not part of the value. */
+    const ac_token t = create_or_reuse_identifier(l, text);
+    l->token.text = t.text;
+    return &l->token;
+}
+
+static const ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base)
+{
+    AC_ASSERT(base == 10 || base == 16 && "Can only parse decimal floats of hexadicemal floats.");
+
+    double value = num.u.float_value;
+    int exponent = 0;
+
+    int c = l->cur[0];
+
+    if (c == '.') {
+        NEXT_DIGIT(l, c);
+
+        if (c == '.') { return NULL; } /* If there is a dot after a dot then we are not parsing a number. */
+        double pow, addend = 0;
+
+        if (base == base10)
+        {
+            for (pow = 1; is_decimal_digit(c); pow *= base) {
+                addend = addend * base + (c - '0');
+                NEXT_DIGIT(l, c);
+            }
+        }
+        else /* base == base16 */
+        {
+            for (pow = 1; ; pow *= base) {
+                if (c >= '0' && c <= '9') {
+                    addend = addend * base + (c - '0');
+                    NEXT_DIGIT(l, c);
+                }
+                else if (c >= 'a' && c <= 'f') {
+                    addend = addend * base + 10 + (c - 'a');
+                    NEXT_DIGIT(l, c);
+                }
+                else if (c >= 'A' && c <= 'F') {
+                    addend = addend * base + 10 + (c - 'A');
+                    NEXT_DIGIT(l, c);
+                }
+                else
+                    break;
+            }
         }
 
-        f_acc = (double)acc + (f_acc * (1.0 / (double)power_));
+        value += addend / pow;
+    }
 
-        bool has_exponent;
-        if (!l->options.reject_hex_float && base == base16) {
-            /* exponent required for hex float literal */
-            if (is_char(l, 'p') && is_char(l, 'P')) {
-                ac_report_error_loc(l->location, "parse_number: internal error while parsing hex_float exponent\n");
-                return token_error(l);
-            }
-            has_exponent = true;
+    if (base == base16) {
+        if (c == 'p' || c == 'P') {
+            exponent = 1;
+            NEXT_DIGIT(l, c); /* Skip 'p' or 'P' */
         }
         else
         {
-            has_exponent = (is_char(l, 'e') || is_char(l, 'E'));
+            ac_report_error_loc(l->location, "Invalid exponent in hex float.");
+            return 0;
         }
-
-        if (has_exponent) {
-            int neg = next_is(l, '-');
-            unsigned int exponent = 0;
-            double power = 1;
-            consume_one(l); /* consume exponent p, P, e or E */
-
-            if (is_char(l, '-') || is_char(l, '+'))
-                consume_one(l);
-
-            while (try_atoi_base(l->cur[0], base10, &temp))
-            {
-                exponent = exponent * base10 + temp;
-                consume_one(l);
-            }
-
-            if (!l->options.reject_hex_float && base == base16)
-                power = stb__clex_pow(2, exponent);
-            else
-                power = stb__clex_pow(10, exponent);
-
-            f_acc *= neg ? (1.0 / power) : power;
-        }
-
-        if (is_char(l, 'f')) {
-            consume_one(l);
-            f.is_double = false;
-
-            if (f.value > FLT_MAX)
-                f.overflow = true;
-        }
-
-        /* assign float value and set it to the current token */
-        f.value = f_acc;
-        l->token.type = ac_token_type_LITERAL_FLOAT;
-        l->token.u.f = f;
-        return &l->token;
     }
-    else
+    else if (c == 'e' || c == 'E')
     {
-        i.value = acc;
-        l->token.type = ac_token_type_LITERAL_INTEGER;
-        l->token.u.i = i;
-        return &l->token;
+        exponent = 1;
+        NEXT_DIGIT(l, c); /* Skip 'e' or 'E' */
     }
-} /* parse_number */
 
-static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) {
-    l->token.type = type;
-    l->token.text = text;
-   
-    return &l->token;
+    int sign = 1;
+    if (exponent) {
+        unsigned int exponent = 0;
+        double power_ = 1;
+        if (c == '-' || c == '+')
+        {
+            sign = '-' ? -1 : 1;
+            NEXT_DIGIT(l, c); /* Skip '-' or '+' */
+        }
+        while (c >= '0' && c <= '9') {
+            exponent = exponent * 10 + (c - '0');
+            NEXT_DIGIT(l, c);
+        }
+
+        power_ = power(base == base10 ? 2 : 10, exponent);
+        if (sign)
+            value /= power_;
+        else
+            value *= power_;
+    }
+    //*q = p;
+
+    num.u.float_value = value;
+    return token_float_literal(l, num);
 }
 
-static const ac_token* token_error(ac_lex* l) {
-    l->token.type = ac_token_type_ERROR;
-    return &l->token;
+static int hex_to_int(const char* c, size_t len)
+{
+    /* @FIXME check for overflow. */
+    int n = 0;
+    const char* end = c + len;
+    for (; c <= end; ++c) {
+        if (c[0] >= '0' && c[0] <= '9')
+            n = n * 16 + (c[0] - '0');
+        else if (c[0] >= 'a' && c[0] <= 'f')
+            n = n * 16 + (c[0] - 'a') + 10;
+        else if (c[0] >= 'A' && c[0] <= 'F')
+            n = n * 16 + (c[0] - 'A') + 10;
+        else
+            break;
+    }
+    return n;
 }
 
-static const ac_token* token_eof(ac_lex* l) {
-    l->token.type = ac_token_type_EOF;
-    return &l->token;
-}
+static const ac_token* parse_integer_or_float_literal(ac_lex* l)
+{
+    ac_token_number num = { 0 };
+    int c = l->cur[0];
 
-static const ac_token* token_from_type(ac_lex* l, enum ac_token_type type) {
-    return token_from_text(l, type, token_infos[type].name);
-}
+    dstr_clear(&l->tok_buf);
+    dstr_append_char(&l->tok_buf, c);
 
-static const ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type) {
-    const ac_token* t = token_from_type(l, type);
-    l->cur++;
-    return t;
+    bool leading_zero = c == '0';
+
+    if (leading_zero)
+    {
+        NEXT_DIGIT(l, c); /* Skip '0' */
+        /* Need to parse hex integer or float */
+        if (c == 'x' || c == 'X') {
+            NEXT_DIGIT(l, c); /* Skip 'x' or 'X */
+            size_t buffer_size = l->tok_buf.size;
+            /* @FIXME check for overflow. */
+            int n = 0;
+            while (is_hex_digit(c)) {
+                n = n * base16 + (c - '0');
+                if (c >= '0' && c <= '9')
+                    n = n * base16 + (c - '0');
+                else if (c >= 'a' && c <= 'f')
+                    n = n * base16 + 10 + (c - 'a');
+                else if (c >= 'A' && c <= 'F')
+                    n = n * base16 + 10 + (c - 'A');
+                NEXT_DIGIT(l, c);
+            }
+            if (!is_eof(l)) {
+                if (c == '.' || c == 'p' || c == 'P') {
+                    return parse_float_literal(l, num, base16);
+                }
+            }
+            if (buffer_size == l->tok_buf.size) /* Nothing after 0x was parsed */
+            {
+                ac_report_error_loc(l->leading_location, "Invalid hexadecimal value.");
+                return token_eof(l);
+            }
+            /* Not float so we return an integer. */
+            num.u.int_value = hex_to_int(l->tok_buf.data, l->tok_buf.size);
+            return token_integer_literal(l, num);
+        }
+        /* Need to parse binary integer */
+        else if (c == 'b' || c == 'B') {
+            NEXT_DIGIT(l, c); /* Skip 'b' or 'B' */
+            size_t buffer_size = l->tok_buf.size;
+            /* @FIXME check for overflow. */
+            int n = 0;
+            while (is_binary_digit(c)) {
+                n = n * base2 + (c - '0');
+                NEXT_DIGIT(l, c);
+            }
+            if (buffer_size == l->tok_buf.size) /* Nothing after 0b was parsed */
+            {
+                ac_report_error_loc(l->leading_location, "Invalid binary value.");
+                return token_eof(l);
+            }
+            num.u.int_value = n;
+            return token_integer_literal(l, num);
+        }
+    }
+
+    /* Try to parse float starting with decimals (not hexadecimal). */
+
+    int n = 0;
+    while (is_decimal_digit(c)) {
+        n = n * base10 + (c - '0'); /* @FIXME check for overflow. */
+        NEXT_DIGIT(l, c);
+    }
+    if (!is_eof(l)) {
+        if (c == '.' || c == 'e' || c == 'E') {
+            return parse_float_literal(l, num, base10);
+        }
+    }
+
+    /* Try to parse octal for buffer since the literal has been eaten */
+    if (leading_zero)
+    {
+        n = 0;
+        for (int i = 0; i < l->tok_buf.size; ++i) {
+            c = l->tok_buf.data[i];
+            /* @FIXME take care of overflow. */
+            if (is_octal_digit(c)) {
+                n = n * base8 + (c - '0');
+            }
+        }
+    }
+
+    if (is_eof(l))
+    {
+        ac_report_error_loc(l->leading_location, "Unexpected end of file after number literal.");
+        return token_eof(l);
+    }
+
+    /* Return the parsed integer. */
+    num.u.int_value = n;
+    return token_integer_literal(l, num);
 }
 
 static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type)
@@ -819,14 +1025,19 @@ static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type typ
     ht_insert_h(&l->mgr->identifiers, &t, ac_djb2_hash((char*)sv.data, sv.size));
 }
 
-static ac_token create_or_reuse_identifier(ac_lex* l, strv ident, size_t hash)
+static ac_token create_or_reuse_identifier(ac_lex* l, strv ident)
+{
+    return create_or_reuse_identifier_h(l, ident, ac_djb2_hash((char*)ident.data, ident.size));
+}
+
+static ac_token create_or_reuse_identifier_h(ac_lex* l, strv ident, size_t hash)
 {
     ac_token token_for_search;
     token_for_search.type = ac_token_type_NONE;
     token_for_search.text = ident;
     ac_token* result = (ac_token*)ht_get_item_h(&l->mgr->identifiers, &token_for_search, hash);
 
-    /* If the identifier is new we create a new entry. */
+    /* If the identifier is new, a new entry is created. */
     if (result == NULL)
     {
         ac_token t;
@@ -1033,7 +1244,7 @@ static bool token_type_is_literal(enum ac_token_type type) {
 
 static void location_increment_row(ac_location* l) {
     l->row++;
-    l->col = 0;
+    l->col = 1;
     l->pos++;
 }
 
