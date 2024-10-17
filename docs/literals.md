@@ -37,7 +37,28 @@ int c = 1_._0; // Possible in AC.
 ## Float
 
 
-'f', 'F', 'l' and 'L' suffixes are handled.
-DF, DD and DL suffixes are not handled.
+'f', 'F', 'l' and 'L' suffixes are supported.
+DF, DD and DL suffixes are not supported.
 
 Like integer literals, floats benefit from the lax single quotes digit separator and underscore can also be used.
+
+## Char
+
+'c-char ' is supported.
+u8'c-char ' is supported.
+u'c-char ' is supported.
+U'c-char ' is supported.
+L'c-char ' is supported.
+'c-char-sequence ' is not supported.
+u'c-char-sequence ' is not supported.
+U'c-char-sequence ' is not supported.
+L'c-char-sequence ' is not supported.
+
+## String
+
+
+" s-char-sequence " is supported.
+u8" s-char-sequence " is supported.
+u" s-char-sequence " is supported.
+U" s-char-sequence " is supported.
+L" s-char-sequence " is supported.

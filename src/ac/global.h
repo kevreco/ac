@@ -1,6 +1,8 @@
 #ifndef AC_GLOBAL_H
 #define AC_GLOBAL_H
 
+#include <stdint.h> /* int32_t, int64_t */
+
 #include "location.h"
 
 #define AC_UNUSED(x) ((void)(x))

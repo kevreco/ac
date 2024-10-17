@@ -185,14 +185,14 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
         }
         case ac_token_type_LITERAL_INTEGER: { 
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_INTEGER);
-            literal->u.integer = token(p).number.u.int_value;
+            literal->u.integer = token(p).u.number.u.int_value;
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_FLOAT: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_FLOAT);
-            literal->u._float = token(p).number.u.float_value;
+            literal->u._float = token(p).u.number.u.float_value;
             result = to_expr(literal);
             goto_next_token(p);
             break;

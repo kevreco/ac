@@ -1,7 +1,6 @@
 #include "lexer.h"
 
 #include "float.h"  /* FLT_MAX */
-#include "stdint.h" /* uint64_t */
 
 #include "global.h"
 
@@ -21,6 +20,14 @@ struct token_info {
     strv name;
 };
 
+static const strv empty = STRV("");
+/* char and string literal prefix. */
+static const strv no_prefix = STRV("");
+static const strv utf8 = STRV("u8");
+static const strv utf16 = STRV("u");
+static const strv utf32 = STRV("U");
+static const strv wide = STRV("L");
+
 token_info token_infos[];
 
 static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
@@ -33,13 +40,9 @@ static bool is_str(const ac_lex* l, const char* str, size_t count); /* current c
 static bool next_is(const ac_lex* l, char c);      /* next char equal to */
 static bool next_next_is(const ac_lex* l, char c); /* next next char equal to */
 
-enum consumed_type {
-    consumed_char_WAS_SPACE,
-    consumed_char_WAS_NOT_SPACE
-};
-
-static enum consumed_type consume_one(ac_lex* l); /* goto next char */
-static int char_after_stray(ac_lex* l);           /* Get the character after stray such as \\n, \\r or \\r\n */
+static int consume_one(ac_lex* l);        /* goto next char and keep up with location of the token. */
+static void consume_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time.  */
+static int skip_if_stray(ac_lex* l);      /* Get character after the current stray or return the current character. */
 static int next_char_without_stray(ac_lex* l, int* c);
 
 static void skipn(ac_lex* l, unsigned n); /* skip n char */
@@ -55,15 +58,27 @@ static bool is_binary_digit(char c);
 static bool is_octal_digit(char c);
 static bool is_decimal_digit(char c);
 static bool is_hex_digit(char c);
-static const ac_token* parse_ascii_char_literal(ac_lex* l);
 
 static bool parse_integer_suffix(ac_lex* l, ac_token_number* num); /* Parse integer suffix like 'uLL' */
 static bool parse_float_suffix(ac_lex* l, ac_token_number* num);   /* Parse float suffix like 'f' or 'l' */
 static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num); /* Create integer token from parsed value. */
 static const ac_token* token_float_literal(ac_lex* l, ac_token_number num);   /* Create float token from parsed value. */
 static const ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base); /* Parse float after the whole number part. */
-static int hex_to_int(const char* c, size_t len);
+static int hex_string_to_int(const char* c, size_t len);
 static const ac_token* parse_integer_or_float_literal(ac_lex* l);
+
+static int hex_digit_to_int(char c);
+static bool try_parse_escaped_char(ac_lex* l, int* result);
+static void* utf8_decode(void* p, int32_t* pc);
+
+static strv string_or_char_literal_to_buffer(ac_lex* l, char quote);
+static const ac_token* parse_string_literal(ac_lex* l);
+static const ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix);
+static const ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix);
+static const ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix);
+static const ac_token* token_string(ac_lex* l, strv literal, strv content, strv kind);
+
+static const ac_token* token_char(ac_lex* l, strv prefix);
 
 /* Register keywords or known identifier. It helps to retrieve the type of a token from it's text value. */
 static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type);
@@ -71,12 +86,12 @@ static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type typ
 static ac_token create_or_reuse_identifier(ac_lex* l, strv sv);
 static ac_token create_or_reuse_identifier_h(ac_lex* l, strv sv, size_t hash);
 
+static strv ac_token_prefix(ac_token token);
 static size_t token_str_len(enum ac_token_type type);
-
 static bool token_type_is_literal(enum ac_token_type type);
 
-static void location_increment_row(ac_location* l);
-static void location_increment_column(ac_location* l);
+static void location_increment_row(ac_location* l, int char_count);
+static void location_increment_column(ac_location* l, int char_count);
 
 /*
 -------------------------------------------------------------------------------
@@ -114,6 +129,7 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
     }
 
     dstr_init(&l->tok_buf);
+    dstr_init(&l->str_buf);
 
     /* Register keywords and known tokens. */
     int i = 0;
@@ -129,6 +145,7 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
 
 void ac_lex_destroy(ac_lex* l)
 {
+    dstr_destroy(&l->str_buf);
     dstr_destroy(&l->tok_buf);
     memset(l, 0, sizeof(ac_lex));
 }
@@ -137,6 +154,8 @@ void ac_lex_destroy(ac_lex* l)
 
 const ac_token* ac_lex_goto_next(ac_lex* l)
 {
+    memset(&l->token, 0, sizeof(ac_token));
+
     l->leading_location = l->location;
 
     if (is_eof(l)) {
@@ -158,7 +177,7 @@ switch_start:
             return token_eof(l);
         }
 
-        char_after_stray(l); /* Skip stray. */
+        skip_if_stray(l);
         goto switch_start;
     case ' ':
     case '\t':
@@ -178,7 +197,7 @@ switch_start:
     {
         /* Parse single line ending: \n or \r or \r\n */
         const char* start = l->cur;
-        consume_one(l);
+        consume_newlines(l);
         return token_from_text(l, ac_token_type_NEW_LINE, strv_make_from(start, l->cur - start));
     }
     case '#': return token_from_single_char(l, ac_token_type_HASH);
@@ -366,7 +385,8 @@ switch_start:
         return token_from_type(l, ac_token_type_DOT);
     }
     
-    case '"' : return parse_ascii_char_literal(l);
+    case '"' : return parse_string_literal(l);
+    case '\'': return token_char(l, no_prefix);
     case '\0': return token_eof(l);
 
     case '0': case '1': case '2': case '3': case '4':
@@ -404,13 +424,12 @@ parse_identifier:
         } while (is_identifier(l->cur[0]));
 
         ac_token token;
-
+        strv ident;
         if (is_char(l, '\\')) /* Stray found. We need to create a new string without it and reparse the identifier. */
         {
-            int c;
             dstr_assign(&l->tok_buf, strv_make_from(start, l->cur - start));
-            l->cur--; /* Adjust buffer so the current stray is eaten (if it's indeed a stray). */
-            NEXT_CHAR_NO_STRAY(l, c);
+            int c = skip_if_stray(l);
+
             while (is_identifier(c))
             {
                 hash = AC_HASH(hash, l->cur[0]);
@@ -418,13 +437,38 @@ parse_identifier:
                 NEXT_CHAR_NO_STRAY(l, c);
             }
 
-            token = create_or_reuse_identifier_h(l, dstr_to_strv(&l->tok_buf), hash);
+            ident =  dstr_to_strv(&l->tok_buf);
         }
         else
         {
-            token = create_or_reuse_identifier_h(l, strv_make_from(start, n), hash);
+            ident = strv_make_from(start, n);
         }
 
+        if (l->cur[0] == '\'')  /* Handle char literal */
+        {
+            if (strv_equals(ident, utf8)) return token_char(l, utf8);
+            else if (strv_equals(ident, utf16)) return token_char(l, utf16);
+            else if (strv_equals(ident, utf32)) return token_char(l, utf32);
+            else if (strv_equals(ident, wide)) return token_char(l, wide);
+            else {
+                ac_report_error_loc(l->leading_location, "Invalid char literal prefix '%.*s'", ident.size, ident.data);
+                return token_eof(l);
+            }
+        }
+
+        if (l->cur[0] == '"') /* Handle string literal */
+        {
+            if (strv_equals(ident, utf8)) return parse_utf8_string_literal(l, utf8);
+            else if (strv_equals(ident, utf16)) return parse_utf16_string_literal(l, utf16);
+            else if (strv_equals(ident, utf32)) return parse_utf32_string_literal(l, utf32);
+            else if (strv_equals(ident, wide)) return parse_utf32_string_literal(l, wide);
+            else {
+                ac_report_error_loc(l->leading_location, "Invalid string literal prefix '%.*s'", ident.size, ident.data);
+                return token_eof(l);
+            }
+        }
+
+        token = create_or_reuse_identifier_h(l, ident, hash);
         return token_from_text(l, token.type, token.text);
     }
 
@@ -518,43 +562,61 @@ static bool next_next_is(const ac_lex* l, char c) {
 }
 
 /* We consume one char at a time to handle new lines and row/line numbers which change the location of tokens. */
-static inline enum consumed_type consume_one(ac_lex* l) {
+static inline int consume_one(ac_lex* l) {
 
-    if (is_char(l, '\n') || is_char(l, '\r')) {
+    /* New lines should be handled separately. */
+    AC_ASSERT(l->cur[0] != '\n' && l->cur[0] != '\r');
 
-        /* \r\n is considered as "one" but two characters are skipped */
-        /* thanks to stb_c_lexer for this nice trick */
-        int num_char = (l->cur[0] + l->cur[1] == '\r' + '\n') ? 2 : 1;
-        l->cur += num_char; /* skip newline */
+    l->cur++;
+    location_increment_column(&l->location, 1);
+    return l->cur[0];
+}
 
-        location_increment_row(&l->location);
+static void consume_newlines(ac_lex* l) {
 
-        if (num_char == 2) /* Increment pos by one extra char. */
-            l->location.pos++;
-
-        return consumed_char_WAS_SPACE;
-    }
-    else {
-
+    switch (l->cur[0])
+    {
+    case '\n':
+    {
         l->cur++;
-        location_increment_column(&l->location);
-        return consumed_char_WAS_NOT_SPACE;
+        location_increment_row(&l->location, 1);
+        break;
+    }
+
+    case '\r':
+    {
+        int count = l->cur[1] == '\n' ? 2 : 1;
+        l->cur += count;
+        location_increment_row(&l->location, count);
+        break;
+    }
+    default:
+        AC_ASSERT(0 && "Unreachable");
     }
 }
 
-static int char_after_stray(ac_lex* l)
+static int skip_if_stray(ac_lex* l)
 {
     AC_ASSERT(l->cur[0] == '\\');
 
-    /* Skip all consecutive backslashes. */
     while (l->cur[0] == '\\')
     {
-        consume_one(l); /* Skip '\\' */
-
-        if (consume_one(l) != consumed_char_WAS_SPACE)
+        switch (l->cur[1])
         {
-            ac_report_error("Stray '\\' in program ");
-            return AC_EOF;
+        case '\n': {
+            l->cur += 2; /* For the '\' and for the '\n' */
+            location_increment_row(&l->location, 2);
+            break;
+        }
+        case '\r': {
+            int count = l->cur[2] == '\n' ? 3 : 2;
+            l->cur += count;
+            location_increment_row(&l->location, count);
+            break;
+        }
+        default: {
+            return l->cur[0]; /* Return the '\' */
+        }
         }
     }
     return l->cur[0];
@@ -562,10 +624,9 @@ static int char_after_stray(ac_lex* l)
 
 static int next_char_without_stray(ac_lex* l, int* c)
 {
-    consume_one(l);
-    *c = *l->cur;
+    *c = consume_one(l);
     if (!l->options.reject_stray && *c == '\\') {
-        *c = char_after_stray(l);
+        *c = skip_if_stray(l);
     }
     return *c;
 }
@@ -634,30 +695,6 @@ static bool is_hex_digit(char c) {
         || (c >= 'A' && c <= 'F');
 }
 
-const ac_token* parse_ascii_char_literal(ac_lex* l) {
-    assert(is_char(l, '"'));
-
-    consume_one(l); /* ignore the quote char */
-
-    const char* start = l->cur;
-    ac_location loc = l->location;
-    int n = 0;
-    /* @TODO replace with is_not_eof? */
-    while (l->cur[0] && is_not_char(l, '"') && is_not_char(l, '\n')) {
-        consume_one(l);
-        ++n;
-    }
-
-    if (is_not_char(l, '"')) {
-        ac_report_error_loc(loc, "String literal is not well terminated with '\"'\n");
-        return token_error(l);
-    }
-    else {
-        consume_one(l);
-    }
-    return token_from_text(l, ac_token_type_LITERAL_STRING, strv_make_from(start, n));
-}
-
 /* Get next digit, ignoring quotes and underscores. */
 #define NEXT_DIGIT(l, c) \
 do { \
@@ -685,7 +722,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
         {
             U++;
             if (U > 1) {
-                ac_report_error("Invalid integer suffix. Too many 'u' or 'U'");
+                ac_report_error_loc(l->location, "Invalid integer suffix. Too many 'u' or 'U'");
                 return false;
             }
             num->is_unsigned = true;
@@ -697,7 +734,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
         {
             L++;
             if (L > 2) {
-                ac_report_error("Invalid integer suffix. Too many 'l' or 'L'");
+                ac_report_error_loc(l->location, "Invalid integer suffix. Too many 'l' or 'L'");
                 return false;
             }
             else {
@@ -714,7 +751,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
         || (c >= 'a' && c <= 'z')
         || (c >= 'A' && c <= 'Z'))
     {
-        ac_report_error("Invalid integer suffix: '%c'", c);
+        ac_report_error_loc(l->location, "Invalid integer suffix: '%c'", c);
         return false;
     }
     return true;
@@ -775,15 +812,15 @@ static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
 static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
 {
     l->token.type = ac_token_type_LITERAL_INTEGER;
-    l->token.number = num;
+    l->token.u.number = num;
 
-    if (!parse_integer_suffix(l, &l->token.number))
+    if (!parse_integer_suffix(l, &l->token.u.number))
     {
         return token_eof(l);
     }
 
     strv text = dstr_to_strv(&l->tok_buf);
-    text.size -= 1; /* Remove 1 to remove last character which is not part of the value. */
+    text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
     const ac_token t = create_or_reuse_identifier(l, text);
     l->token.text = t.text;
     return &l->token;
@@ -792,20 +829,20 @@ static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
 static const ac_token* token_float_literal(ac_lex* l, ac_token_number num)
 {
     l->token.type = ac_token_type_LITERAL_FLOAT;
-    l->token.number = num;
+    l->token.u.number = num;
 
-    if (!parse_float_suffix(l, &l->token.number))
+    if (!parse_float_suffix(l, &l->token.u.number))
     {
         return token_eof(l);
     }
 
-    if (l->token.number.is_float && l->token.number.u.float_value > FLT_MAX)
+    if (l->token.u.number.is_float && l->token.u.number.u.float_value > FLT_MAX)
     {
-        l->token.number.overflow = true;
+        l->token.u.number.overflow = true;
     }
 
     strv text = dstr_to_strv(&l->tok_buf);
-    text.size -= 1; /* Remove 1 to remove last character which is not part of the value. */
+    text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
     const ac_token t = create_or_reuse_identifier(l, text);
     l->token.text = t.text;
     return &l->token;
@@ -899,7 +936,7 @@ static const ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum 
     return token_float_literal(l, num);
 }
 
-static int hex_to_int(const char* c, size_t len)
+static int hex_string_to_int(const char* c, size_t len)
 {
     /* @FIXME check for overflow. */
     int n = 0;
@@ -957,7 +994,7 @@ static const ac_token* parse_integer_or_float_literal(ac_lex* l)
                 return token_eof(l);
             }
             /* Not float so we return an integer. */
-            num.u.int_value = hex_to_int(l->tok_buf.data, l->tok_buf.size);
+            num.u.int_value = hex_string_to_int(l->tok_buf.data, l->tok_buf.size);
             return token_integer_literal(l, num);
         }
         /* Need to parse binary integer */
@@ -1006,7 +1043,7 @@ static const ac_token* parse_integer_or_float_literal(ac_lex* l)
         }
     }
 
-    if (is_eof(l))
+    if (is_eof(l) && !l->mgr->options.preprocess) /* Do not display error if we only preprocess. */
     {
         ac_report_error_loc(l->leading_location, "Unexpected end of file after number literal.");
         return token_eof(l);
@@ -1015,6 +1052,329 @@ static const ac_token* parse_integer_or_float_literal(ac_lex* l)
     /* Return the parsed integer. */
     num.u.int_value = n;
     return token_integer_literal(l, num);
+}
+
+static int hex_digit_to_int(char c) {
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    return c - 'A' + 10;
+}
+
+static bool try_parse_escaped_char(ac_lex* l, int* result) {
+   
+    int c = l->cur[0];
+    AC_ASSERT(c == '\\');
+
+    NEXT_CHAR_NO_STRAY(l, c); /* Skip '\' */
+
+    *result = 0;
+    int ch = 0;
+    if (is_octal_digit(c)) { /* Try to parse octal. */
+        ch = c - '0';
+        NEXT_CHAR_NO_STRAY(l, c);
+        if (is_octal_digit(c)) {
+            ch = (ch * base8) + (c - '0');
+            NEXT_CHAR_NO_STRAY(l, c);
+            if (is_octal_digit(c)) {
+                ch = (ch * base8) + (c - '0');
+                NEXT_CHAR_NO_STRAY(l, c);
+            }
+        }
+        *result = ch;
+        return true;
+    }
+
+    if (c == 'x') {
+        NEXT_CHAR_NO_STRAY(l, c); /* Skip 'x' */
+
+        int count = 0;
+        while(is_hex_digit(c)) {
+            ch = (ch * base16) + hex_digit_to_int(c);
+            NEXT_CHAR_NO_STRAY(l, c); /* Skip current hex char */
+            count += 1;
+        }
+        if (count == 0) {
+            ac_report_error_loc(l->leading_location, "Invalid hexadecimal escape sequence.");
+        }
+           
+        *result = ch;
+        return true;
+    }
+
+    switch (c) {
+    case 'a':  { *result = '\a'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x07 */
+    case 'b':  { *result = '\b'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x08 */
+    case 't':  { *result = '\t'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x09 */
+    case 'n':  { *result = '\n'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x0a */
+    case 'v':  { *result = '\v'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x0b */
+    case 'f':  { *result = '\f'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x0c */
+    case '\'': { *result = '\''; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x27 */
+    case '"':  { *result = '"';  NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x22 */
+    case '?':  { *result = '?';  NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x3f */
+    case '\\': { *result = '\\'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x5c */
+    case 'U':
+    case 'u' : { 
+        ac_report_error_loc(l->location, "Universal character names are not supported yet.");
+        return false;
+    }
+    default: 
+        ac_report_warning_loc(l->location, "Unknown escape sequence '\\%c'", c);
+        *result = c;
+        return true;
+    }
+}
+
+static void* utf8_decode(void* p, int32_t* pc)
+{
+    const int replacement = 0xFFFD;
+    const unsigned char* s = (const unsigned char*)p;
+    if (s[0] < 0x80) {
+        *pc = s[0];
+        return *pc ? (char*)p + 1 : p;
+    }
+    if ((s[0] & 0xE0) == 0xC0) {
+        *pc = (int)(s[0] & 0x1F) << 6
+            | (int)(s[1] & 0x3F);
+        return (char*)p + 2;
+    }
+    if ((s[0] & 0xF0) == 0xE0) {
+        *pc = (int)(s[0] & 0x0F) << 12
+            | (int)(s[1] & 0x3F) << 6
+            | (int)(s[2] & 0x3F);
+        /* Surrogate pairs are not allowed in UTF-8 */
+        if (0xD800 <= *pc && *pc <= 0xDFFF)
+            *pc = replacement;
+        return (char*)p + 3;
+    }
+    if ((s[0] & 0xF8) == 0xF0 && (s[0] <= 0xF4)) {
+        /* Not greater than 0x10FFFF */
+        *pc = (int)(s[0] & 0x07) << 18
+            | (int)(s[1] & 0x3F) << 12
+            | (int)(s[2] & 0x3F) << 6
+            | (int)(s[3] & 0x3F);
+        return (char*)p + 4;
+    }
+    *pc = replacement;
+    return NULL;
+}
+
+
+static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
+{
+    strv inner_content = empty;
+    AC_ASSERT(is_char(l, quote));
+
+    int c = l->cur[0];
+
+    const char* start = l->cur;
+    int n = 0;
+    /* @FIXME try transform the do/while in while. */
+    do {
+        n += 1;
+        c = consume_one(l);
+    } while (!is_eof(l)
+        && c != quote
+        && c != '\n'
+        && c != '\r'
+        && c != '\\'); /* Could be a stray or a escaped char. */
+   
+    /* Check if a stray or escape character has been found we take the slow path. */
+    if (is_char(l, '\\'))
+    {
+        /* Add already parsed part of the string: */
+        size_t s = l->tok_buf.size;
+        dstr_append(&l->tok_buf, strv_make_from(start, l->cur - start));
+
+        c = skip_if_stray(l);
+
+        while (!is_eof(l)
+                && is_not_char(l, quote)
+                && is_not_char(l, '\n')
+                && is_not_char(l, '\r'))
+        {
+            if (c == '\\')
+            {
+                if (!try_parse_escaped_char(l, &c))
+                    return empty;
+                dstr_append_char(&l->tok_buf, c);
+            }
+            else
+            {
+                dstr_append_char(&l->tok_buf, c);
+                NEXT_CHAR_NO_STRAY(l, c);
+            }
+        }
+
+        strv sv = dstr_to_strv(&l->tok_buf);
+        inner_content = strv_remove_left(sv, s + 1); /* Remove first quote from the result. */
+    }
+    else
+    {
+        strv sv = strv_make_from(start, l->cur - start);
+        inner_content = strv_remove_left(sv, 1); /* Remove first quote from the result. */
+    }
+
+    if (is_not_char(l, quote)) {
+        ac_report_error_loc(l->leading_location, "Missing terminating char '%c' for literal.\n", quote);
+        return empty;
+    }
+
+    NEXT_CHAR_NO_STRAY(l, c); /* consume quote or double quote */
+
+    return inner_content;
+}
+
+static const ac_token* parse_string_literal(ac_lex* l) {
+    return parse_utf8_string_literal(l, no_prefix);
+}
+
+static const ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix) {
+    AC_ASSERT(is_char(l, '"'));
+    AC_ASSERT(prefix.data == no_prefix.data || prefix.data == utf8.data);
+
+    strv literal = string_or_char_literal_to_buffer(l, '"');
+    if (literal.size <= 0)
+        return token_eof(l);
+
+    return token_string(l, literal, literal, prefix);
+}
+
+static const ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix) {
+    AC_ASSERT(is_char(l, '"'));
+    AC_ASSERT(prefix.data == utf16.data);
+
+    strv literal = string_or_char_literal_to_buffer(l, '"');
+    if (literal.size <= 0)
+        return token_eof(l);
+
+    /* Reserve enough space to hold new utf16 content */
+    dstr_reserve(&l->str_buf, (2 * (literal.size + 1)));
+    l->str_buf.size = 0;
+    uint16_t* buffer = (uint16_t*)l->str_buf.data;
+    int buffer_len = 0;
+
+    char* cursor = (char*)literal.data;
+    char* end = (char*)literal.data + literal.size;
+    while (cursor < end) {
+        uint32_t c;
+        cursor = utf8_decode(cursor, &c);
+
+        if (c < 0x10000) { /* Encode a code point in 2 bytes. */
+            buffer[buffer_len++] = c;
+        } else {  /* Encode a code point in 4 bytes. */
+            c -= 0x10000;
+            buffer[buffer_len++] = 0xd800 + ((c >> 10) & 0x3ff);
+            buffer[buffer_len++] = 0xdc00 + (c & 0x3ff);
+        }
+    }
+
+    buffer[buffer_len] = '\0';
+
+    strv utf16_content;
+    utf16_content.data = l->str_buf.data;
+    utf16_content.size = buffer_len * sizeof(uint16_t);
+
+    return token_string(l, literal, utf16_content, prefix);
+}
+
+static const ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix)
+{
+    AC_ASSERT(prefix.data == utf32.data || prefix.data == wide.data);
+
+    AC_ASSERT(is_char(l, '"'));
+
+    strv literal = string_or_char_literal_to_buffer(l, '"');
+    if (literal.size <= 0)
+        return token_eof(l);
+
+    /* Reserve enough space to hold new utf32 content */
+    dstr_reserve(&l->str_buf, (4 * (literal.size + 1)));
+    l->str_buf.size = 0;
+    uint32_t* buffer = (uint32_t*)l->str_buf.data;
+    int buffer_len = 0;
+
+    char* cursor = (char*)literal.data;
+    char* end = (char*)literal.data + literal.size;
+    while (cursor < end) {
+        uint32_t c;
+        cursor = utf8_decode(cursor, &c);
+        buffer[buffer_len++] = c;
+    }
+
+    buffer[buffer_len] = '\0';
+
+    strv utf16_content;
+    utf16_content.data = l->str_buf.data;
+    utf16_content.size = buffer_len * sizeof(uint32_t);
+
+    return token_string(l, literal, utf16_content, prefix);
+}
+
+static const ac_token* token_string(ac_lex* l, strv literal, strv encoded_content, strv prefix)
+{
+    l->token.type = ac_token_type_LITERAL_STRING;
+
+    /* @FIXME Is there a need to reuse strings for string literal? */
+    ac_token t;
+    t = create_or_reuse_identifier(l, literal);
+    l->token.text = t.text;
+
+    t = create_or_reuse_identifier(l, encoded_content);
+    l->token.u.str.encoded_content = t.text;
+
+    if (prefix.data == utf8.data)
+        l->token.u.str.is_utf8 = true;
+    else if (prefix.data == utf16.data)
+        l->token.u.str.is_utf16 = true;
+    else if (prefix.data == utf32.data)
+        l->token.u.str.is_utf32 = true;
+    else if (prefix.data == wide.data)
+        l->token.u.str.is_wide = true;
+
+    return &l->token;
+}
+
+static const ac_token* token_char(ac_lex* l, strv prefix)
+{
+    AC_ASSERT(is_char(l, '\''));
+
+    dstr_assign(&l->tok_buf, prefix);
+
+    strv literal = string_or_char_literal_to_buffer(l, '\'');
+    if (literal.size <= 0)
+        return token_eof(l);
+
+    l->token.type = ac_token_type_LITERAL_CHAR;
+
+    ac_token t = create_or_reuse_identifier(l, literal);
+    l->token.text = t.text;
+
+    int32_t c = 0;
+    utf8_decode((char*)literal.data, &c);
+
+    if (prefix.data == no_prefix.data) {
+        l->token.u.ch.value = (char)c;
+    }
+    else if (prefix.data == utf8.data) {
+        l->token.u.ch.is_utf8 = true;
+        l->token.u.ch.value = c;
+    }
+    else if (prefix.data == utf16.data) {
+        l->token.u.ch.is_utf16 = true;
+        l->token.u.ch.value = c & 0xffff;
+    }
+    else if (prefix.data == utf32.data) {
+        l->token.u.ch.is_utf32 = true;
+        l->token.u.ch.value = c;
+    }
+    else if (prefix.data == wide.data) {
+        l->token.u.ch.is_wide = true;
+        l->token.u.ch.value = c;
+    }
+
+    return &l->token;
 }
 
 static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type)
@@ -1209,18 +1569,57 @@ const char* ac_token_to_str(ac_token token) {
 
 strv ac_token_to_strv(ac_token token) {
 
-    if (token.type == ac_token_type_IDENTIFIER)
+    if (token.type == ac_token_type_IDENTIFIER
+        || token.type == ac_token_type_LITERAL_CHAR
+        || token.type == ac_token_type_LITERAL_STRING)
     {
         return (strv){ token.text.size, token.text.data };
     }
-
     return ac_token_type_to_strv(token.type);
+}
+
+void ac_token_print(FILE* file, ac_token t)
+{
+    strv prefix = ac_token_prefix(t);
+    if (prefix.size)
+    {
+        fprintf(file, "%.*s", (int)prefix.size, prefix.data);
+    }
+    const char* format = "%.*s";
+    if (t.type == ac_token_type_LITERAL_STRING)
+        format = "\"%.*s\"";
+    else  if (t.type == ac_token_type_LITERAL_CHAR)
+        format = "'%.*s'";
+
+    fprintf(file, format, (int)t.text.size, t.text.data);
 }
 
 bool ac_token_type_is_keyword(enum ac_token_type t) {
 
     return t >= ac_token_type_ALIGNAS
         && t <= ac_token_type_WHILE;
+}
+
+static strv ac_token_prefix(ac_token token) {
+
+    if (token.type == ac_token_type_LITERAL_STRING)
+    {
+        if (token.u.str.is_utf8) return utf8;
+        else if (token.u.str.is_utf16) return utf16;
+        else if (token.u.str.is_utf32) return utf32;
+        else if (token.u.str.is_wide) return wide;
+        else return no_prefix;
+    }
+
+    if (token.type == ac_token_type_LITERAL_CHAR)
+    {
+        if (token.u.ch.is_utf8) return utf8;
+        else if (token.u.ch.is_utf16) return utf16;
+        else if (token.u.ch.is_utf32) return utf32;
+        else if (token.u.ch.is_wide) return wide;
+        else return no_prefix;
+    }
+    return no_prefix;
 }
 
 static size_t token_str_len(enum ac_token_type type) {
@@ -1242,13 +1641,13 @@ static bool token_type_is_literal(enum ac_token_type type) {
     return false;
 }
 
-static void location_increment_row(ac_location* l) {
-    l->row++;
+static void location_increment_row(ac_location* l, int char_count) {
+    l->row += 1;
     l->col = 1;
-    l->pos++;
+    l->pos += char_count;
 }
 
-static void location_increment_column(ac_location* l) {
-    l->col++;
-    l->pos++;
+static void location_increment_column(ac_location* l, int char_count) {
+    l->col += 1;
+    l->pos += char_count;
 }

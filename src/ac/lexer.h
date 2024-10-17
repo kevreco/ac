@@ -147,7 +147,7 @@ struct ac_token_number {
     bool is_unsigned : 1;
     int long_depth : 2;
     union {
-        int int_value;
+        int64_t int_value;
         double float_value;
     } u;
 };
@@ -156,7 +156,23 @@ typedef struct ac_token ac_token;
 struct ac_token {
     enum ac_token_type type;
     strv text;
-    ac_token_number number;
+    union {
+        ac_token_number number;
+        struct {
+            strv encoded_content;
+            bool is_utf8;
+            bool is_utf16;
+            bool is_utf32;
+            bool is_wide;
+        } str;
+        struct {
+            int64_t value;
+            bool is_utf8;
+            bool is_utf16;
+            bool is_utf32;
+            bool is_wide;
+        } ch;
+    } u;
 };
 
 /* @TODO move this to the compiler options. */
@@ -182,6 +198,7 @@ struct ac_lex {
     ac_location leading_location; /* Location when at the very begining of ac_lex_goto_next. */
     ac_location location; /* Current location */
     dstr tok_buf;         /* Token buffer in case we can't just use a string view to the memory. */
+    dstr str_buf;         /* Buffer for string conversion. */
 };
 
 void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath);
@@ -203,6 +220,7 @@ const char* ac_token_type_to_str(enum ac_token_type type); /* this should be use
 strv ac_token_type_to_strv(enum ac_token_type type);
 const char* ac_token_to_str(ac_token t);
 strv ac_token_to_strv(ac_token t);
+void ac_token_print(FILE* file, ac_token t);
 
 #ifdef __cplusplus
 } /* extern "C" */

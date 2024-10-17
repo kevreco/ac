@@ -48,7 +48,7 @@ bool ac_compiler_compile(ac_compiler* c)
         while ((token = ac_pp_goto_next(&pp)) != NULL
             && token->type != ac_token_type_EOF)
         {
-            fprintf(stdout, "%.*s", (int)token->text.size, token->text.data);
+            ac_token_print(stdout, *token);
         }
 
         ac_pp_destroy(&pp);
