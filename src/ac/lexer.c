@@ -47,11 +47,11 @@ static int next_char_without_stray(ac_lex* l, int* c);
 
 static void skipn(ac_lex* l, unsigned n); /* skip n char */
 
-static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text); /* set current token and got to next */
-static const ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
-static const ac_token* token_eof(ac_lex* l);   /* set current token to eof and returns it. */
-static const ac_token* token_from_type(ac_lex* l, enum ac_token_type type);
-static const ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type); /* set current token and got to next */
+static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text); /* set current token and got to next */
+static ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
+static ac_token* token_eof(ac_lex* l);   /* set current token to eof and returns it. */
+static ac_token* token_from_type(ac_lex* l, enum ac_token_type type);
+static ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type); /* set current token and got to next */
 
 static double power(double base, unsigned int exponent);
 static bool is_binary_digit(char c);
@@ -61,24 +61,24 @@ static bool is_hex_digit(char c);
 
 static bool parse_integer_suffix(ac_lex* l, ac_token_number* num); /* Parse integer suffix like 'uLL' */
 static bool parse_float_suffix(ac_lex* l, ac_token_number* num);   /* Parse float suffix like 'f' or 'l' */
-static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num); /* Create integer token from parsed value. */
-static const ac_token* token_float_literal(ac_lex* l, ac_token_number num);   /* Create float token from parsed value. */
-static const ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base); /* Parse float after the whole number part. */
+static ac_token* token_integer_literal(ac_lex* l, ac_token_number num); /* Create integer token from parsed value. */
+static ac_token* token_float_literal(ac_lex* l, ac_token_number num);   /* Create float token from parsed value. */
+static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base); /* Parse float after the whole number part. */
 static int hex_string_to_int(const char* c, size_t len);
-static const ac_token* parse_integer_or_float_literal(ac_lex* l);
+static ac_token* parse_integer_or_float_literal(ac_lex* l);
 
 static int hex_digit_to_int(char c);
 static bool try_parse_escaped_char(ac_lex* l, int* result);
 static void* utf8_decode(void* p, int32_t* pc);
 
 static strv string_or_char_literal_to_buffer(ac_lex* l, char quote);
-static const ac_token* parse_string_literal(ac_lex* l);
-static const ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix);
-static const ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix);
-static const ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix);
-static const ac_token* token_string(ac_lex* l, strv literal, strv content, strv kind);
+static ac_token* parse_string_literal(ac_lex* l);
+static ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix);
+static ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix);
+static ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix);
+static ac_token* token_string(ac_lex* l, strv literal, strv content, strv kind);
 
-static const ac_token* token_char(ac_lex* l, strv prefix);
+static ac_token* token_char(ac_lex* l, strv prefix);
 
 /* Register keywords or known identifier. It helps to retrieve the type of a token from it's text value. */
 static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type);
@@ -152,7 +152,7 @@ void ac_lex_destroy(ac_lex* l)
 
 #define NEXT_CHAR_NO_STRAY(l, c) next_char_without_stray(l, &c)
 
-const ac_token* ac_lex_goto_next(ac_lex* l)
+ac_token* ac_lex_goto_next(ac_lex* l)
 {
     memset(&l->token, 0, sizeof(ac_token));
 
@@ -369,7 +369,7 @@ switch_start:
     case '.': {
        
         /* Float can also starts with a dot. */
-        const ac_token* token = parse_integer_or_float_literal(l);
+        ac_token* token = parse_integer_or_float_literal(l);
         if (token)
             return token;
 
@@ -492,7 +492,7 @@ ac_token ac_lex_token(ac_lex* l) {
     return l->token;
 }
 
-const ac_token* ac_lex_token_ptr(ac_lex* l) {
+ac_token* ac_lex_token_ptr(ac_lex* l) {
     return &l->token;
 }
 
@@ -512,6 +512,13 @@ bool ac_lex_expect(ac_lex* l, enum ac_token_type type) {
         return false;
     }
     return true;
+}
+
+static ac_token eof = {ac_token_type_EOF};
+
+ac_token* ac_token_eof()
+{
+    return &eof;
 }
 
 static inline bool _is_end_line(char c) {
@@ -563,10 +570,6 @@ static bool next_next_is(const ac_lex* l, char c) {
 
 /* We consume one char at a time to handle new lines and row/line numbers which change the location of tokens. */
 static inline int consume_one(ac_lex* l) {
-
-    /* New lines should be handled separately. */
-    AC_ASSERT(l->cur[0] != '\n' && l->cur[0] != '\r');
-
     l->cur++;
     location_increment_column(&l->location, 1);
     return l->cur[0];
@@ -642,29 +645,29 @@ static void skipn(ac_lex* l, unsigned n) {
     }
 }
 
-static const ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) {
+static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) {
     l->token.type = type;
     l->token.text = text;
    
     return &l->token;
 }
 
-static const ac_token* token_error(ac_lex* l) {
+static ac_token* token_error(ac_lex* l) {
     l->token.type = ac_token_type_ERROR;
     return &l->token;
 }
 
-static const ac_token* token_eof(ac_lex* l) {
+static ac_token* token_eof(ac_lex* l) {
     l->token.type = ac_token_type_EOF;
     return &l->token;
 }
 
-static const ac_token* token_from_type(ac_lex* l, enum ac_token_type type) {
+static ac_token* token_from_type(ac_lex* l, enum ac_token_type type) {
     return token_from_text(l, type, token_infos[type].name);
 }
 
-static const ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type) {
-    const ac_token* t = token_from_type(l, type);
+static ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type) {
+    ac_token* t = token_from_type(l, type);
     consume_one(l);
     return t;
 }
@@ -809,7 +812,7 @@ static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
     return true;
 }
 
-static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
+static ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
 {
     l->token.type = ac_token_type_LITERAL_INTEGER;
     l->token.u.number = num;
@@ -821,12 +824,12 @@ static const ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
 
     strv text = dstr_to_strv(&l->tok_buf);
     text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
-    const ac_token t = create_or_reuse_identifier(l, text);
+    ac_token t = create_or_reuse_identifier(l, text);
     l->token.text = t.text;
     return &l->token;
 }
 
-static const ac_token* token_float_literal(ac_lex* l, ac_token_number num)
+static ac_token* token_float_literal(ac_lex* l, ac_token_number num)
 {
     l->token.type = ac_token_type_LITERAL_FLOAT;
     l->token.u.number = num;
@@ -843,12 +846,12 @@ static const ac_token* token_float_literal(ac_lex* l, ac_token_number num)
 
     strv text = dstr_to_strv(&l->tok_buf);
     text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
-    const ac_token t = create_or_reuse_identifier(l, text);
+    ac_token t = create_or_reuse_identifier(l, text);
     l->token.text = t.text;
     return &l->token;
 }
 
-static const ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base)
+static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base)
 {
     AC_ASSERT(base == 10 || base == 16 && "Can only parse decimal floats of hexadicemal floats.");
 
@@ -954,7 +957,7 @@ static int hex_string_to_int(const char* c, size_t len)
     return n;
 }
 
-static const ac_token* parse_integer_or_float_literal(ac_lex* l)
+static ac_token* parse_integer_or_float_literal(ac_lex* l)
 {
     ac_token_number num = { 0 };
     int c = l->cur[0];
@@ -1226,11 +1229,11 @@ static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
     return inner_content;
 }
 
-static const ac_token* parse_string_literal(ac_lex* l) {
+static ac_token* parse_string_literal(ac_lex* l) {
     return parse_utf8_string_literal(l, no_prefix);
 }
 
-static const ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix) {
+static ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix) {
     AC_ASSERT(is_char(l, '"'));
     AC_ASSERT(prefix.data == no_prefix.data || prefix.data == utf8.data);
 
@@ -1241,7 +1244,7 @@ static const ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix) {
     return token_string(l, literal, literal, prefix);
 }
 
-static const ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix) {
+static ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix) {
     AC_ASSERT(is_char(l, '"'));
     AC_ASSERT(prefix.data == utf16.data);
 
@@ -1279,7 +1282,7 @@ static const ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix) {
     return token_string(l, literal, utf16_content, prefix);
 }
 
-static const ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix)
+static ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix)
 {
     AC_ASSERT(prefix.data == utf32.data || prefix.data == wide.data);
 
@@ -1312,7 +1315,7 @@ static const ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix)
     return token_string(l, literal, utf16_content, prefix);
 }
 
-static const ac_token* token_string(ac_lex* l, strv literal, strv encoded_content, strv prefix)
+static ac_token* token_string(ac_lex* l, strv literal, strv encoded_content, strv prefix)
 {
     l->token.type = ac_token_type_LITERAL_STRING;
 
@@ -1336,7 +1339,7 @@ static const ac_token* token_string(ac_lex* l, strv literal, strv encoded_conten
     return &l->token;
 }
 
-static const ac_token* token_char(ac_lex* l, strv prefix)
+static ac_token* token_char(ac_lex* l, strv prefix)
 {
     AC_ASSERT(is_char(l, '\''));
 
@@ -1594,10 +1597,10 @@ void ac_token_print(FILE* file, ac_token t)
     fprintf(file, format, (int)t.text.size, t.text.data);
 }
 
-bool ac_token_type_is_keyword(enum ac_token_type t) {
+bool ac_token_is_keyword_or_identifier(ac_token t) {
 
-    return t >= ac_token_type_ALIGNAS
-        && t <= ac_token_type_WHILE;
+    return t.type == ac_token_type_IDENTIFIER
+        || (t.type >= ac_token_type_ALIGNAS && t.type <= ac_token_type_WHILE);
 }
 
 static strv ac_token_prefix(ac_token token) {

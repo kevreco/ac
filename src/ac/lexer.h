@@ -205,22 +205,24 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
 void ac_lex_destroy(ac_lex* l);
 
 /* Got to signficant next token. */
-const ac_token* ac_lex_goto_next(ac_lex* l);
+ac_token* ac_lex_goto_next(ac_lex* l);
 
 /* Returns current token. */
 ac_token ac_lex_token(ac_lex* l);
 
 /* Returns current token pointer. */
-const ac_token* ac_lex_token_ptr(ac_lex* l);
+ac_token* ac_lex_token_ptr(ac_lex* l);
 
 /* Report error if the current token is not of the type specified. */
 bool ac_lex_expect(ac_lex* l, enum ac_token_type type);
+ac_token* ac_token_eof();
 
 const char* ac_token_type_to_str(enum ac_token_type type); /* this should be used only for printf */
 strv ac_token_type_to_strv(enum ac_token_type type);
 const char* ac_token_to_str(ac_token t);
 strv ac_token_to_strv(ac_token t);
 void ac_token_print(FILE* file, ac_token t);
+bool ac_token_is_keyword_or_identifier(ac_token t);
 
 #ifdef __cplusplus
 } /* extern "C" */
