@@ -232,6 +232,8 @@ DARR_API void darr_append_darr_from(darr* arr, darr_size_t index, const darr* ot
 
 /* Removes the last element from the array */
 DARR_API void darr_pop_back(darr* arr);
+/* Removes the first element from the array */
+DARR_API void darr_pop_front(darr* arr);
 
 /* Assign other values to the array */
 DARR_API void darr_assign(darr* arr, const void* value, const darr_size_t size);
@@ -302,6 +304,12 @@ DARR_API darr_size_t darr_lower_bound_predicate(const void* void_ptr, darr_size_
         darr_insert_one_space(&(a)->base, (index)); \
 		(a)->darr.data[(index)] = value; \
 	} while (0);
+
+#define darrT_pop_back(a) \
+    (a)->darr.data[(a)->darr.size - 1], darr_pop_back((&(a)->base))
+
+#define darrT_pop_front(a) \
+     ((a)->darr.data[0]), darr_pop_front((&(a)->base))
 
 #define darrT_push_back(a, value) \
     do {  \
@@ -791,6 +799,13 @@ darr_pop_back(darr* arr)
 {
     DARR_ASSERT(arr->size > 0);
     darr_erase_one(arr, arr->size - 1);
+}
+
+DARR_API void
+darr_pop_front(darr* arr)
+{
+    DARR_ASSERT(arr->size > 0);
+    darr_erase_one(arr, 0);
 }
 
 DARR_API void
