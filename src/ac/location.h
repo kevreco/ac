@@ -13,8 +13,9 @@ typedef struct ac_location ac_location;
 struct ac_location
 {
     const char* filepath;
-    int row, col, pos;
-    
+    int row; /* 1-based index. */
+    int col; /* 1-based index. */
+    int pos; /* 0-based index. */
     strv content; /* view to the whole content of the file for convenience */
 };
 
@@ -31,8 +32,8 @@ static ac_location ac_location_empty() {
 static void ac_location_init_with_file(ac_location* l, const char* filepath, strv content) {
     l->filepath = filepath;
     l->row = 1;
-    l->col = 1;
-    l->pos = 0;
+    l->col = 0;
+    l->pos = -1;
     l->content = content;
 }
 

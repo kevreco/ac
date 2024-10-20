@@ -1646,7 +1646,7 @@ static bool token_type_is_literal(enum ac_token_type type) {
 
 static void location_increment_row(ac_location* l, int char_count) {
     l->row += 1;
-    l->col = 1;
+    l->col = 0; /* This is 1-based index, but the column after a new line is not '1' the next character should be '1'. */
     l->pos += char_count;
 }
 
