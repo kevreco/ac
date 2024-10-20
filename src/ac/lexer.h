@@ -91,6 +91,7 @@ enum ac_token_type {
     ac_token_type_DOUBLE_DOT,      /* .. */
     ac_token_type_DOUBLE_EQUAL,    /* == */
     ac_token_type_DOUBLE_GREATER,  /* >> */
+    ac_token_type_DOUBLE_HASH,     /* ## */
     ac_token_type_DOUBLE_LESS,     /* << */
     ac_token_type_DOUBLE_PIPE,     /* || */
     ac_token_type_DOUBLE_QUOTE,    /* "  */

@@ -21,9 +21,9 @@ struct ac_macro {
 static strv directive_define = STRV("define");
 
 static ac_token* parse_directive(ac_pp* pp);
-static void parse_macro_definition(ac_pp* pp, ac_token* identifier);
+static bool parse_macro_definition(ac_pp* pp);
 static void parse_macro_parameters(ac_pp* pp, ac_macro* macro);
-static void parse_macro_body(ac_pp* pp, ac_macro* macro);
+static bool parse_macro_body(ac_pp* pp, ac_macro* macro);
 
 /* Get and remove the first token from macro in the list. */
 static ac_token_node* expanded_tokens_pop(ac_pp* pp);
@@ -36,7 +36,7 @@ static macro_arg_node* find_token_in_args(ac_token* token, macro_arg_node* node)
 static void substitute_macro_body(ac_pp* pp, ac_token_node* body_node, macro_arg_node* arg_node);
 static ac_token* expand_function_macro(ac_pp* pp, ac_macro* macro);
 
-static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name);
+static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location);
 static ac_token_node* create_token_node(ac_pp* pp, ac_token* token_ident, ac_token_node* parent);
 static macro_arg_node* create_macro_arg_node(ac_pp* pp, macro_arg_node* parent);
 
@@ -93,8 +93,8 @@ ac_token* ac_pp_goto_next(ac_pp* pp)
     while (token->type == ac_token_type_HASH)
     {
         token = parse_directive(pp);
-        if (!token)
-            return NULL;
+        if (token->type == ac_token_type_EOF)
+            return token;
     }
 
     /* Expand macro for identifiers. */
@@ -123,25 +123,30 @@ static ac_token* parse_directive(ac_pp* pp)
         /* #define */
         if (consume_if(pp, strv_equals(tok->text, directive_define)))
         {
-            ac_token identifier = token(pp);
-
-            ac_lex_goto_next(&pp->lex); /* Skip identifier, but not the whitespaces.*/
-
-            parse_macro_definition(pp, &identifier);
+            if (!parse_macro_definition(pp))
+            {
+                return ac_token_eof();
+            }
         }
         else
         {
             ac_report_error_loc(pp->lex.location, "Unknown directive.");
-            return NULL;
+            return ac_token_eof();
         }
     }
 
     return token_ptr(pp);
 }
 
-static void parse_macro_definition(ac_pp* pp, ac_token* identifier)
+static bool parse_macro_definition(ac_pp* pp)
 {
-    ac_macro* m = create_macro(pp, identifier);
+    expect(pp, ac_token_type_IDENTIFIER);
+
+    ac_token* identifier = token_ptr(pp);
+    ac_location loc = pp->lex.location;
+    ac_macro* m = create_macro(pp, identifier, loc);
+
+    ac_lex_goto_next(&pp->lex); /* Skip identifier, but not the whitespaces or comment. */
 
     /* There is a '(' right next tot the macro name, it's a function-like macro. */
     if (token(pp).type == ac_token_type_PAREN_L)
@@ -162,8 +167,14 @@ static void parse_macro_definition(ac_pp* pp, ac_token* identifier)
     }
 
     /* Parse body of macro. Which are all tokens until the next EOL or EOF. */
-    parse_macro_body(pp, m);
+    if (!parse_macro_body(pp, m))
+    {
+        return false;
+    }
+
     add_macro(pp, m);
+
+    return true;
 }
 
 static void parse_macro_parameters(ac_pp* pp, ac_macro* macro)
@@ -189,14 +200,14 @@ static void parse_macro_parameters(ac_pp* pp, ac_macro* macro)
     expect_and_consume(pp, ac_token_type_PAREN_R);
 }
 
-static void parse_macro_body(ac_pp* pp, ac_macro* macro)
+static bool parse_macro_body(ac_pp* pp, ac_macro* macro)
 {
     ac_token* tok = token_ptr(pp);
 
     /* Return early if it's the EOF. */
     if (tok->type == ac_token_type_EOF)
     {
-        return;
+        return true;
     }
 
     /* Return early if it's a new line */
@@ -204,7 +215,7 @@ static void parse_macro_body(ac_pp* pp, ac_macro* macro)
     {
         /* Eat single new line*/
         ac_lex_goto_next(&pp->lex);
-        return;
+        return true;
     }
 
     /* Create first token of the body with the current one and go to the next token. */
@@ -226,6 +237,20 @@ static void parse_macro_body(ac_pp* pp, ac_macro* macro)
     {
         ac_lex_goto_next(&pp->lex);
     }
+
+    if (macro->body_node->token.type == ac_token_type_DOUBLE_HASH)
+    {
+        ac_report_error_loc(macro->location, "'##' cannot appear at either end of a macro expansion.");
+        return false;
+    }
+
+    if (node->token.type == ac_token_type_DOUBLE_HASH)
+    {
+        ac_report_error_loc(macro->location, "'##' cannot appear at either end of a macro expansion.");
+        return false;
+    }
+
+    return true;
 }
 
 static ac_token_node leading_space_token_node = { { ac_token_type_HORIZONTAL_WHITESPACE , STRV(" ")} };
@@ -411,13 +436,14 @@ static ac_token* expand_function_macro(ac_pp* pp, ac_macro* macro)
     return &tok_node->token;
 }
 
-static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name)
+static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location)
 {
     AC_ASSERT(macro_name->type == ac_token_type_IDENTIFIER);
     /* @FIXME: ast_arena should be renamed. */
     ac_macro* m = ac_allocator_allocate(&pp->mgr->ast_arena.allocator, sizeof(ac_macro));
     memset(m, 0, sizeof(ac_macro));
     m->identifier = *macro_name;
+    m->location = location;
     return m;
 }
 

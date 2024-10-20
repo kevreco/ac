@@ -200,7 +200,7 @@ switch_start:
         consume_newlines(l);
         return token_from_text(l, ac_token_type_NEW_LINE, strv_make_from(start, l->cur - start));
     }
-    case '#': return token_from_single_char(l, ac_token_type_HASH);
+    
     case '[': return token_from_single_char(l, ac_token_type_SQUARE_L);
     case ']': return token_from_single_char(l, ac_token_type_SQUARE_R);
     case '(': return token_from_single_char(l, ac_token_type_PAREN_L);
@@ -212,6 +212,14 @@ switch_start:
     case ',': return token_from_single_char(l, ac_token_type_COMMA);
     case '?': return token_from_single_char(l, ac_token_type_QUESTION);
 
+    case '#': {
+        NEXT_CHAR_NO_STRAY(l, c); /* Skip '#' */
+        if (c == '#') {
+            NEXT_CHAR_NO_STRAY(l, c); /* Skip '#' */
+            return token_from_type(l, ac_token_type_DOUBLE_HASH);
+        }
+        return token_from_type(l, ac_token_type_HASH);
+    }
     case '=': {
         NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
         if (c == '=') {
@@ -1510,6 +1518,7 @@ token_info token_infos[] = {
     { false, ac_token_type_DOUBLE_DOT, STRV("..") },
     { false, ac_token_type_DOUBLE_EQUAL, STRV("==") },
     { false, ac_token_type_DOUBLE_GREATER, STRV(">>") },
+    { true,  ac_token_type_DOUBLE_HASH, STRV("##") },
     { false, ac_token_type_DOUBLE_LESS, STRV("<<") },
     { false, ac_token_type_DOUBLE_PIPE, STRV("||") },
     { false, ac_token_type_DOUBLE_QUOTE , STRV("\"") },
