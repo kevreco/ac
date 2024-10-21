@@ -115,15 +115,17 @@ next_token_again:
         && (m = find_macro(pp, token)) != NULL)
     {
         /* If the macro exists and have tokens we push them. */
-        if (m && m->body_node)
+        if (m)
         {
-            token = expand_macro(pp, m);
+            if (m->body_node) {
+                token = expand_macro(pp, m);
+            }
+            else {
+                /* Macro does not have body so it expands to nothing, hence just jump straight to the next token. */
+                goto next_token_again;
+            }
         }
-        else
-        {
-            /* Macro does not have body so it expands to nothing, hence just jump straight to the next token. */
-            goto next_token_again;
-        }
+
     }
 
     return token;
