@@ -306,7 +306,7 @@ DARR_API darr_size_t darr_lower_bound_predicate(const void* void_ptr, darr_size_
 	} while (0);
 
 #define darrT_pop_back(a) \
-    (a)->darr.data[(a)->darr.size - 1], darr_pop_back((&(a)->base))
+    ((a)->darr.data[(a)->darr.size - 1], (a)->darr.size -= 1)
 
 #define darrT_pop_front(a) \
      ((a)->darr.data[0]), darr_pop_front((&(a)->base))

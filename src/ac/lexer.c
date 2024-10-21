@@ -99,11 +99,8 @@ w_lex
 -------------------------------------------------------------------------------
 */
 
-void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
+void ac_lex_init(ac_lex* l, ac_manager* mgr)
 {
-    AC_ASSERT(content.data);
-    AC_ASSERT(content.size);
-
     /* Construct. */
     {
         memset(l, 0, sizeof(ac_lex));
@@ -114,19 +111,6 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath)
         l->options.reject_stray = mgr->options.reject_stray;
     }
 
-    /* Initialize source. */
-    {
-        l->filepath = filepath;
-
-        ac_location_init_with_file(&l->location, filepath, content);
-
-        if (content.data && content.size) {
-            l->src = content.data;
-            l->end = content.data + content.size;
-            l->cur = content.data;
-            l->len = content.size;
-        }
-    }
 
     dstr_init(&l->tok_buf);
     dstr_init(&l->str_buf);
@@ -148,6 +132,23 @@ void ac_lex_destroy(ac_lex* l)
     dstr_destroy(&l->str_buf);
     dstr_destroy(&l->tok_buf);
     memset(l, 0, sizeof(ac_lex));
+}
+
+void ac_lex_set_content(ac_lex* l, strv content, const char* filepath)
+{
+    AC_ASSERT(content.data);
+    AC_ASSERT(content.size);
+
+    l->filepath = filepath;
+
+    ac_location_init_with_file(&l->location, filepath, content);
+
+    if (content.data && content.size) {
+        l->src = content.data;
+        l->end = content.data + content.size;
+        l->cur = content.data;
+        l->len = content.size;
+    }
 }
 
 #define NEXT_CHAR_NO_STRAY(l, c) next_char_without_stray(l, &c)
@@ -522,6 +523,13 @@ bool ac_lex_expect(ac_lex* l, enum ac_token_type type) {
     return true;
 }
 
+void ac_lex_swap(ac_lex* left, ac_lex* right)
+{
+    ac_lex tmp = *left;
+    *left = *right;
+    *right = tmp;
+}
+
 static ac_token eof = {ac_token_type_EOF};
 
 ac_token* ac_token_eof()
@@ -642,6 +650,7 @@ static int next_char_without_stray(ac_lex* l, int* c)
     return *c;
 }
 
+/* @TODO: Remove this function since it's used only once. */
 static void skipn(ac_lex* l, unsigned n) {
 
     for (unsigned i = 0; i < n; ++i) {
@@ -1590,7 +1599,7 @@ strv ac_token_to_strv(ac_token token) {
     return ac_token_type_to_strv(token.type);
 }
 
-void ac_token_print(FILE* file, ac_token t)
+void ac_token_fprint(FILE* file, ac_token t)
 {
     strv prefix = ac_token_prefix(t);
     if (prefix.size)
@@ -1604,6 +1613,22 @@ void ac_token_print(FILE* file, ac_token t)
         format = "'%.*s'";
 
     fprintf(file, format, (int)t.text.size, t.text.data);
+}
+
+void ac_token_sprint(dstr* str, ac_token t)
+{
+    strv prefix = ac_token_prefix(t);
+    if (prefix.size)
+    {
+        dstr_append_f(str, "%.*s", (int)prefix.size, prefix.data);
+    }
+    const char* format = "%.*s";
+    if (t.type == ac_token_type_LITERAL_STRING)
+        format = "\"%.*s\"";
+    else  if (t.type == ac_token_type_LITERAL_CHAR)
+        format = "'%.*s'";
+
+    dstr_append_f(str, format, (int)t.text.size, t.text.data);
 }
 
 bool ac_token_is_keyword_or_identifier(ac_token t) {

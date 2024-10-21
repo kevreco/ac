@@ -202,9 +202,10 @@ struct ac_lex {
     dstr str_buf;         /* Buffer for string conversion. */
 };
 
-void ac_lex_init(ac_lex* l, ac_manager* mgr, strv content, const char* filepath);
+void ac_lex_init(ac_lex* l, ac_manager* mgr);
 void ac_lex_destroy(ac_lex* l);
 
+void ac_lex_set_content(ac_lex* l, strv content, const char* filepath);
 /* Got to signficant next token. */
 ac_token* ac_lex_goto_next(ac_lex* l);
 
@@ -216,13 +217,18 @@ ac_token* ac_lex_token_ptr(ac_lex* l);
 
 /* Report error if the current token is not of the type specified. */
 bool ac_lex_expect(ac_lex* l, enum ac_token_type type);
+
+void ac_lex_swap(ac_lex* left, ac_lex* right);
+
 ac_token* ac_token_eof();
 
 const char* ac_token_type_to_str(enum ac_token_type type); /* this should be used only for printf */
 strv ac_token_type_to_strv(enum ac_token_type type);
 const char* ac_token_to_str(ac_token t);
 strv ac_token_to_strv(ac_token t);
-void ac_token_print(FILE* file, ac_token t);
+void ac_token_fprint(FILE* file, ac_token t); /* Print to file. */
+void ac_token_sprint(dstr* str, ac_token t);  /* Print to dynamic string. */
+
 bool ac_token_is_keyword_or_identifier(ac_token t);
 
 #ifdef __cplusplus
