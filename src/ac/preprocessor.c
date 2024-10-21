@@ -20,7 +20,6 @@ struct ac_macro {
 
 static strv directive_define = STRV("define");
 
-static ac_token* preprocess(ac_pp* pp, ac_token* token);
 /* Get token from the stack or from the lexer. */
 static ac_token* goto_next_raw_token(ac_pp* pp);
 /* Get token from goto_next_raw_token and skip comments and whitespaces. */
@@ -99,13 +98,9 @@ void ac_pp_destroy(ac_pp* pp)
 
 ac_token* ac_pp_goto_next(ac_pp* pp)
 {
+next_token_again:
     ac_token* token = goto_next_raw_token(pp);
 
-    return preprocess(pp, token);
-}
-
-static ac_token* preprocess(ac_pp* pp, ac_token* token)
-{
     /* Starts with '#', handle the preprocessor directive. */
     while (token->type == ac_token_type_HASH)
     {
@@ -124,7 +119,11 @@ static ac_token* preprocess(ac_pp* pp, ac_token* token)
         {
             token = expand_macro(pp, m);
         }
-        /* @TODO if there is no macro body then we need to get the next token. */
+        else
+        {
+            /* Macro does not have body so it expands to nothing, hence just jump straight to the next token. */
+            goto next_token_again;
+        }
     }
 
     return token;
