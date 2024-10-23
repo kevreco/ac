@@ -521,6 +521,12 @@ static bool substitute_macro_body(ac_pp* pp, ac_macro* macro, macro_arg_node* ar
     
     ac_token_node* results = &results_root;
     ac_token_node* body_node = macro->body_node;
+   
+    if (!body_node) /* No token in the body, so it expand to nothing. */
+    {
+        return true;
+    }
+
     do 
     {
         /* Search for macro in case the token is an keyword or an identifier. */
