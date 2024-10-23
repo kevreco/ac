@@ -9,13 +9,14 @@ struct macro_arg_node {
 
 typedef struct ac_macro ac_macro;
 struct ac_macro {
-    ac_token identifier;       /* Name of the macro */
+    ac_token identifier;        /* Name of the macro */
     /* '#define X(x, y) (x + y)' is a function-like macro,
     whereas '#define Y (1 + 2)' is an object-like macro. */
     bool is_function_like;
     ac_token_node* params_node; /* Argument of macro if it's function-like macro. */
     ac_token_node* body_node;   /* First token of the macro. */
     ac_location location;
+    bool cannot_expand;         /* Macro should be expanded if they already are in expansion. */
 };
 
 static strv directive_define = STRV("define");
@@ -25,23 +26,25 @@ static ac_token* goto_next_raw_token(ac_pp* pp);
 /* Get token from goto_next_raw_token and skip comments and whitespaces. */
 static ac_token* goto_next_token(ac_pp* pp);
 
-static ac_token* parse_directive(ac_pp* pp);
+static bool parse_directive(ac_pp* pp);
 static bool parse_macro_definition(ac_pp* pp);
-static void parse_macro_parameters(ac_pp* pp, ac_macro* macro);
+static bool parse_macro_parameters(ac_pp* pp, ac_macro* macro);
 static bool parse_macro_body(ac_pp* pp, ac_macro* macro);
 
-/* Get and remove the first token from macro in the list. */
+/* Get and remove the first expanded token. */
 static ac_token_node* stack_pop(ac_pp* pp);
 static void stack_push(ac_pp* pp, ac_token_list list);
 
-/* Expand the macro and return the first token of the macro. */
-static ac_token* expand_macro(ac_pp* pp, ac_macro* macro);
+/* Try to expand the token. Return true if it was expanded, false otherwise. */
+static bool try_expand(ac_pp* pp, ac_token* token);
 static macro_arg_node* find_token_in_args(ac_token* token, macro_arg_node* node);
 /* Concatenate two token and return the chain of tokens created by the concatenation.
    The first node is returned. */
 static ac_token_node* concat(ac_pp* pp, ac_token_node* left, ac_token_node* right);
 static bool substitute_macro_body(ac_pp* pp, ac_macro* macro, macro_arg_node* arg_node);
-static ac_token* expand_function_macro(ac_pp* pp, ac_macro* macro);
+/* Return true if something has been expanded.
+   The expanded tokens are pushed into a stack used to pick the next token. */
+static bool expand_function_macro(ac_pp* pp, ac_macro* macro);
 
 static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location);
 /* Create token_node from token. */
@@ -96,37 +99,33 @@ void ac_pp_destroy(ac_pp* pp)
 
 ac_token* ac_pp_goto_next(ac_pp* pp)
 {
-next_token_again:
-    ac_token* token = goto_next_raw_token(pp);
+    goto_next_raw_token(pp);
 
-    /* Starts with '#', handle the preprocessor directive. */
-    while (token->type == ac_token_type_HASH)
+    if (token_ptr(pp)->type == ac_token_type_HASH)
     {
-        token = parse_directive(pp);
-        if (token->type == ac_token_type_EOF)
-            return token;
-    }
-
-    /* Expand macro for identifiers. */
-    ac_macro* m;
-    while (ac_token_is_keyword_or_identifier(*token)
-        && (m = find_macro(pp, token)) != NULL)
-    {
-        /* If the macro exists and have tokens we push them. */
-        if (m)
+        while (token_ptr(pp)->type == ac_token_type_HASH)
         {
-            if (m->body_node) {
-                token = expand_macro(pp, m);
+            if (!parse_directive(pp))
+            {
+                return ac_token_eof(pp);
             }
-            else {
-                /* Macro does not have body so it expands to nothing, hence just jump straight to the next token. */
-                goto next_token_again;
-            }
-        }
 
+            if (token_ptr(pp)->type == ac_token_type_EOF)
+                return ac_token_eof(pp);
+
+            goto_next_raw_token(pp);
+        }
+    }
+ 
+    if (token_ptr(pp)->type == ac_token_type_EOF)
+        return token_ptr(pp);
+
+    /* Every time the token is expanded we need to try to expand again. */
+    while (try_expand(pp, token_ptr(pp))) {
+        goto_next_raw_token(pp);
     }
 
-    return token;
+    return token_ptr(pp);
 }
 
 static ac_token* goto_next_raw_token(ac_pp* pp)
@@ -142,7 +141,7 @@ static ac_token* goto_next_raw_token(ac_pp* pp)
     return pp->current_token;
 }
 
-static ac_token* goto_next_token(ac_pp* pp)
+static ac_token* goto_next_token_no_expand(ac_pp* pp)
 {
     pp->previous_was_space = false;
     ac_token* token = goto_next_raw_token(pp);
@@ -158,30 +157,55 @@ static ac_token* goto_next_token(ac_pp* pp)
     return token;
 }
 
-static ac_token* parse_directive(ac_pp* pp)
+static ac_token* goto_next_token(ac_pp* pp)
+{
+    pp->previous_was_space = false;
+    ac_token* token = ac_pp_goto_next(pp);
+    ac_token* previous_token = token;
+
+    while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
+        || token->type == ac_token_type_COMMENT)
+    {
+        pp->previous_was_space = true;
+        token = ac_pp_goto_next(pp);
+    }
+
+    return token;
+}
+
+static bool parse_directive(ac_pp* pp)
 {
     AC_ASSERT(token(pp).type == ac_token_type_HASH);
 
-    ac_token* tok = goto_next_token(pp); /* Skip '#' */
+    ac_token* tok = goto_next_token_no_expand(pp); /* Skip '#' */
 
     if (tok->type == ac_token_type_IDENTIFIER)
     {
         /* #define */
-        if (consume_if(pp, strv_equals(tok->text, directive_define)))
+        if (strv_equals(tok->text, directive_define))
         {
+            goto_next_token_no_expand(pp); /* Skip 'define' */
             if (!parse_macro_definition(pp))
             {
-                return ac_token_eof();
+                return false;
             }
         }
         else
         {
             ac_report_error_loc(location(pp), "Unknown directive.");
-            return ac_token_eof();
+            return false;
         }
     }
 
-    return token_ptr(pp);
+    /* All directives must end with a new line of a EOF. */
+    if (token_ptr(pp)->type != ac_token_type_NEW_LINE
+        && token_ptr(pp)->type != ac_token_type_EOF)
+    {
+        ac_report_error("Internal error: directive did not end with a new line.");
+        return false;
+    }
+
+    return true;
 }
 
 static bool parse_macro_definition(ac_pp* pp)
@@ -199,11 +223,14 @@ static bool parse_macro_definition(ac_pp* pp)
     {
         m->is_function_like = true;
         
-        parse_macro_parameters(pp, m);
+        if (!parse_macro_parameters(pp, m))
+        {
+            return false;
+        }
     }
     else
     {
-        /* There are spaces or new lines right after the macro name. */
+        /* There are spaces or comment right after the macro name. */
 
         if (token(pp).type == ac_token_type_HORIZONTAL_WHITESPACE
             || token(pp).type == ac_token_type_COMMENT)
@@ -223,27 +250,41 @@ static bool parse_macro_definition(ac_pp* pp)
     return true;
 }
 
-static void parse_macro_parameters(ac_pp* pp, ac_macro* macro)
+static bool parse_macro_parameters(ac_pp* pp, ac_macro* macro)
 {
-    if (!expect_and_consume(pp, ac_token_type_PAREN_L))
+    if (!expect(pp, ac_token_type_PAREN_L))
     {
-        return;
+        return false;
     }
 
-    if (token(pp).type == ac_token_type_IDENTIFIER)
+    goto_next_token_no_expand(pp); /* Skip '(' */
+
+    if (token(pp).type == ac_token_type_IDENTIFIER) /* Only allow identifiers in macro parameters. */
     {
         macro->params_node = create_token_node(pp, token_ptr(pp), NULL);
         ac_token_node* node = macro->params_node;
-        goto_next_token(pp); /* Skip identifier. */
-        while (consume_if_type(pp, ac_token_type_COMMA)
-            && token(pp).type == ac_token_type_IDENTIFIER)
+        goto_next_token_no_expand(pp); /* Skip identifier. */
+
+        while (token(pp).type == ac_token_type_COMMA)
         {
+            goto_next_token_no_expand(pp);  /* Skip ','. */
+
+            if (token(pp).type != ac_token_type_IDENTIFIER) /* Only allow identifiers in macro parameters. */
+            {
+                break;
+            }
             node->next = create_token_node(pp, token_ptr(pp), node);
-            goto_next_token(pp); /* Skip identifier. */
+            goto_next_token_no_expand(pp); /* Skip identifier. */
         }
     }
 
-    expect_and_consume(pp, ac_token_type_PAREN_R);
+    if (!expect(pp, ac_token_type_PAREN_R))
+    {
+        return false;
+    }
+
+    goto_next_token_no_expand(pp); /* Skip ')' */
+    return true;
 }
 
 static bool parse_macro_body(ac_pp* pp, ac_macro* macro)
@@ -259,14 +300,12 @@ static bool parse_macro_body(ac_pp* pp, ac_macro* macro)
     /* Return early if it's a new line */
     if (tok->type == ac_token_type_NEW_LINE)
     {
-        /* Eat single new line. */
-        goto_next_raw_token(pp);
         return true;
     }
 
     /* Create first token of the body with the current one and go to the next token. */
     macro->body_node = create_token_node(pp, tok, NULL);
-    tok = goto_next_token(pp);
+    tok = goto_next_token_no_expand(pp);
 
     /* Get every token until the end of the body. */
     ac_token_node* node = macro->body_node;
@@ -275,14 +314,8 @@ static bool parse_macro_body(ac_pp* pp, ac_macro* macro)
     {
         node = create_token_node(pp, tok, node);
         node->previous_was_space = pp->previous_was_space;
-        tok = goto_next_token(pp);
+        tok = goto_next_token_no_expand(pp);
     };
-
-    /* Eat single new line if necessary. */
-    if (tok->type == ac_token_type_NEW_LINE)
-    {
-        goto_next_raw_token(pp);
-    }
 
     if (macro->body_node->token.type == ac_token_type_DOUBLE_HASH)
     {
@@ -303,10 +336,24 @@ static ac_token_node leading_space_token_node = { { ac_token_type_HORIZONTAL_WHI
 
 static ac_token_node* stack_pop(ac_pp* pp)
 {
-    size_t size = pp->stack.darr.size;
-    if (size)
+    while (pp->stack.darr.size)
     {
-        ac_token_list* list = darrT_ptr(&pp->stack, size - 1 ); /* Get last list. */
+        size_t index_of_last = pp->stack.darr.size - 1;
+        ac_token_list* list = darrT_ptr(&pp->stack, index_of_last); /* Get last list. */
+
+        /* The last list was empty so we remove it from the stack.
+           We need to this here and not when the head is shifted (in the previous pop)
+           because we want the macro to be unexapandable until then. */
+        if (!list->node)
+        {
+            if (list->macro) /* Pop macro and make is expandable again. */
+            {
+                list->macro->cannot_expand = false;
+            }
+
+            darrT_pop_back(&pp->stack);
+            continue;
+        }
 
         /* Weird trick to return "virtual" space token from expanded tokens.
            If the token we are about to return contains a space before then we
@@ -316,13 +363,12 @@ static ac_token_node* stack_pop(ac_pp* pp)
             list->node->previous_was_space = false;
             return &leading_space_token_node;
         }
-       
+
         pp->expanded_token = *list->node;
-        /* If it was the last token from the list we go to the next list. */
-        if (list->node->next)
-            list->node = list->node->next;
-        else
-            darrT_pop_back(&pp->stack);
+
+        /* Shift the head of the list to the next token.
+           New node can be empty and it will be removed in the next pop */
+        list->node = list->node->next; 
 
         return &pp->expanded_token;
     }
@@ -334,22 +380,39 @@ static void stack_push(ac_pp* pp, ac_token_list list)
     darrT_push_back(&pp->stack, list);
 }
 
-/* Add all tokens of a macro to the queue and pop the first token of the macro. */
-static ac_token* expand_macro(ac_pp* pp, ac_macro* macro)
+static bool try_expand(ac_pp* pp, ac_token* token)
 {
-    if (macro->is_function_like)
+    if (!ac_token_is_keyword_or_identifier(*token))
     {
-        return expand_function_macro(pp, macro);
+        return false;
+    }
+
+    ac_macro* m = find_macro(pp, token);
+
+    if (!m || m->cannot_expand)
+    {
+        return false;
+    }
+
+    if (m->is_function_like)
+    {
+        return expand_function_macro(pp, m);
     }
     else
     {
-        ac_token_list list;
-        list.node = macro->body_node;
-        list.macro = macro;
-        stack_push(pp, list);
-        ac_token_node* tok_node = stack_pop(pp);
-        return &tok_node->token;
+        if (m->body_node) /* No items to add to the stack, but the macro is considered expanded. */
+        {
+            ac_token_list list;
+            list.node = m->body_node;
+            list.macro = m;
+            stack_push(pp, list);
+        }
+        return true;
     }
+
+    m->cannot_expand = true;
+
+    return true;
 }
 
 static macro_arg_node* find_token_in_args(ac_token* token, macro_arg_node* node)
@@ -454,21 +517,21 @@ static bool substitute_macro_body(ac_pp* pp, ac_macro* macro, macro_arg_node* ar
     return true;
 }
 
-static ac_token* expand_function_macro(ac_pp* pp, ac_macro* macro)
+static bool expand_function_macro(ac_pp* pp, ac_macro* macro)
 {
     AC_ASSERT(macro->is_function_like);
 
     /* Skip the current identifier of the function-like macro. */
     if (!expect_and_consume(pp, ac_token_type_IDENTIFIER))
     {
-        return ac_token_eof();
+        return false;
     }
 
-    /* If the matching macro identifier does not have parenthesis we need to return the identifier itself. */
+    /* If the matching macro identifier does not have parenthesis we don't need to expand anything. */
     if (token(pp).type != ac_token_type_PAREN_L)
     {
         /* We use the macro identifier to avoid allocating here. */
-        return &macro->identifier;
+        return false;
     }
    
     goto_next_token(pp); /* Skip parenthesis. */
@@ -529,21 +592,20 @@ static ac_token* expand_function_macro(ac_pp* pp, ac_macro* macro)
     if (params) /* No parameter should be left. */
     {
         ac_report_error_loc(location(pp), "Macro call is missing arguments.");
-        return ac_token_eof(pp);
+        return false;
     }
 
     /* NOTE: We don't want to skip this right parenthis so that it will be skip on the next round
        after the consumption of all the tokens from the macro expansion(s). */
     if (!expect(pp, ac_token_type_PAREN_R)) {
-        return ac_token_eof(pp);
+        return false;
     }
 
     if (!substitute_macro_body(pp, macro, root_arg_node.next)) {
-        return ac_token_eof(pp);
+        return false;
     }
  
-    ac_token_node* tok_node = stack_pop(pp);
-    return &tok_node->token;
+    return true;
 }
 
 static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location)
