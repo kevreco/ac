@@ -21,3 +21,4 @@
 
 #define HT_IMPLEMENTATION
 #include <re/ht.h>
+#include <re/ht_ptr.h>

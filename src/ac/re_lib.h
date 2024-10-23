@@ -20,6 +20,7 @@
 
 /* hash table */
 #include <re/ht.h>
+#include <re/ht_ptr.h>
 
 #endif /* RE_C_LIB_H */
 

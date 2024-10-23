@@ -65,10 +65,8 @@ static bool consume_if_type(ac_pp* pp, enum ac_token_type type);
 /* macro hash table */
 /*------------------*/
 
-static ht_hash_t macro_hash(ac_macro* m);
-static ht_bool macros_are_same(ac_macro* left, ac_macro* right);
-static void swap_macros(ac_macro* left, ac_macro* right);
-
+static ht_hash_t macro_hash(ht_ptr_handle* handle);
+static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright);
 static void add_macro(ac_pp* pp, ac_macro* macro);
 static ac_macro* find_macro(ac_pp* pp, ac_token* identifer);
 
@@ -81,7 +79,7 @@ void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath)
     ac_lex_set_content(&pp->lex, content, filepath);
     ac_lex_init(&pp->concat_lex, mgr);
 
-    ht_init(&pp->macros, sizeof(ac_macro), (ht_hash_function_t)macro_hash, (ht_predicate_t)macros_are_same, (ht_swap_function_t)swap_macros, 0);
+    ht_ptr_init(&pp->macros, (ht_hash_function_t)macro_hash, (ht_predicate_t)macros_are_same);
 
     darrT_init(&pp->stack);
     dstr_init(&pp->concat_buffer);
@@ -649,34 +647,28 @@ static bool consume_if_type(ac_pp* pp, enum ac_token_type type)
     return consume_if(pp, token_ptr(pp)->type == type);
 }
 
-static ht_hash_t macro_hash(ac_macro* m)
+static ht_hash_t macro_hash(ht_ptr_handle* handle)
 {
+    ac_macro* m = (ac_macro*)handle->ptr;
     return ac_djb2_hash((char*)m->identifier.text.data, m->identifier.text.size);
 }
 
-static ht_bool macros_are_same(ac_macro* left, ac_macro* right)
+static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright)
 {
+    ac_macro* left = (ac_macro*)hleft->ptr;
+    ac_macro* right = (ac_macro*)hright->ptr;
     return strv_equals(left->identifier.text, right->identifier.text);
-}
-
-static void swap_macros(ac_macro* left, ac_macro* right)
-{
-    ac_macro tmp;
-    tmp = *left;
-    *left = *right;
-    *right = tmp;
 }
 
 static void add_macro(ac_pp* pp, ac_macro* m)
 {
-    AC_ASSERT(m);
-
-    ht_insert(&pp->macros, m);
+    ht_ptr_insert(&pp->macros, m);
 }
 
 static ac_macro* find_macro(ac_pp* pp, ac_token* identifer)
 {
-    ac_macro m;
-    m.identifier = *identifer;
-    return ht_get_item(&pp->macros, &m);
+    ac_macro key;
+    key.identifier = *identifer;
+
+    return ht_ptr_get(&pp->macros, &key);
 }
