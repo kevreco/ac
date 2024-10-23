@@ -20,9 +20,14 @@ struct ac_macro {
 };
 
 static strv directive_define = STRV("define");
+static strv directive_undef = STRV("undef");
 
 /* Get token from the stack or from the lexer. */
 static ac_token* goto_next_raw_token(ac_pp* pp);
+/* Get preprocessed token ignoring whitespaces and comments.
+   @FIXME: this is what is done in the parser, and it seems they require the same processing.
+   Which means we can likely create a "ac_pp_goto_next_token(pp)" and a "ac_pp_goto_next_parser_token(pp)" */
+static ac_token* goto_next_token_from_parameter(ac_pp* pp);
 /* Get token from goto_next_raw_token and skip comments and whitespaces. */
 static ac_token* goto_next_token(ac_pp* pp);
 
@@ -71,6 +76,7 @@ static bool consume_if_type(ac_pp* pp, enum ac_token_type type);
 static ht_hash_t macro_hash(ht_ptr_handle* handle);
 static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright);
 static void add_macro(ac_pp* pp, ac_macro* macro);
+static void remove_macro(ac_pp* pp, ac_macro* macro);
 static ac_macro* find_macro(ac_pp* pp, ac_token* identifer);
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath)
@@ -157,6 +163,23 @@ static ac_token* goto_next_token_no_expand(ac_pp* pp)
     return token;
 }
 
+static ac_token* goto_next_token_from_parameter(ac_pp* pp)
+{
+    pp->previous_was_space = false;
+    ac_token* token = ac_pp_goto_next(pp);
+    ac_token* previous_token = token;
+
+    while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
+        || token->type == ac_token_type_COMMENT
+        || token->type == ac_token_type_NEW_LINE)
+    {
+        pp->previous_was_space = true;
+        token = ac_pp_goto_next(pp);
+    }
+
+    return token;
+}
+
 static ac_token* goto_next_token(ac_pp* pp)
 {
     pp->previous_was_space = false;
@@ -188,6 +211,36 @@ static bool parse_directive(ac_pp* pp)
             if (!parse_macro_definition(pp))
             {
                 return false;
+            }
+        }
+        /* #undef */
+        else if (strv_equals(tok->text, directive_undef))
+        {
+            goto_next_token_no_expand(pp); /* Skip 'undef' */
+            expect(pp, ac_token_type_IDENTIFIER);
+            ac_token identifier = token(pp);
+            goto_next_token_no_expand(pp); /* Skip 'identifier' */
+
+            if (token_ptr(pp)->type != ac_token_type_COMMENT
+                && token_ptr(pp)->type != ac_token_type_HORIZONTAL_WHITESPACE
+                && token_ptr(pp)->type != ac_token_type_NEW_LINE
+                && token_ptr(pp)->type != ac_token_type_EOF)
+            {
+                ac_report_warning("Extra tokens at end of '#undef' directive");
+            }
+
+            /* Skip all tokens until end of line */
+            while (token_ptr(pp)->type != ac_token_type_NEW_LINE
+                && token_ptr(pp)->type != ac_token_type_EOF)
+            {
+                goto_next_token_no_expand(pp);
+            }
+
+            /* Remove macro it's previously defined. */
+            ac_macro* m = find_macro(pp, &identifier);
+            if (m)
+            {
+                remove_macro(pp, m);
             }
         }
         else
@@ -534,7 +587,7 @@ static bool expand_function_macro(ac_pp* pp, ac_macro* macro)
         return false;
     }
    
-    goto_next_token(pp); /* Skip parenthesis. */
+    goto_next_token_from_parameter(pp); /* Skip parenthesis. */
 
     ac_token_node* params = macro->params_node;
     
@@ -583,7 +636,7 @@ static bool expand_function_macro(ac_pp* pp, ac_macro* macro)
                     node->previous_was_space = pp->previous_was_space;
                 }
 
-                goto_next_token(pp);
+                goto_next_token_from_parameter(pp);
             }
             current_arg_node->args_node = root_token_node.next; /* Add node list to the current argument before creating a new one. */
         }
@@ -725,6 +778,11 @@ static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright)
 static void add_macro(ac_pp* pp, ac_macro* m)
 {
     ht_ptr_insert(&pp->macros, m);
+}
+
+static void remove_macro(ac_pp* pp, ac_macro* m)
+{
+    ht_ptr_remove(&pp->macros, m);
 }
 
 static ac_macro* find_macro(ac_pp* pp, ac_token* identifer)

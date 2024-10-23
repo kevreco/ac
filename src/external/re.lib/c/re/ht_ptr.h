@@ -20,6 +20,9 @@ HT_API void ht_ptr_insert(ht* h, void* ptr);
 /* Return item from a key. NULL is returned if nothing was found. */
 HT_API void* ht_ptr_get(ht* h, void* key_ptr);
 
+/* Remove pointer. Return true if it was removed. */
+HT_API bool ht_ptr_remove(ht* h, void* ptr);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
@@ -68,6 +71,13 @@ ht_ptr_get(ht* h, void* key_ptr)
     return result
         ? result->ptr
         : NULL;
+}
+
+HT_API bool
+ht_ptr_remove(ht* h, void* ptr)
+{
+    ht_ptr_handle handle = { ptr };
+    return ht_erase(h, &handle);
 }
 
 #endif /* defined(HT_IMPLEMENTATION) */
