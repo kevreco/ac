@@ -174,8 +174,8 @@ try_parse_from_file(ac_options* o, int argc, char** argv)
         ((char*)trimmed.data)[trimmed.size] = '\0';
     }
 
-    int config_argc = (int)o->config_file_args.darr.size;
-    char** config_argv = (char**)o->config_file_args.darr.data;
+    int config_argc = (int)darrT_size(&o->config_file_args);
+    char** config_argv = (char**)&darrT_first(&o->config_file_args);
 
     if (config_argc > 0)
     {

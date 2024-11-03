@@ -24,8 +24,8 @@ void ac_compiler_destroy(ac_compiler* c)
 
 bool ac_compiler_compile(ac_compiler* c)
 {
-    AC_ASSERT(options(c)->files.darr.size > 0);
-    AC_ASSERT(options(c)->files.darr.size == 1 && "Not supported yet. Cannot compile multiple files.");
+    AC_ASSERT(darrT_size(&(options(c)->files)));
+    AC_ASSERT(darrT_size(&(options(c)->files)) == 1 && "Not supported yet. Cannot compile multiple files.");
     
     /* Load file into memory. */
     const char* source_file = darrT_at(&options(c)->files, 0);

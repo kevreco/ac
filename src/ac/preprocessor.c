@@ -438,15 +438,15 @@ static void macro_pop(ac_pp* pp, ac_macro* m)
 
 static ac_token* stack_pop(ac_pp* pp)
 {
-    while (pp->stack.darr.size)
+    while (darrT_size(&pp->stack))
     {
-        size_t index_of_last = pp->stack.darr.size - 1;
+        size_t index_of_last = darrT_size(&pp->stack) - 1;
         ac_token_list* list = darrT_ptr(&pp->stack, index_of_last); /* Get last list. */
 
         /* End of the list has been reached so we remove the list from the stack.
            This is done now and after incrementing i because we want the macro
            to be unexapandable until then. */
-        if (list->i == list->tokens->darr.size)
+        if (list->i == darrT_size(list->tokens))
         {
             /* If the list of token was coming from a macro
                we adjust the macro depth and allow it to be expandable again.*/
@@ -606,7 +606,7 @@ static void push_back_expanded_token(ac_pp* pp, ac_macro* m, ac_token token)
         ac_token right = token;
 
         /* Change current size because we want to override the left token and the '##' token. */
-        m->expanded_args.darr.size = left_index;
+        m->expanded_args.arr.size = left_index;
 
         concat(pp, m, left, right);
     }
@@ -665,11 +665,11 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
                 goto_next_token_from_macro_agrument(pp); /* Skip ',' */
             }
 
-            r.end = args.darr.size;
+            r.end = darrT_size(&args);
 
             darrT_push_back(&ranges, r);
 
-            r.start = args.darr.size;
+            r.start = darrT_size(&args);
 
             current_param_index += 1;
         }

@@ -10,6 +10,7 @@
 
 /* dynamic array */
 #include <re/darr.h>
+#include <re/darrT.h>
 
 #include <re/file.h>
 

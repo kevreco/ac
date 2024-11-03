@@ -1,33 +1,24 @@
-/* darr.h - v0.3 - kevreco - CC0 1.0 Licence(public domain) */
+/*
+    darr.h - See end of file for license information.
+*/
 
 /*
 
- Dynamic (Strechy) Array - a C partially equivalent of std::vector
+SUMMARY:
 
+    Dynamic (Strechy) Array - a C partially equivalent of std::vector
+    
+    Do this
+        #define DARR_IMPLEMENTATION
+    before you include this file in *one* C or C++ file to create the implementation.
 
 NOTES:
-=====
 
-- Allocators are not implemented.
-
-CHANGES (DD/MM/YYYY):
-====================
-
--
-
-TODO:
-====
-
-- check all tag "@TODO" in this file
-
+    - Allocators are not implemented.
 */
 
 #ifndef RE_DARR_H
 #define RE_DARR_H
-
-#ifdef DARR_USE_CONFIG
-#include "darr_config.h"
-#endif
 
 #ifndef DARR_API
     #ifdef DARR_STATIC
@@ -134,7 +125,7 @@ struct arr_view {
     darr_byte_t* data;
 };
 
-#define arr_viewT(type_) union { arr_view base; struct { darr_size_t size; type_ *data; } arrv; }
+#define arr_viewT(type_) union { arr_view base; struct { darr_size_t size; type_ *data; } arr_view; }
 
 #define EACH_ARR_VIEW(i, arr) \
 	(i) = &((arr).data[0]); (i) < &((arr).data[(arr).size]); ++(i)
@@ -185,17 +176,6 @@ struct darr {
     darr_byte_t* data;        /* Buffer pointer */
     darr_size_t sizeof_value; /* Byte size of each item */
 };
-
-#define darrT(type)                   \
-    union {                           \
-        darr base;                    \
-        struct  {                     \
-            darr_size_t size;         \
-            darr_size_t capacity;     \
-            type* data;               \
-            darr_size_t sizeof_value; \
-        } darr;                       \
-    }
 
 /*-----------------------------------------------------------------------*/
 /* darr - API */
@@ -292,52 +272,6 @@ DARR_API darr_size_t darr_lower_bound_predicate(const void* void_ptr, darr_size_
         void* value_ref_ = &(value); \
         darr_insert_one(array_, array_->size, value_ref_); \
     } while (0);
-
-#define darrT_init(a) \
-    darr_init(&(a)->base, sizeof(*(a)->darr.data))
-
-#define darrT_destroy(a) \
-    darr_destroy(&(a)->base)
-
-#define darrT_clear(a) \
-    darr_clear(&(a)->base)
-
-#define darrT_insert(a, index, value) \
-    do {  \
-        darr_insert_one_space(&(a)->base, (index)); \
-		(a)->darr.data[(index)] = value; \
-	} while (0);
-
-#define darrT_first(a) \
-    ((a)->darr.data[0])
-
-#define darrT_last(a) \
-    ((a)->darr.data[(a)->darr.size - 1])
-
-#define darrT_pop_back(a) \
-    (darrT_last(a), (a)->darr.size -= 1)
-
-#define darrT_pop_front(a) \
-     (darrT_first(a), darr_pop_front((&(a)->base))
-
-#define darrT_push_back(a, value) \
-    do {  \
-        int last__ = (a)->darr.size; \
-        darr_insert_one_space(&(a)->base, last__); \
-		(a)->darr.data[last__] = value; \
-	} while (0);
-
-#define darrT_at(a, index) \
-    ((a)->darr.data[index])
-
-#define darrT_set(a, index, value) \
-    (a)->darr.data[index] = (value)
-
-#define darrT_ptr(a, index) \
-    (&(a)->darr.data[index])
-
-#define darrT_size(a) \
-    darr_size(&((a)->base))
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -1054,3 +988,57 @@ darr__is_allocated(darr* arr)
 
 #endif /* DARR_IMPLEMENTATION */
 
+/*
+------------------------------------------------------------------------------
+This software is available under 2 licenses -- choose whichever you prefer.
+------------------------------------------------------------------------------
+ALTERNATIVE 1 - The MIT License (MIT)
+
+Copyright (c) 2024 kevreco
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+------------------------------------------------------------------------------
+ALTERNATIVE 2 - Public Domain (www.unlicense.org)
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <https://unlicense.org>
+------------------------------------------------------------------------------
+*/

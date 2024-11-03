@@ -9,6 +9,7 @@
 
 #define DARR_IMPLEMENTATION
 #include <re/darr.h>
+#include <re/darrT.h>
 
 #define RE_FILE_IMPLEMENTATION
 #include <re/file.h>
