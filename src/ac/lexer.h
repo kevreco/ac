@@ -161,19 +161,21 @@ struct ac_token {
         ac_token_number number;
         struct {
             strv encoded_content;
-            bool is_utf8;
-            bool is_utf16;
-            bool is_utf32;
-            bool is_wide;
+            bool is_utf8;    /* @TODO @OPT place this in a flag. */
+            bool is_utf16;   /* @TODO @OPT place this in a flag. */
+            bool is_utf32;   /* @TODO @OPT place this in a flag. */
+            bool is_wide;    /* @TODO @OPT place this in a flag. */
         } str;
         struct {
-            int64_t value;
-            bool is_utf8;
-            bool is_utf16;
-            bool is_utf32;
-            bool is_wide;
+            int64_t value;   /* @TODO @OPT place this in a flag. */
+            bool is_utf8;    /* @TODO @OPT place this in a flag. */
+            bool is_utf16;   /* @TODO @OPT place this in a flag. */
+            bool is_utf32;   /* @TODO @OPT place this in a flag. */
+            bool is_wide;    /* @TODO @OPT place this in a flag. */
         } ch;
     } u;
+
+    bool previous_was_space; /* @TODO @OPT place this in a flag. */
 };
 
 /* @TODO move this to the compiler options. */

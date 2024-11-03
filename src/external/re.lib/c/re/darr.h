@@ -299,17 +299,26 @@ DARR_API darr_size_t darr_lower_bound_predicate(const void* void_ptr, darr_size_
 #define darrT_destroy(a) \
     darr_destroy(&(a)->base)
 
+#define darrT_clear(a) \
+    darr_clear(&(a)->base)
+
 #define darrT_insert(a, index, value) \
     do {  \
         darr_insert_one_space(&(a)->base, (index)); \
 		(a)->darr.data[(index)] = value; \
 	} while (0);
 
+#define darrT_first(a) \
+    ((a)->darr.data[0])
+
+#define darrT_last(a) \
+    ((a)->darr.data[(a)->darr.size - 1])
+
 #define darrT_pop_back(a) \
-    ((a)->darr.data[(a)->darr.size - 1], (a)->darr.size -= 1)
+    (darrT_last(a), (a)->darr.size -= 1)
 
 #define darrT_pop_front(a) \
-     ((a)->darr.data[0]), darr_pop_front((&(a)->base))
+     (darrT_first(a), darr_pop_front((&(a)->base))
 
 #define darrT_push_back(a, value) \
     do {  \
@@ -326,6 +335,9 @@ DARR_API darr_size_t darr_lower_bound_predicate(const void* void_ptr, darr_size_
 
 #define darrT_ptr(a, index) \
     (&(a)->darr.data[index])
+
+#define darrT_size(a) \
+    darr_size(&((a)->base))
 
 #ifdef __cplusplus
 } /* extern "C" */

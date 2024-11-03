@@ -1601,6 +1601,11 @@ strv ac_token_to_strv(ac_token token) {
 
 void ac_token_fprint(FILE* file, ac_token t)
 {
+    if (t.previous_was_space)
+    {
+        fprintf(file, " ");
+    }
+
     strv prefix = ac_token_prefix(t);
     if (prefix.size)
     {
@@ -1617,6 +1622,11 @@ void ac_token_fprint(FILE* file, ac_token t)
 
 void ac_token_sprint(dstr* str, ac_token t)
 {
+    if (t.previous_was_space)
+    {
+        dstr_append_f(str, " ");
+    }
+
     strv prefix = ac_token_prefix(t);
     if (prefix.size)
     {

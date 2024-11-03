@@ -10,17 +10,12 @@ extern "C" {
 
 typedef struct ac_macro ac_macro;
 
-typedef struct ac_token_node ac_token_node;
-struct ac_token_node {
-	ac_token token;
-	bool previous_was_space; /* To know if the previous token was a space. */
-	ac_token_node* next;
-};
+typedef darrT(ac_token) darr_token;
 
 typedef struct ac_token_list ac_token_list;
 struct ac_token_list {
-	ac_token_node* node;
-	/* @TODO use this macro field to hide/unhide a macro when the list is pushed/poped from the stack. */
+	darr_token* tokens;
+	size_t i;        /* Next token to pick up. */
 	ac_macro* macro; /* Not null if it's coming from a macro.  */
 };
 
@@ -29,21 +24,18 @@ struct ac_pp {
 	ac_manager* mgr;
 	ac_lex lex;        /* Main lexer. */
 	ac_lex concat_lex; /* Lexer for string concatenation. */
-	ht macros;  /* Hash table containing macros. */
+	ht macros;         /* Hash table containing macros. */
 
 	/* Stack of list of tokens. It's mostly used for macro but we should be able to add tokens if we peek some next ones. */
 	darrT(ac_token_list) stack;
-	ac_token_node expanded_token; /* last token retrieved from the stack. */
+	ac_token expanded_token;    /* Last token retrieved from the stack. */
 	ac_token* current_token;
-	/* previous_was_space: to know if the previous token was a space. This is only relevant in case of macro expansion.
-	   @TODO check if it's only for function-like macro or even object-like macro.
-		 #define foo(x) x
-		 foo(1+2)         // Will be displayed as "1+2"
-		 foo(1 + 2)       // Will be displayed as "1 + 2"
-		 foo(  1  +  2 )  // Will be displayed as "1 + 2"
-	*/
-	bool previous_was_space;
-	dstr concat_buffer;
+	
+	/* previous_was_space: to know if the previous token was a space. This is only relevant in case of macro expansion. */
+	bool previous_was_space;    
+	dstr concat_buffer;         /* Concatenation of token is done via tokenizing a string. */
+	int macro_depth;            /* Macro depth is not currently needed, it's mostly for inspectiong purpose. */
+	darr_token buffer_for_peek; /* Sometimes we need to peek some tokens and send them on the stack. */
 };
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath);
