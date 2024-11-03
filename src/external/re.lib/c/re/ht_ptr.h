@@ -45,7 +45,7 @@ ht_ptr_init(ht* h, ht_hash_function_t hash, ht_predicate_t items_are_same)
         sizeof(ht_ptr_handle),
         hash,
         items_are_same,
-        swap_ptrs,
+        (ht_swap_function_t)swap_ptrs,
         0);
 }
 
