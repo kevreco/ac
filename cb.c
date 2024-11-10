@@ -1,7 +1,7 @@
 #define CB_IMPLEMENTATION
-#include <cb/cb.h>
-#include <cb/cb_add_files.h>
-#include <cb/cb_assert.h>
+#include "cb/cb.h"
+#include "cb/cb_add_files.h"
+#include "cb/cb_assert.h"
 
 /* STRV_IMPLEMENTATION is defined at the bottom of this file. */
 #include "src/external/re.lib/c/re/strv.h"
