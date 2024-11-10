@@ -1,4 +1,7 @@
 
+Abstract syntax tree of the C language supported in this compiler:
+
+```
 top_level:
      declaration−list
 
@@ -73,3 +76,4 @@ parameter:
     type ( pointer ) ( arglist )
     type declarator
     ...
+```

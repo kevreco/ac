@@ -1,5 +1,5 @@
 
-# C Parser and C converter - Stage 0
+# Stage 0 - C Parser and C converter
   
     - [./] Support integer declaration. "int a = 0;"
     - [./] Support multiple integer declaration. "int a = 0, b = 1;"
@@ -10,7 +10,7 @@
     - [./] Support pointer parameters.
     - [./] Support array parameters.
     
-# C Parser and C converter - Stage 1
+# Stage 1 - C Preprocessor
 
     - [WIP] Handle macro.
         - [./] Object-like macro.
@@ -19,15 +19,24 @@
         - [./] Strays '\' for other multiple-char token.
         - [./] Strays '\' in other literal (numbers, boolean, etc.).
         - [./] Strays '\' in string and character literals.
-        - [WIP] Function-like macro.
+        - [./] Function-like macro.
         - [./] Token concatenation.
-        - [] Macro should not be visible from the expanded tokens.
-        - [] Special macro like __COUNT__, __LINE__, __FILE__ etc.
+        - [./] Macro should not be visible from the expanded tokens.
+        - [] Support Stringification operator #
+        - [] Implement special macro like __COUNT__, __LINE__, __FILE__ etc.
+        
+    - [] Support basic #if/#endif
+    - [] Support #elif
+    - [] Support #if defined(XXX)
+    - [] Support evaluation if #if
+    
+# Stage 2 - C Parser and C converter
+
     - [] Support pointer declaration.
     - [] Support array declaration.
     - [] Handle typedef.
     - [] Handle struct.
-
+    
 # Type check
 
     - Implement some type check with int8/int16/etc before introducing structure and enum?
@@ -37,3 +46,7 @@
 # Later
     - Handle raw string literals and utf8/utf16/utf32 raw literal as well.
     - Add __STDC_NO_VLA__ as default macro. We don't want to support VLA at all.
+    
+# Documentation
+    - Expand the "Generic type" section.
+    - Expand the "User-defined for loop" section.
