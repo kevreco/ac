@@ -43,7 +43,7 @@ static bool next_next_is(const ac_lex* l, char c); /* next next char equal to */
 static int consume_one(ac_lex* l);        /* goto next char and keep up with location of the token. */
 static void consume_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time.  */
 static int skip_if_stray(ac_lex* l);      /* Get character after the current stray or return the current character. */
-static int next_char_without_stray(ac_lex* l, int* c);
+static int next_char_no_stray(ac_lex* l);
 
 static void skipn(ac_lex* l, unsigned n); /* skip n char */
 
@@ -151,8 +151,6 @@ void ac_lex_set_content(ac_lex* l, strv content, const char* filepath)
     }
 }
 
-#define NEXT_CHAR_NO_STRAY(l, c) next_char_without_stray(l, &c)
-
 ac_token* ac_lex_goto_next(ac_lex* l)
 {
     memset(&l->token, 0, sizeof(ac_token));
@@ -214,117 +212,117 @@ switch_start:
     case '?': return token_from_single_char(l, ac_token_type_QUESTION);
 
     case '#': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '#' */
+        c = next_char_no_stray(l); /* Skip '#' */
         if (c == '#') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '#' */
+            c = next_char_no_stray(l); /* Skip '#' */
             return token_from_type(l, ac_token_type_DOUBLE_HASH);
         }
         return token_from_type(l, ac_token_type_HASH);
     }
     case '=': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+        c = next_char_no_stray(l); /* Skip '=' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_DOUBLE_EQUAL);
         }
         return token_from_type(l, ac_token_type_EQUAL);
     }
 
     case '!': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '!' */
+        c = next_char_no_stray(l); /* Skip '!' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_NOT_EQUAL);
         }
         return token_from_type(l, ac_token_type_EXCLAM);
     }
 
     case '<': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '<' */
+        c = next_char_no_stray(l); /* Skip '<' */
         if (c == '<') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '<' */
+            c = next_char_no_stray(l); /* Skip '<' */
             return token_from_type(l, ac_token_type_DOUBLE_LESS);
         }
         else if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l,  ac_token_type_LESS_EQUAL);
         }
         return token_from_type(l,  ac_token_type_LESS);
     }
 
     case '>': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '>' */
+        c = next_char_no_stray(l); /* Skip '>' */
         if (c == '>') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '>' */
+            c = next_char_no_stray(l); /* Skip '>' */
             return token_from_type(l, ac_token_type_DOUBLE_GREATER);
         }
         else if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_GREATER_EQUAL);
         }
         return token_from_type(l, ac_token_type_GREATER);
     }
 
     case '&': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '&' */
+        c = next_char_no_stray(l); /* Skip '&' */
         if (c == '&') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '&' */
+            c = next_char_no_stray(l); /* Skip '&' */
             return token_from_type(l, ac_token_type_DOUBLE_AMP);
         }
         else if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_AMP_EQUAL);
         }
         return token_from_type(l, ac_token_type_AMP);
     }
 
     case '|': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '|' */
+        c = next_char_no_stray(l); /* Skip '|' */
         if (c == '|') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '|' */
+            c = next_char_no_stray(l); /* Skip '|' */
             return token_from_type(l, ac_token_type_DOUBLE_PIPE);
         }
         else if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_PIPE_EQUAL);
         }
         return token_from_type(l, ac_token_type_PIPE);
     }
 
     case '+': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '+' */
+        c = next_char_no_stray(l); /* Skip '+' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_PLUS_EQUAL);
         }
         return token_from_type(l, ac_token_type_PLUS);
     }
     case '-': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '-' */
+        c = next_char_no_stray(l); /* Skip '-' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_MINUS_EQUAL);
         }
         else if (c == '>') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '>' */
+            c = next_char_no_stray(l); /* Skip '>' */
             return token_from_type(l, ac_token_type_ARROW);
         }
         return token_from_type(l, ac_token_type_MINUS);
     }
 
     case '*': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '*' */
+        c = next_char_no_stray(l); /* Skip '*' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_STAR_EQUAL);
         }
         return token_from_type(l, ac_token_type_STAR);
     }
 
     case '/': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '/' */
+        c = next_char_no_stray(l); /* Skip '/' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_SLASH_EQUAL);
         }
         else if (c == '/') {  /* Parse inline comment. */
@@ -357,18 +355,18 @@ switch_start:
     }
 
     case '%': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '%' */
+        c = next_char_no_stray(l); /* Skip '%' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_PERCENT_EQUAL);
         }
         return token_from_type(l, ac_token_type_PERCENT);
     }
 
     case '^': {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip '^' */
+        c = next_char_no_stray(l); /* Skip '^' */
         if (c == '=') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '=' */
+            c = next_char_no_stray(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_CARET_EQUAL);
         }
 
@@ -384,9 +382,9 @@ switch_start:
 
         c = l->cur[0];
         if (c == '.') {
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip '.' */
+            c = next_char_no_stray(l); /* Skip '.' */
             if (c == '.') {
-                NEXT_CHAR_NO_STRAY(l, c); /* Skip '.' */
+                c = next_char_no_stray(l); /* Skip '.' */
                 return token_from_type(l, ac_token_type_TRIPLE_DOT);
             }
             return token_from_type(l, ac_token_type_DOUBLE_DOT);
@@ -443,7 +441,7 @@ parse_identifier:
             {
                 hash = AC_HASH(hash, l->cur[0]);
                 dstr_append_char(&l->tok_buf, c);
-                NEXT_CHAR_NO_STRAY(l, c);
+                c = next_char_no_stray(l);
             }
 
             ident =  dstr_to_strv(&l->tok_buf);
@@ -641,13 +639,14 @@ static int skip_if_stray(ac_lex* l)
     return l->cur[0];
 }
 
-static int next_char_without_stray(ac_lex* l, int* c)
+static int next_char_no_stray(ac_lex* l)
 {
-    *c = consume_one(l);
-    if (!l->options.reject_stray && *c == '\\') {
-        *c = skip_if_stray(l);
+    int c;
+    c = consume_one(l);
+    if (!l->options.reject_stray && c == '\\') {
+        c = skip_if_stray(l);
     }
-    return *c;
+    return c;
 }
 
 /* @TODO: Remove this function since it's used only once. */
@@ -718,9 +717,9 @@ static bool is_hex_digit(char c) {
 /* Get next digit, ignoring quotes and underscores. */
 #define NEXT_DIGIT(l, c) \
 do { \
-    NEXT_CHAR_NO_STRAY(l, c); \
+    c = next_char_no_stray(l); \
     while (c == '\'' || c == '_') { \
-        NEXT_CHAR_NO_STRAY(l, c); \
+        c = next_char_no_stray(l); \
     } \
     dstr_append_char(&l->tok_buf, c); \
 } while (0);
@@ -1087,19 +1086,19 @@ static bool try_parse_escaped_char(ac_lex* l, int* result) {
     int c = l->cur[0];
     AC_ASSERT(c == '\\');
 
-    NEXT_CHAR_NO_STRAY(l, c); /* Skip '\' */
+    c = next_char_no_stray(l); /* Skip '\' */
 
     *result = 0;
     int ch = 0;
     if (is_octal_digit(c)) { /* Try to parse octal. */
         ch = c - '0';
-        NEXT_CHAR_NO_STRAY(l, c);
+        c = next_char_no_stray(l);
         if (is_octal_digit(c)) {
             ch = (ch * base8) + (c - '0');
-            NEXT_CHAR_NO_STRAY(l, c);
+            c = next_char_no_stray(l);
             if (is_octal_digit(c)) {
                 ch = (ch * base8) + (c - '0');
-                NEXT_CHAR_NO_STRAY(l, c);
+                c = next_char_no_stray(l);
             }
         }
         *result = ch;
@@ -1107,12 +1106,12 @@ static bool try_parse_escaped_char(ac_lex* l, int* result) {
     }
 
     if (c == 'x') {
-        NEXT_CHAR_NO_STRAY(l, c); /* Skip 'x' */
+        c = next_char_no_stray(l); /* Skip 'x' */
 
         int count = 0;
         while(is_hex_digit(c)) {
             ch = (ch * base16) + hex_digit_to_int(c);
-            NEXT_CHAR_NO_STRAY(l, c); /* Skip current hex char */
+            c = next_char_no_stray(l); /* Skip current hex char */
             count += 1;
         }
         if (count == 0) {
@@ -1124,16 +1123,16 @@ static bool try_parse_escaped_char(ac_lex* l, int* result) {
     }
 
     switch (c) {
-    case 'a':  { *result = '\a'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x07 */
-    case 'b':  { *result = '\b'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x08 */
-    case 't':  { *result = '\t'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x09 */
-    case 'n':  { *result = '\n'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x0a */
-    case 'v':  { *result = '\v'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x0b */
-    case 'f':  { *result = '\f'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x0c */
-    case '\'': { *result = '\''; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x27 */
-    case '"':  { *result = '"';  NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x22 */
-    case '?':  { *result = '?';  NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x3f */
-    case '\\': { *result = '\\'; NEXT_CHAR_NO_STRAY(l, c); return true; } /* 0x5c */
+    case 'a':  { *result = '\a'; c = next_char_no_stray(l); return true; } /* 0x07 */
+    case 'b':  { *result = '\b'; c = next_char_no_stray(l); return true; } /* 0x08 */
+    case 't':  { *result = '\t'; c = next_char_no_stray(l); return true; } /* 0x09 */
+    case 'n':  { *result = '\n'; c = next_char_no_stray(l); return true; } /* 0x0a */
+    case 'v':  { *result = '\v'; c = next_char_no_stray(l); return true; } /* 0x0b */
+    case 'f':  { *result = '\f'; c = next_char_no_stray(l); return true; } /* 0x0c */
+    case '\'': { *result = '\''; c = next_char_no_stray(l); return true; } /* 0x27 */
+    case '"':  { *result = '"';  c = next_char_no_stray(l); return true; } /* 0x22 */
+    case '?':  { *result = '?';  c = next_char_no_stray(l); return true; } /* 0x3f */
+    case '\\': { *result = '\\'; c = next_char_no_stray(l); return true; } /* 0x5c */
     case 'U':
     case 'u' : { 
         ac_report_error_loc(l->location, "Universal character names are not supported yet.");
@@ -1223,7 +1222,7 @@ static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
             else
             {
                 dstr_append_char(&l->tok_buf, c);
-                NEXT_CHAR_NO_STRAY(l, c);
+                c = next_char_no_stray(l);
             }
         }
 
@@ -1241,7 +1240,7 @@ static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
         return empty;
     }
 
-    NEXT_CHAR_NO_STRAY(l, c); /* consume quote or double quote */
+    c = next_char_no_stray(l); /* consume quote or double quote */
 
     return inner_content;
 }
