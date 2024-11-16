@@ -32,7 +32,7 @@ token_info token_infos[];
 
 static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
 static bool is_horizontal_whitespace(char c);      /* char is alphanumeric */
-static bool is_identifier(char c);          /* char is allowed in identifier */
+static bool is_identifier(char c);                 /* char is allowed in identifier */
 static bool is_eof(const ac_lex* l);               /* current char is end of line */
 static bool is_char(const ac_lex* l, char c);      /* current char is equal to char  */
 static bool is_not_char(const ac_lex* l, char c);  /* current char is not equal to char  */
@@ -44,6 +44,7 @@ static int consume_one(ac_lex* l);        /* goto next char and keep up with loc
 static void consume_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time.  */
 static int skip_if_stray(ac_lex* l);      /* Get character after the current stray or return the current character. */
 static int next_char_no_stray(ac_lex* l);
+static int next_digit(ac_lex* l);         /* Get next digit, ignoring quotes and underscores. Push the digit to the token_buf.*/
 
 static void skipn(ac_lex* l, unsigned n); /* skip n char */
 
@@ -649,6 +650,17 @@ static int next_char_no_stray(ac_lex* l)
     return c;
 }
 
+static int next_digit(ac_lex* l)
+{
+    int c = next_char_no_stray(l);
+
+    while (c == '\'' || c == '_') {
+        c = next_char_no_stray(l);
+    }
+    dstr_append_char(&l->tok_buf, c);
+    return c;
+}
+
 /* @TODO: Remove this function since it's used only once. */
 static void skipn(ac_lex* l, unsigned n) {
 
@@ -714,16 +726,6 @@ static bool is_hex_digit(char c) {
         || (c >= 'A' && c <= 'F');
 }
 
-/* Get next digit, ignoring quotes and underscores. */
-#define NEXT_DIGIT(l, c) \
-do { \
-    c = next_char_no_stray(l); \
-    while (c == '\'' || c == '_') { \
-        c = next_char_no_stray(l); \
-    } \
-    dstr_append_char(&l->tok_buf, c); \
-} while (0);
-
 static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
 {
     int c = l->cur[0];
@@ -745,7 +747,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
                 return false;
             }
             num->is_unsigned = true;
-            NEXT_DIGIT(l, c);
+            c = next_digit(l);
             break;
         }
         case 'l':
@@ -760,7 +762,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
                 num->long_depth += 1;
             }
 
-            NEXT_DIGIT(l, c);
+            c = next_digit(l);
         }
         }
     }
@@ -798,7 +800,7 @@ static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
                 return false;
             }
             num->is_float = true;
-            NEXT_DIGIT(l, c);
+            c = next_digit(l);
             break;
         }
         case 'l':
@@ -813,7 +815,7 @@ static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
                 num->is_double = true;
             }
 
-            NEXT_DIGIT(l, c);
+            c = next_digit(l);
         }
         }
     }
@@ -877,7 +879,7 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
     int c = l->cur[0];
 
     if (c == '.') {
-        NEXT_DIGIT(l, c);
+        c = next_digit(l);
 
         if (c == '.') { return NULL; } /* If there is a dot after a dot then we are not parsing a number. */
         double pow, addend = 0;
@@ -886,7 +888,7 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
         {
             for (pow = 1; is_decimal_digit(c); pow *= base) {
                 addend = addend * base + (c - '0');
-                NEXT_DIGIT(l, c);
+                c = next_digit(l);
             }
         }
         else /* base == base16 */
@@ -894,15 +896,15 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
             for (pow = 1; ; pow *= base) {
                 if (c >= '0' && c <= '9') {
                     addend = addend * base + (c - '0');
-                    NEXT_DIGIT(l, c);
+                    c = next_digit(l);
                 }
                 else if (c >= 'a' && c <= 'f') {
                     addend = addend * base + 10 + (c - 'a');
-                    NEXT_DIGIT(l, c);
+                    c = next_digit(l);
                 }
                 else if (c >= 'A' && c <= 'F') {
                     addend = addend * base + 10 + (c - 'A');
-                    NEXT_DIGIT(l, c);
+                    c = next_digit(l);
                 }
                 else
                     break;
@@ -915,7 +917,7 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
     if (base == base16) {
         if (c == 'p' || c == 'P') {
             exponent = 1;
-            NEXT_DIGIT(l, c); /* Skip 'p' or 'P' */
+            c = next_digit(l); /* Skip 'p' or 'P' */
         }
         else
         {
@@ -926,7 +928,7 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
     else if (c == 'e' || c == 'E')
     {
         exponent = 1;
-        NEXT_DIGIT(l, c); /* Skip 'e' or 'E' */
+        c = next_digit(l); /* Skip 'e' or 'E' */
     }
 
     int sign = 1;
@@ -936,11 +938,11 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
         if (c == '-' || c == '+')
         {
             sign = '-' ? -1 : 1;
-            NEXT_DIGIT(l, c); /* Skip '-' or '+' */
+            c = next_digit(l); /* Skip '-' or '+' */
         }
         while (c >= '0' && c <= '9') {
             exponent = exponent * 10 + (c - '0');
-            NEXT_DIGIT(l, c);
+            c = next_digit(l);
         }
 
         power_ = power(base == base10 ? 2 : 10, exponent);
@@ -985,10 +987,10 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l)
 
     if (leading_zero)
     {
-        NEXT_DIGIT(l, c); /* Skip '0' */
+        c = next_digit(l); /* Skip '0' */
         /* Need to parse hex integer or float */
         if (c == 'x' || c == 'X') {
-            NEXT_DIGIT(l, c); /* Skip 'x' or 'X */
+            c = next_digit(l); /* Skip 'x' or 'X */
             size_t buffer_size = l->tok_buf.size;
             /* @FIXME check for overflow. */
             int n = 0;
@@ -1000,7 +1002,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l)
                     n = n * base16 + 10 + (c - 'a');
                 else if (c >= 'A' && c <= 'F')
                     n = n * base16 + 10 + (c - 'A');
-                NEXT_DIGIT(l, c);
+                c = next_digit(l);
             }
             if (!is_eof(l)) {
                 if (c == '.' || c == 'p' || c == 'P') {
@@ -1018,13 +1020,13 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l)
         }
         /* Need to parse binary integer */
         else if (c == 'b' || c == 'B') {
-            NEXT_DIGIT(l, c); /* Skip 'b' or 'B' */
+            c = next_digit(l); /* Skip 'b' or 'B' */
             size_t buffer_size = l->tok_buf.size;
             /* @FIXME check for overflow. */
             int n = 0;
             while (is_binary_digit(c)) {
                 n = n * base2 + (c - '0');
-                NEXT_DIGIT(l, c);
+                c = next_digit(l);
             }
             if (buffer_size == l->tok_buf.size) /* Nothing after 0b was parsed */
             {
@@ -1041,7 +1043,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l)
     int n = 0;
     while (is_decimal_digit(c)) {
         n = n * base10 + (c - '0'); /* @FIXME check for overflow. */
-        NEXT_DIGIT(l, c);
+        c = next_digit(l);
     }
     if (!is_eof(l)) {
         if (c == '.' || c == 'e' || c == 'E') {
