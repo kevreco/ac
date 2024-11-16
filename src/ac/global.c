@@ -22,11 +22,6 @@ static const char* get_message_prefix(enum message_type type);
 static bool location_has_row_and_column(ac_location l);
 static void print_underline_cursor(FILE* file, strv line, size_t pos);
 
-static bool os_std_console_setup();
-static bool os_std_console_color_enabled();
-static const char* os_std_console_color_red_begin();
-static const char* os_std_console_color_end();
-
 void ac_report_error(const char* fmt, ...)
 {
     va_list args;
@@ -97,10 +92,6 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
 {
     AC_ASSERT(surrounding_lines >= 0);
 
-    /* if needed setup console so that it can color the output on errors */
-    /* @TODO @FIXME we only need to do it once. */
-    if (global_options.colored_output) os_std_console_setup();
-
     dstr256 message;
     dstr256_init(&message);
 
@@ -115,13 +106,7 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
 
     if (type != message_type_NONE)
     {
-        bool emit_color = os_std_console_color_enabled() && type == message_type_ERROR;
-
-        if (emit_color) dstr256_append_f(&message, "%s", os_std_console_color_red_begin());
-
         dstr256_append_f(&message, "%s ", get_message_prefix(type));
-
-        if (emit_color) dstr256_append_f(&message, "%s", os_std_console_color_end());
     }
 
     dstr256_append_fv(&message, fmt, args);
@@ -209,80 +194,6 @@ static void print_underline_cursor(FILE* file, strv line, size_t pos)
     }
     printf("^");
 }
-
-/*
--------------------------------------------------------------------------------
-os_std_console
--------------------------------------------------------------------------------
-*/
-
-#if defined(WIN32)
-
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-
-#include <IntSafe.h>
-bool os_std_console_setup()
-{
-    if (!SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ENABLE_PROCESSED_OUTPUT | 0x0004))
-    {
-        fprintf(stderr, "SetConsoleMode error\n");
-        return false;
-    }
-    if (!SetConsoleOutputCP(CP_UTF8))
-    {
-        fprintf(stderr, "SetConsoleOutputCP error\n");
-        return false;
-    }
-
-    return true;
-}
-
-static bool os_std_console_color_enabled()
-{
-    DWORD mode;
-    if (!GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mode))
-    {
-        fprintf(stderr, "GetConsoleMode error\n");
-        return false;
-    }
-
-    return (mode | ENABLE_PROCESSED_OUTPUT)
-        && (mode | 0x0004);
-}
-
-static const char* os_std_console_color_red_begin()
-{
-    return "\x1b[31m";
-}
-
-static const char* os_std_console_color_end()
-{
-    return "\x1b[39m";
-}
-
-#else
-
-bool os_std_console_setup()
-{
-    return false;
-}
-
-static bool os_std_console_color_enabled()
-{
-    return false;
-}
-
-static const char* os_std_console_color_red_begin()
-{
-    return "";
-}
-
-static const char* os_std_console_color_end()
-{
-    return "";
-}
-#endif /* defined(WIN32) */
 
 size_t ac_djb2_hash(char* str, size_t count)
 {
