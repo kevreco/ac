@@ -16,7 +16,8 @@ typedef struct ac_token_list ac_token_list;
 struct ac_token_list {
 	darr_token* tokens;
 	size_t i;        /* Next token to pick up. */
-	ac_macro* macro; /* Not null if it's coming from a macro.  */
+	ac_macro* macro; /* Not null if it's coming from a macro. */
+	int macro_depth; /* Macro depth of the list of token. To avoid counting argument delimiter if the tokens are coming from expanded macros. */
 };
 
 typedef struct ac_pp ac_pp;

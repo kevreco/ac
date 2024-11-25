@@ -85,8 +85,9 @@ static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location locat
 
 static ac_location location(ac_pp* pp); /* Return location of the current token. */
 
-static ac_token token(ac_pp* pp); /* Current token by value. */
-static ac_token* token_ptr(ac_pp* pp); /* Current token by pointer. */
+static ac_token token(ac_pp* pp);        /* Current token by value. */
+static ac_token* token_ptr(ac_pp* pp);   /* Current token by pointer. */
+static int token_macro_depth(ac_pp* pp); /* Current token macro depth. */
 static bool expect(ac_pp* pp, enum ac_token_type type);
 
 /*------------------*/
@@ -477,6 +478,8 @@ static void stack_push(ac_pp* pp, ac_token_list list)
         macro_push(pp, list.macro);
     }
 
+    list.macro_depth = pp->macro_depth;
+
     darrT_push_back(&pp->stack, list);
 }
 
@@ -633,6 +636,10 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
     size_t param_count = m->params.end - m->params.start;
     size_t current_param_index = m->params.start;
 
+    /* We need to store the macro depth to check commas and right parenthesis,
+       expanded tokens (commas, right parenthesis) should not be counted as argument separator. */
+    int depth = pp->macro_depth;
+
     /* Collect all the arguments. */
     if (token(pp).type != ac_token_type_PAREN_R)
     {
@@ -642,9 +649,12 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
         {
             ac_token param = darrT_at(&m->definition, current_param_index);
             while (token(pp).type != ac_token_type_EOF
-                && token(pp).type != ac_token_type_COMMA
                 && token(pp).type != ac_token_type_PAREN_R)
             {
+                /* Stop if a comma has been reached on the same depth. */
+                if (token(pp).type == ac_token_type_COMMA && depth == token_macro_depth(pp))
+                    break;
+
                 ac_token t = token(pp);
 
                 if (!try_expand(pp, &t))
@@ -788,6 +798,17 @@ static ac_token token(ac_pp* pp)
 static ac_token* token_ptr(ac_pp* pp)
 {
     return pp->current_token;
+}
+
+static int token_macro_depth(ac_pp* pp)
+{
+    if (darrT_size(&pp->stack))
+    {
+        size_t index_of_last = darrT_size(&pp->stack) - 1;
+        ac_token_list* list = darrT_ptr(&pp->stack, index_of_last); /* Get last list. */
+        return list->macro_depth;
+    }
+    return 0;
 }
 
 static bool expect(ac_pp* pp, enum ac_token_type type)
