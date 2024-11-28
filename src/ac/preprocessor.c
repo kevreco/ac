@@ -494,6 +494,12 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
 
     if (!m || m->cannot_expand)
     {
+        tok->cannot_expand = true;
+        return false;
+    }
+
+    if (tok->cannot_expand)
+    {
         return false;
     }
 

@@ -176,6 +176,8 @@ struct ac_token {
     } u;
 
     bool previous_was_space; /* @TODO @OPT place this in a flag. */
+    /* Macro identifiers must be marked as "non expandable" to avoid recursive expansion. */
+    bool cannot_expand;      /* @TODO @OPT place this in a flag. */
 };
 
 /* @TODO move this to the compiler options. */
