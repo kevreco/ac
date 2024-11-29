@@ -53,6 +53,8 @@ static ac_token* goto_next_normal_token(ac_pp* pp);
 static ac_token* goto_next_token_from_directive(ac_pp* pp);
 /* Get preprocessed token ignoring all whitespaces. */
 static ac_token* goto_next_token_from_macro_agrument(ac_pp* pp);
+/* Get next raw token ignoring whitespaces. */
+static ac_token* goto_next_token_from_macro_body(ac_pp* pp);
 
 static bool parse_directive(ac_pp* pp);
 static bool parse_macro_definition(ac_pp* pp);
@@ -70,8 +72,11 @@ static void stack_push(ac_pp* pp, ac_token_list list);
 static bool try_expand(ac_pp* pp, ac_token* token);
 static size_t find_parameter_index(ac_token* token, ac_macro* m);
 
-/* /* Concatenate two tokens and add them to the expanded_token array of the macro. */
+/* Concatenate two tokens and add them to the expanded_token array of the macro. */
 static void concat(ac_pp* pp, ac_macro* m, ac_token left, ac_token right);
+/* Stringize the token (used by operator '#') */
+static ac_token stringize(ac_pp* pp, ac_token token);
+
 /* Add token to the expanded_token array of the macro.
    This also handle the concat operator '##'. */
 static void push_back_expanded_token(ac_pp* pp, ac_macro* m, ac_token token);
@@ -222,6 +227,22 @@ static ac_token* goto_next_token_from_macro_agrument(ac_pp* pp)
     return token;
 }
 
+static ac_token* goto_next_token_from_macro_body(ac_pp* pp)
+{
+    ac_token* token = goto_next_raw_token(pp);
+    ac_token* previous_token = token;
+
+    while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
+        || token->type == ac_token_type_COMMENT
+        || token->type == ac_token_type_NEW_LINE)
+    {
+        token = goto_next_raw_token(pp);
+        token->previous_was_space = true;
+    }
+
+    return token;
+}
+
 static bool parse_directive(ac_pp* pp)
 {
     AC_ASSERT(token(pp).type == ac_token_type_HASH);
@@ -363,7 +384,7 @@ static bool parse_macro_parameters(ac_pp* pp, ac_macro* m)
         return false;
     }
 
-    goto_next_token_from_directive(pp); /* Skip ')' */
+    goto_next_token_from_macro_body(pp); /* Skip ')' */
 
     range r = { 0u, darrT_size(&m->definition) };
     m->params = r;
@@ -439,14 +460,17 @@ static void macro_pop(ac_pp* pp, ac_macro* m)
 
 static ac_token* stack_pop(ac_pp* pp)
 {
-    while (darrT_size(&pp->stack))
+    if (darrT_size(&pp->stack))
     {
         size_t index_of_last = darrT_size(&pp->stack) - 1;
         ac_token_list* list = darrT_ptr(&pp->stack, index_of_last); /* Get last list. */
 
-        /* End of the list has been reached so we remove the list from the stack.
-           This is done now and after incrementing i because we want the macro
-           to be unexapandable until then. */
+        /* Update current token. */
+        pp->expanded_token = darrT_at(list->tokens, list->i);
+
+        list->i += 1; /* Go to next token index. */
+
+        /* End of the list has been reached so we remove the list from the stack.*/
         if (list->i == darrT_size(list->tokens))
         {
             /* If the list of token was coming from a macro
@@ -456,13 +480,7 @@ static ac_token* stack_pop(ac_pp* pp)
                 macro_pop(pp, list->macro);
             }
             darrT_pop_back(&pp->stack);
-            continue;
         }
-
-        /* Update current token. */
-        pp->expanded_token = darrT_at(list->tokens, list->i);
-
-        list->i += 1; /* Go to next token index. */
 
         return &pp->expanded_token;
     }
@@ -492,10 +510,14 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
 
     ac_macro* m = find_macro(pp, tok);
 
-    if (!m || m->cannot_expand)
+    if (!m)
+    {
+        return false;
+    }
+
+    if (m->cannot_expand)
     {
         tok->cannot_expand = true;
-        return false;
     }
 
     if (tok->cannot_expand)
@@ -541,8 +563,6 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
         expand_object_macro(pp, &identifier, m);
         expanded = true;
     }
-
-    m->cannot_expand = expanded;
 
     return expanded;
 }
@@ -602,27 +622,84 @@ static void concat(ac_pp* pp, ac_macro* m, ac_token left, ac_token right)
     ac_lex_swap(&pp->lex, &pp->concat_lex);
 }
 
+static ac_token stringize(ac_pp* pp, ac_token token)
+{
+    dstr_clear(&pp->concat_buffer);
+    dstr_append_char(&pp->concat_buffer, '"');
+
+    if (token.type == ac_token_type_LITERAL_STRING
+        || token.type == ac_token_type_LITERAL_CHAR)
+    {
+        /* Add string prefix. */
+        dstr_append(&pp->concat_buffer, ac_token_prefix(token));
+        dstr_append_str(&pp->concat_buffer, "\\\""); /* Add escaped quote: \" */
+        strv sv = token.text;
+
+        for (size_t i = 0; i < sv.size; i += 1) {
+            if (sv.data[i] == '\\' || sv.data[i] == '"')
+            {
+                dstr_append_char(&pp->concat_buffer, '\\');
+            }
+            dstr_append_char(&pp->concat_buffer, sv.data[i]);
+        }
+        dstr_append_str(&pp->concat_buffer, "\\\""); /* Add escaped quote: \" */
+    }
+    else
+    {
+        dstr_append(&pp->concat_buffer, token.text);
+    }
+
+    dstr_append_char(&pp->concat_buffer, '"');
+    
+    ac_token t = { 0 };
+    ac_create_or_reuse_identifier(pp->mgr, dstr_to_strv(& pp->concat_buffer), &t);
+    return t;
+}
+
 static void push_back_expanded_token(ac_pp* pp, ac_macro* m, ac_token token)
 {
     size_t size = darrT_size(&m->expanded_args);
 
-    /* The previous token was a ##, concatenation needed. */
-    if (size
-        && darrT_last(&m->expanded_args).type == ac_token_type_DOUBLE_HASH)
+    if (size)
     {
-        size_t left_index = size - 2;
-        ac_token left = darrT_at(&m->expanded_args, left_index);
-        ac_token right = token;
+        ac_token last = darrT_last(&m->expanded_args);
+        /* The previous token was a ##, concatenation needed. */
+        if (last.type == ac_token_type_DOUBLE_HASH)
+        {
+            //darrT_last(&m->expanded_args).cannot_expand = true;
+            size_t left_index = size - 2;
+            ac_token left = darrT_at(&m->expanded_args, left_index);
+            ac_token right = token;
 
-        /* Change current size because we want to override the left token and the '##' token. */
-        m->expanded_args.arr.size = left_index;
+            /* Change current size because we want to override the left token and the '##' token. */
+            m->expanded_args.arr.size = left_index;
 
-        concat(pp, m, left, right);
+            concat(pp, m, left, right);
+            return;
+        }
+        else if (last.type == ac_token_type_HASH)
+        {
+            /* Index of the '#' */
+            size_t hash_index = size - 1;
+            m->expanded_args.arr.size -= 1;
+
+            ac_token t = stringize(pp, token);
+
+            t.previous_was_space = last.previous_was_space;
+            /* Replace '#'  token with the new stringified token*/
+            darrT_push_back(&m->expanded_args, t);
+            return;
+        }
     }
-    else
+
+    /* If the token is the macro identifier we mark it as non expandable. */
+    /* @TODO create a method to encapsulate this. */
+    if (m->identifier.text.data == token.text.data)
     {
-        darrT_push_back(&m->expanded_args, token);
+        token.cannot_expand = true;
     }
+
+    darrT_push_back(&m->expanded_args, token);
 }
 
 static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
@@ -709,6 +786,7 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
         goto cleanup;
     }
 
+    m->cannot_expand = true;
     /* Expand tokens. */
     darrT_clear(&m->expanded_args);
 
@@ -758,6 +836,7 @@ static void expand_object_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
 {
     AC_ASSERT(!m->is_function_like);
 
+    m->cannot_expand = true;
     darrT_clear(&m->expanded_args);
 
     size_t body_size = m->body.end - m->body.start;

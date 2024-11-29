@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+typedef struct ac_token ac_token;
+
 typedef struct ac_ast_top_level ac_ast_top_level;
 
 typedef struct ac_source_file ac_source_file;
@@ -77,6 +79,12 @@ void ac_manager_init(ac_manager* m, ac_options* o);
 void ac_manager_destroy(ac_manager* m);
 
 ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath);
+
+/* NOTE: An ac_token is returned as result simply because we want a string view and a token type. */
+/* @TODO rename this. */
+void ac_create_or_reuse_identifier(ac_manager* mgr, strv ident, ac_token* result);
+/* @TODO rename this. */
+void ac_create_or_reuse_identifier_h(ac_manager* mgr, strv ident, size_t hash, ac_token* result);
 
 #ifdef __cplusplus
 } /* extern "C" */

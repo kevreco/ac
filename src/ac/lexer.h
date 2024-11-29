@@ -234,6 +234,7 @@ void ac_token_fprint(FILE* file, ac_token t); /* Print to file. */
 void ac_token_sprint(dstr* str, ac_token t);  /* Print to dynamic string. */
 
 bool ac_token_is_keyword_or_identifier(ac_token t);
+strv ac_token_prefix(ac_token t);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -83,11 +83,7 @@ static ac_token* token_char(ac_lex* l, strv prefix);
 
 /* Register keywords or known identifier. It helps to retrieve the type of a token from it's text value. */
 static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type);
-/* We return a ac_token because we want a string view and a token type. */
-static ac_token create_or_reuse_identifier(ac_lex* l, strv sv);
-static ac_token create_or_reuse_identifier_h(ac_lex* l, strv sv, size_t hash);
 
-static strv ac_token_prefix(ac_token token);
 static size_t token_str_len(enum ac_token_type type);
 static bool token_type_is_literal(enum ac_token_type type);
 
@@ -476,7 +472,7 @@ parse_identifier:
             }
         }
 
-        token = create_or_reuse_identifier_h(l, ident, hash);
+        ac_create_or_reuse_identifier_h(l->mgr, ident, hash, &token);
         return token_from_text(l, token.type, token.text);
     }
 
@@ -842,7 +838,8 @@ static ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
 
     strv text = dstr_to_strv(&l->tok_buf);
     text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
-    ac_token t = create_or_reuse_identifier(l, text);
+    ac_token t = {0};
+    ac_create_or_reuse_identifier(l->mgr, text, &t);
     l->token.text = t.text;
     return &l->token;
 }
@@ -864,7 +861,8 @@ static ac_token* token_float_literal(ac_lex* l, ac_token_number num)
 
     strv text = dstr_to_strv(&l->tok_buf);
     text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
-    ac_token t = create_or_reuse_identifier(l, text);
+    ac_token t = { 0 };
+    ac_create_or_reuse_identifier(l->mgr, text, &t);
     l->token.text = t.text;
     return &l->token;
 }
@@ -1338,11 +1336,11 @@ static ac_token* token_string(ac_lex* l, strv literal, strv encoded_content, str
     l->token.type = ac_token_type_LITERAL_STRING;
 
     /* @FIXME Is there a need to reuse strings for string literal? */
-    ac_token t;
-    t = create_or_reuse_identifier(l, literal);
+    ac_token t = { 0 };
+    ac_create_or_reuse_identifier(l->mgr, literal, &t);
     l->token.text = t.text;
 
-    t = create_or_reuse_identifier(l, encoded_content);
+    ac_create_or_reuse_identifier(l->mgr, encoded_content, &t);
     l->token.u.str.encoded_content = t.text;
 
     if (prefix.data == utf8.data)
@@ -1369,7 +1367,8 @@ static ac_token* token_char(ac_lex* l, strv prefix)
 
     l->token.type = ac_token_type_LITERAL_CHAR;
 
-    ac_token t = create_or_reuse_identifier(l, literal);
+    ac_token t = { 0 };
+    ac_create_or_reuse_identifier(l->mgr, literal, &t);
     l->token.text = t.text;
 
     int32_t c = 0;
@@ -1404,34 +1403,6 @@ static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type typ
     t.text = sv;
     t.type = type;
     ht_insert_h(&l->mgr->identifiers, &t, ac_djb2_hash((char*)sv.data, sv.size));
-}
-
-static ac_token create_or_reuse_identifier(ac_lex* l, strv ident)
-{
-    return create_or_reuse_identifier_h(l, ident, ac_djb2_hash((char*)ident.data, ident.size));
-}
-
-static ac_token create_or_reuse_identifier_h(ac_lex* l, strv ident, size_t hash)
-{
-    ac_token token_for_search;
-    token_for_search.type = ac_token_type_NONE;
-    token_for_search.text = ident;
-    ac_token* result = (ac_token*)ht_get_item_h(&l->mgr->identifiers, &token_for_search, hash);
-
-    /* If the identifier is new, a new entry is created. */
-    if (result == NULL)
-    {
-        ac_token t;
-        t.text.data = ac_allocator_allocate(&l->mgr->identifiers_arena.allocator, ident.size);
-        t.text.size = ident.size;
-        t.type = ac_token_type_IDENTIFIER;
-        memcpy((char*)t.text.data, ident.data, ident.size);
-
-        ht_insert_h(&l->mgr->identifiers, &t, hash);
-        return t;
-    }
-
-    return *result;
 }
 
 /*
@@ -1648,7 +1619,7 @@ bool ac_token_is_keyword_or_identifier(ac_token t) {
         || (t.type >= ac_token_type_ALIGNAS && t.type <= ac_token_type_WHILE);
 }
 
-static strv ac_token_prefix(ac_token token) {
+strv ac_token_prefix(ac_token token) {
 
     if (token.type == ac_token_type_LITERAL_STRING)
     {

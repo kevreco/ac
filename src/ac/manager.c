@@ -103,6 +103,36 @@ ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath)
     }
 }
 
+void ac_create_or_reuse_identifier(ac_manager* mgr, strv ident, ac_token* result)
+{
+    ac_create_or_reuse_identifier_h(mgr, ident, ac_djb2_hash((char*)ident.data, ident.size), result);
+}
+
+void ac_create_or_reuse_identifier_h(ac_manager* mgr, strv ident, size_t hash, ac_token* result)
+{
+    ac_token token_for_search;
+    token_for_search.type = ac_token_type_NONE;
+    token_for_search.text = ident;
+    ac_token* result_item = (ac_token*)ht_get_item_h(&mgr->identifiers, &token_for_search, hash);
+
+    /* If the identifier is new, a new entry is created. */
+    if (result_item == NULL)
+    {
+        ac_token t;
+        t.text.data = ac_allocator_allocate(&mgr->identifiers_arena.allocator, ident.size);
+        t.text.size = ident.size;
+        t.type = ac_token_type_IDENTIFIER;
+        memcpy((char*)t.text.data, ident.data, ident.size);
+
+        ht_insert_h(&mgr->identifiers, &t, hash);
+        *result = t;
+    }
+    else
+    {
+        *result = *result_item;
+    }
+}
+
 static bool try_get_file_content(const char* filepath, dstr* content)
 {
     if (!re_file_exists_str(filepath)) {
