@@ -17,7 +17,7 @@ typedef struct token_info token_info;
 struct token_info {
     bool is_supported;
     enum ac_token_type type;
-    strv name;
+    ac_ident ident;
 };
 
 static const strv empty = STRV("");
@@ -28,7 +28,7 @@ static const strv utf16 = STRV("u");
 static const strv utf32 = STRV("U");
 static const strv wide = STRV("L");
 
-token_info token_infos[];
+static token_info token_infos[ac_token_type_COUNT];
 
 static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
 static bool is_horizontal_whitespace(char c);      /* char is alphanumeric */
@@ -81,9 +81,6 @@ static ac_token* token_string(ac_lex* l, strv literal, strv content, strv kind);
 
 static ac_token* token_char(ac_lex* l, strv prefix);
 
-/* Register keywords or known identifier. It helps to retrieve the type of a token from it's text value. */
-static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type);
-
 static size_t token_str_len(enum ac_token_type type);
 static bool token_type_is_literal(enum ac_token_type type);
 
@@ -105,9 +102,7 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr)
         l->mgr = mgr;
 
         l->options.reject_hex_float = mgr->options.reject_hex_float;
-        l->options.reject_stray = mgr->options.reject_stray;
     }
-
 
     dstr_init(&l->tok_buf);
     dstr_init(&l->str_buf);
@@ -116,10 +111,11 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr)
     int i = 0;
     for (; i < ac_token_type_COUNT; ++i)
     {
-        token_info item = token_infos[i];
-        if (item.is_supported)
+        if (token_infos[i].is_supported && ac_token_is_keyword_or_identifier(token_infos[i].type))
         {
-            register_known_identifier(l, item.name, item.type);
+            /* @FIXME: this should be done once in the manager.
+              Multiple lexer are instanciated however the known identifier won't be registered again. */
+            ac_register_known_identifier(l->mgr, &token_infos[i].ident, token_infos[i].type);
         }
     }
 }
@@ -163,14 +159,11 @@ switch_start:
     switch (l->cur[0]) {
 
     case '\\':
-        if (l->options.reject_stray)
-            goto before_default;
         if (!next_is(l, '\n')
             && !next_is(l, '\r')
             && !next_is(l, '\0'))
         {
-            ac_report_error("Stray '\\' in program.");
-            return token_eof(l);
+            return token_from_single_char(l, ac_token_type_BACKSLASH);
         }
 
         skip_if_stray(l);
@@ -460,7 +453,7 @@ parse_identifier:
             }
         }
 
-        if (l->cur[0] == '"') /* Handle string literal */
+        if (l->cur[0] == '"') /* Handle string literal. */
         {
             if (strv_equals(ident, utf8)) return parse_utf8_string_literal(l, utf8);
             else if (strv_equals(ident, utf16)) return parse_utf16_string_literal(l, utf16);
@@ -472,8 +465,10 @@ parse_identifier:
             }
         }
 
-        ac_create_or_reuse_identifier_h(l->mgr, ident, hash, &token);
-        return token_from_text(l, token.type, token.text);
+        ac_ident_holder id = ac_create_or_reuse_identifier_h(l->mgr, ident, hash);
+        l->token.type = (enum ac_token_type)id.token_type; /* Is and identifier or a keyword. */
+        l->token.ident = id.ident;
+        return &l->token;
     }
 
     before_default:
@@ -640,7 +635,7 @@ static int next_char_no_stray(ac_lex* l)
 {
     int c;
     c = consume_one(l);
-    if (!l->options.reject_stray && c == '\\') {
+    if (c == '\\') {
         c = skip_if_stray(l);
     }
     return c;
@@ -672,7 +667,7 @@ static void skipn(ac_lex* l, unsigned n) {
 static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) {
     l->token.type = type;
     l->token.text = text;
-   
+
     return &l->token;
 }
 
@@ -687,7 +682,7 @@ static ac_token* token_eof(ac_lex* l) {
 }
 
 static ac_token* token_from_type(ac_lex* l, enum ac_token_type type) {
-    return token_from_text(l, type, token_infos[type].name);
+    return token_from_text(l, type, token_infos[type].ident.text);
 }
 
 static ac_token* token_from_single_char(ac_lex* l, enum ac_token_type type) {
@@ -838,9 +833,7 @@ static ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
 
     strv text = dstr_to_strv(&l->tok_buf);
     text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
-    ac_token t = {0};
-    ac_create_or_reuse_identifier(l->mgr, text, &t);
-    l->token.text = t.text;
+    l->token.text = ac_create_or_reuse_literal(l->mgr, text);
     return &l->token;
 }
 
@@ -861,9 +854,7 @@ static ac_token* token_float_literal(ac_lex* l, ac_token_number num)
 
     strv text = dstr_to_strv(&l->tok_buf);
     text = strv_remove_right(text, 1); /* Remove 1 to remove last character which is not part of the value. */
-    ac_token t = { 0 };
-    ac_create_or_reuse_identifier(l->mgr, text, &t);
-    l->token.text = t.text;
+    l->token.text = ac_create_or_reuse_literal(l->mgr, text);
     return &l->token;
 }
 
@@ -1335,13 +1326,9 @@ static ac_token* token_string(ac_lex* l, strv literal, strv encoded_content, str
 {
     l->token.type = ac_token_type_LITERAL_STRING;
 
-    /* @FIXME Is there a need to reuse strings for string literal? */
-    ac_token t = { 0 };
-    ac_create_or_reuse_identifier(l->mgr, literal, &t);
-    l->token.text = t.text;
+    l->token.text = ac_create_or_reuse_literal(l->mgr, literal);
 
-    ac_create_or_reuse_identifier(l->mgr, encoded_content, &t);
-    l->token.u.str.encoded_content = t.text;
+    l->token.u.str.encoded_content = ac_create_or_reuse_literal(l->mgr, encoded_content);
 
     if (prefix.data == utf8.data)
         l->token.u.str.is_utf8 = true;
@@ -1367,9 +1354,7 @@ static ac_token* token_char(ac_lex* l, strv prefix)
 
     l->token.type = ac_token_type_LITERAL_CHAR;
 
-    ac_token t = { 0 };
-    ac_create_or_reuse_identifier(l->mgr, literal, &t);
-    l->token.text = t.text;
+    l->token.text = ac_create_or_reuse_literal(l->mgr, literal);
 
     int32_t c = 0;
     utf8_decode((char*)literal.data, &c);
@@ -1397,14 +1382,6 @@ static ac_token* token_char(ac_lex* l, strv prefix)
     return &l->token;
 }
 
-static void register_known_identifier(ac_lex* l, strv sv, enum ac_token_type type)
-{
-    ac_token t;
-    t.text = sv;
-    t.type = type;
-    ht_insert_h(&l->mgr->identifiers, &t, ac_djb2_hash((char*)sv.data, sv.size));
-}
-
 /*
 -------------------------------------------------------------------------------
 ac_token
@@ -1412,136 +1389,137 @@ ac_token
 */
 
 #define TOKEN_INFO_COUNT (sizeof(token_infos) / sizeof(token_infos[0]))
+#define IDENT(value) { STRV(value) }
 
-token_info token_infos[] = {
+static token_info token_infos[] = {
 
-    { false, ac_token_type_NONE, STRV("<none>") },
+    { false, ac_token_type_NONE, IDENT("<none>") },
 
     /* Keywords */
 
-    { false, ac_token_type_ALIGNAS, STRV("alignas") },
-    { false, ac_token_type_ALIGNAS2, STRV("_Alignas") },
-    { false, ac_token_type_ALIGNOF, STRV("alignof") },
-    { false, ac_token_type_ALIGNOF2, STRV("_Alignof") },
-    { false, ac_token_type_ATOMIC, STRV("_Atomic") },
-    { false, ac_token_type_AUTO, STRV("auto") },
-    { false, ac_token_type_BOOL, STRV("bool") },
-    { false, ac_token_type_BOOL2, STRV("_Bool") },
-    { false, ac_token_type_BITINT, STRV("_BitInt") },
-    { false, ac_token_type_BREAK, STRV("break") },
-    { false, ac_token_type_CASE, STRV("case") },
-    { false, ac_token_type_CHAR, STRV("char") },
-    { false, ac_token_type_CONST, STRV("const") },
-    { false, ac_token_type_CONSTEXPR, STRV("constexpr") },
-    { false, ac_token_type_CONTINUE, STRV("continue") },
-    { false, ac_token_type_COMPLEX, STRV("_Complex") },
-    { false, ac_token_type_DECIMAL128, STRV("_Decimal128") },
-    { false, ac_token_type_DECIMAL32, STRV("_Decimal32") },
-    { false, ac_token_type_DECIMAL64, STRV("_Decimal64") },
-    { false, ac_token_type_DEFAULT, STRV("default") },
-    { false, ac_token_type_DO, STRV("do") },
-    { false, ac_token_type_DOUBLE, STRV("double") },
-    { false, ac_token_type_ELSE, STRV("else") },
-    { false, ac_token_type_ENUM, STRV("enum") },
-    { false, ac_token_type_EXTERN, STRV("extern") },
-    { false, ac_token_type_FALSE, STRV("false") },
-    { false, ac_token_type_FLOAT, STRV("float") },
-    { false, ac_token_type_FOR, STRV("for") },
-    { false, ac_token_type_GENERIC, STRV("_Generic") },
-    { false, ac_token_type_GOTO, STRV("goto") },
-    { false, ac_token_type_IF, STRV("if") },
-    { false, ac_token_type_INLINE, STRV("inline") },
+    { false, ac_token_type_ALIGNAS, IDENT("alignas") },
+    { false, ac_token_type_ALIGNAS2, IDENT("_Alignas") },
+    { false, ac_token_type_ALIGNOF, IDENT("alignof") },
+    { false, ac_token_type_ALIGNOF2, IDENT("_Alignof") },
+    { false, ac_token_type_ATOMIC, IDENT("_Atomic") },
+    { false, ac_token_type_AUTO, IDENT("auto") },
+    { false, ac_token_type_BOOL, IDENT("bool") },
+    { false, ac_token_type_BOOL2, IDENT("_Bool") },
+    { false, ac_token_type_BITINT, IDENT("_BitInt") },
+    { false, ac_token_type_BREAK, IDENT("break") },
+    { false, ac_token_type_CASE, IDENT("case") },
+    { false, ac_token_type_CHAR, IDENT("char") },
+    { false, ac_token_type_CONST, IDENT("const") },
+    { false, ac_token_type_CONSTEXPR, IDENT("constexpr") },
+    { false, ac_token_type_CONTINUE, IDENT("continue") },
+    { false, ac_token_type_COMPLEX, IDENT("_Complex") },
+    { false, ac_token_type_DECIMAL128, IDENT("_Decimal128") },
+    { false, ac_token_type_DECIMAL32, IDENT("_Decimal32") },
+    { false, ac_token_type_DECIMAL64, IDENT("_Decimal64") },
+    { false, ac_token_type_DEFAULT, IDENT("default") },
+    { false, ac_token_type_DO, IDENT("do") },
+    { false, ac_token_type_DOUBLE, IDENT("double") },
+    { false, ac_token_type_ELSE, IDENT("else") },
+    { false, ac_token_type_ENUM, IDENT("enum") },
+    { false, ac_token_type_EXTERN, IDENT("extern") },
+    { false, ac_token_type_FALSE, IDENT("false") },
+    { false, ac_token_type_FLOAT, IDENT("float") },
+    { false, ac_token_type_FOR, IDENT("for") },
+    { false, ac_token_type_GENERIC, IDENT("_Generic") },
+    { false, ac_token_type_GOTO, IDENT("goto") },
+    { false, ac_token_type_IF, IDENT("if") },
+    { false, ac_token_type_INLINE, IDENT("inline") },
     /* @TODO properly support int. */
-    { false, ac_token_type_INT, STRV("int") },
-    { false, ac_token_type_IMAGINARY, STRV("_Imaginary") },
-    { false, ac_token_type_LONG, STRV("long") },
-    { false, ac_token_type_NORETURN, STRV("_Noreturn") },
-    { false, ac_token_type_NULLPTR, STRV("nullptr") },
-    { false, ac_token_type_REGISTER, STRV("register") },
-    { false, ac_token_type_RESTRICT, STRV("restrict") },
-    { true,  ac_token_type_RETURN, STRV("return") },
-    { false, ac_token_type_SHORT, STRV("short") },
-    { false, ac_token_type_SIGNED, STRV("signed") },
-    { false, ac_token_type_SIZEOF, STRV("sizeof") },
-    { false, ac_token_type_STATIC, STRV("static") },
-    { false, ac_token_type_STATIC_ASSERT, STRV("static_assert") },
-    { false, ac_token_type_STATIC_ASSERT2, STRV("_Static_assert") },
-    { false, ac_token_type_STRUCT, STRV("struct") },
-    { false, ac_token_type_SWITCH, STRV("switch") },
-    { false, ac_token_type_THREAD_LOCAL, STRV("thread_local") },
-    { false, ac_token_type_THREAD_LOCAL2, STRV("_Thread_local") },
-    { false, ac_token_type_TRUE, STRV("true") },
-    { false, ac_token_type_TYPEDEF, STRV("typedef") },
-    { false, ac_token_type_TYPEOF, STRV("typeof") },
-    { false, ac_token_type_TYPEOF_UNQUAL, STRV("typeof_unqual") },
-    { false, ac_token_type_UNION, STRV("union") },
-    { false, ac_token_type_UNSIGNED, STRV("unsigned") },
-    { false, ac_token_type_VOID, STRV("void") },
-    { false, ac_token_type_VOLATILE, STRV("volatile") },
-    { false, ac_token_type_WHILE, STRV("while") },
+    { false, ac_token_type_INT, IDENT("int") },
+    { false, ac_token_type_IMAGINARY, IDENT("_Imaginary") },
+    { false, ac_token_type_LONG, IDENT("long") },
+    { false, ac_token_type_NORETURN, IDENT("_Noreturn") },
+    { false, ac_token_type_NULLPTR, IDENT("nullptr") },
+    { false, ac_token_type_REGISTER, IDENT("register") },
+    { false, ac_token_type_RESTRICT, IDENT("restrict") },
+    { true,  ac_token_type_RETURN, IDENT("return") },
+    { false, ac_token_type_SHORT, IDENT("short") },
+    { false, ac_token_type_SIGNED, IDENT("signed") },
+    { false, ac_token_type_SIZEOF, IDENT("sizeof") },
+    { false, ac_token_type_STATIC, IDENT("static") },
+    { false, ac_token_type_STATIC_ASSERT, IDENT("static_assert") },
+    { false, ac_token_type_STATIC_ASSERT2, IDENT("_Static_assert") },
+    { false, ac_token_type_STRUCT, IDENT("struct") },
+    { false, ac_token_type_SWITCH, IDENT("switch") },
+    { false, ac_token_type_THREAD_LOCAL, IDENT("thread_local") },
+    { false, ac_token_type_THREAD_LOCAL2, IDENT("_Thread_local") },
+    { false, ac_token_type_TRUE, IDENT("true") },
+    { false, ac_token_type_TYPEDEF, IDENT("typedef") },
+    { false, ac_token_type_TYPEOF, IDENT("typeof") },
+    { false, ac_token_type_TYPEOF_UNQUAL, IDENT("typeof_unqual") },
+    { false, ac_token_type_UNION, IDENT("union") },
+    { false, ac_token_type_UNSIGNED, IDENT("unsigned") },
+    { false, ac_token_type_VOID, IDENT("void") },
+    { false, ac_token_type_VOLATILE, IDENT("volatile") },
+    { false, ac_token_type_WHILE, IDENT("while") },
 
     /* Symbols */
 
-    { false, ac_token_type_AMP, STRV("&") },
-    { false, ac_token_type_AMP_EQUAL, STRV("&=") },
-    { false, ac_token_type_ARROW, STRV("->") },
-    { true,  ac_token_type_BACKSLASH, STRV("\\") },
-    { true,  ac_token_type_BRACE_L, STRV("{") },
-    { true,  ac_token_type_BRACE_R, STRV("}") },
-    { false, ac_token_type_CARET, STRV("^") },
-    { false, ac_token_type_CARET_EQUAL, STRV("^=") },
-    { false, ac_token_type_COLON, STRV(":") },
-    { true, ac_token_type_COMMA, STRV(",") },
-    { false, ac_token_type_COMMENT, STRV("<comment>") },
-    { false, ac_token_type_DOLLAR, STRV("$") },
-    { false, ac_token_type_DOT, STRV(".") },
-    { false, ac_token_type_DOUBLE_AMP, STRV("&&") },
-    { false, ac_token_type_DOUBLE_DOT, STRV("..") },
-    { false, ac_token_type_DOUBLE_EQUAL, STRV("==") },
-    { false, ac_token_type_DOUBLE_GREATER, STRV(">>") },
-    { true,  ac_token_type_DOUBLE_HASH, STRV("##") },
-    { false, ac_token_type_DOUBLE_LESS, STRV("<<") },
-    { false, ac_token_type_DOUBLE_PIPE, STRV("||") },
-    { false, ac_token_type_DOUBLE_QUOTE , STRV("\"") },
-    { true,  ac_token_type_EOF, STRV("<end-of-line>") },
-    { true,  ac_token_type_EQUAL, STRV("=") },
-    { false, ac_token_type_ERROR, STRV("<error>") },
-    { true,  ac_token_type_EXCLAM, STRV("!") },
-    { false, ac_token_type_GREATER, STRV(">") },
-    { false, ac_token_type_GREATER_EQUAL, STRV(">=") },
-    { true,  ac_token_type_HASH, STRV("#") },
-    { false, ac_token_type_HORIZONTAL_WHITESPACE, STRV("<horizontal_whitespace>") },
-    { false, ac_token_type_IDENTIFIER, STRV("<identifier>") },
-    { false, ac_token_type_LESS, STRV("<") },
-    { false, ac_token_type_LESS_EQUAL, STRV("<=") },
-    { false, ac_token_type_LITERAL_CHAR, STRV("<literal-char>") },
-    { false, ac_token_type_LITERAL_FLOAT, STRV("<literal-float>") },
-    { true,  ac_token_type_LITERAL_INTEGER, STRV("<literal-integer>") },
-    { false, ac_token_type_LITERAL_STRING, STRV("<literal-string>") },
-    { true,  ac_token_type_MINUS, STRV("-") },
-    { false, ac_token_type_MINUS_EQUAL, STRV("-=") },
-    { true, ac_token_type_NEW_LINE, STRV("<new_line>") },
-    { false, ac_token_type_NOT_EQUAL, STRV("!=") },
-    { true,  ac_token_type_PAREN_L, STRV("(") },
-    { true,  ac_token_type_PAREN_R, STRV(")") },
-    { false, ac_token_type_PERCENT, STRV("%") },
-    { false, ac_token_type_PERCENT_EQUAL, STRV("%=") },
-    { false, ac_token_type_PIPE, STRV("|") },
-    { false, ac_token_type_PIPE_EQUAL, STRV("|=") },
-    { true,  ac_token_type_PLUS, STRV("+") },
-    { false, ac_token_type_PLUS_EQUAL, STRV("+=") },
-    { false, ac_token_type_QUESTION, STRV("?") },
-    { false, ac_token_type_QUOTE, STRV("'") },
-    { true,  ac_token_type_SEMI_COLON, STRV(";") },
-    { false, ac_token_type_SLASH, STRV("/") },
-    { false, ac_token_type_SLASH_EQUAL, STRV("/=") },
-    { false, ac_token_type_SQUARE_L, STRV("[") },
-    { false, ac_token_type_SQUARE_R, STRV("]") },
-    { false, ac_token_type_STAR, STRV("*") },
-    { false, ac_token_type_STAR_EQUAL, STRV("*=") },
-    { false, ac_token_type_TILDE, STRV("~") },
-    { false, ac_token_type_TILDE_EQUAL, STRV("~=") },
-    { false, ac_token_type_TRIPLE_DOT, STRV("...") }
+    { false, ac_token_type_AMP, IDENT("&") },
+    { false, ac_token_type_AMP_EQUAL, IDENT("&=") },
+    { false, ac_token_type_ARROW, IDENT("->") },
+    { true,  ac_token_type_BACKSLASH, IDENT("\\") },
+    { true,  ac_token_type_BRACE_L, IDENT("{") },
+    { true,  ac_token_type_BRACE_R, IDENT("}") },
+    { false, ac_token_type_CARET, IDENT("^") },
+    { false, ac_token_type_CARET_EQUAL, IDENT("^=") },
+    { false, ac_token_type_COLON, IDENT(":") },
+    { true, ac_token_type_COMMA, IDENT(",") },
+    { false, ac_token_type_COMMENT, IDENT("<comment>") },
+    { false, ac_token_type_DOLLAR, IDENT("$") },
+    { false, ac_token_type_DOT, IDENT(".") },
+    { false, ac_token_type_DOUBLE_AMP, IDENT("&&") },
+    { false, ac_token_type_DOUBLE_DOT, IDENT("..") },
+    { false, ac_token_type_DOUBLE_EQUAL, IDENT("==") },
+    { false, ac_token_type_DOUBLE_GREATER, IDENT(">>") },
+    { true,  ac_token_type_DOUBLE_HASH, IDENT("##") },
+    { false, ac_token_type_DOUBLE_LESS, IDENT("<<") },
+    { false, ac_token_type_DOUBLE_PIPE, IDENT("||") },
+    { false, ac_token_type_DOUBLE_QUOTE , IDENT("\"") },
+    { true,  ac_token_type_EOF, IDENT("<end-of-line>") },
+    { true,  ac_token_type_EQUAL, IDENT("=") },
+    { false, ac_token_type_ERROR, IDENT("<error>") },
+    { true,  ac_token_type_EXCLAM, IDENT("!") },
+    { false, ac_token_type_GREATER, IDENT(">") },
+    { false, ac_token_type_GREATER_EQUAL, IDENT(">=") },
+    { true,  ac_token_type_HASH, IDENT("#") },
+    { false, ac_token_type_HORIZONTAL_WHITESPACE, IDENT("<horizontal_whitespace>") },
+    { false, ac_token_type_IDENTIFIER, IDENT("<identifier>") },
+    { false, ac_token_type_LESS, IDENT("<") },
+    { false, ac_token_type_LESS_EQUAL, IDENT("<=") },
+    { false, ac_token_type_LITERAL_CHAR, IDENT("<literal-char>") },
+    { false, ac_token_type_LITERAL_FLOAT, IDENT("<literal-float>") },
+    { true,  ac_token_type_LITERAL_INTEGER, IDENT("<literal-integer>") },
+    { false, ac_token_type_LITERAL_STRING, IDENT("<literal-string>") },
+    { true,  ac_token_type_MINUS, IDENT("-") },
+    { false, ac_token_type_MINUS_EQUAL, IDENT("-=") },
+    { true, ac_token_type_NEW_LINE, IDENT("<new_line>") },
+    { false, ac_token_type_NOT_EQUAL, IDENT("!=") },
+    { true,  ac_token_type_PAREN_L, IDENT("(") },
+    { true,  ac_token_type_PAREN_R, IDENT(")") },
+    { false, ac_token_type_PERCENT, IDENT("%") },
+    { false, ac_token_type_PERCENT_EQUAL, IDENT("%=") },
+    { false, ac_token_type_PIPE, IDENT("|") },
+    { false, ac_token_type_PIPE_EQUAL, IDENT("|=") },
+    { true,  ac_token_type_PLUS, IDENT("+") },
+    { false, ac_token_type_PLUS_EQUAL, IDENT("+=") },
+    { false, ac_token_type_QUESTION, IDENT("?") },
+    { false, ac_token_type_QUOTE, IDENT("'") },
+    { true,  ac_token_type_SEMI_COLON, IDENT(";") },
+    { false, ac_token_type_SLASH, IDENT("/") },
+    { false, ac_token_type_SLASH_EQUAL, IDENT("/=") },
+    { false, ac_token_type_SQUARE_L, IDENT("[") },
+    { false, ac_token_type_SQUARE_R, IDENT("]") },
+    { false, ac_token_type_STAR, IDENT("*") },
+    { false, ac_token_type_STAR_EQUAL, IDENT("*=") },
+    { false, ac_token_type_TILDE, IDENT("~") },
+    { false, ac_token_type_TILDE_EQUAL, IDENT("~=") },
+    { false, ac_token_type_TRIPLE_DOT, IDENT("...") }
 
     /* Other known identifiers like the preprocessor directives . @TODO */
 };
@@ -1552,7 +1530,7 @@ const char* ac_token_type_to_str(enum ac_token_type type) {
 
 strv ac_token_type_to_strv(enum ac_token_type type)
 {
-    return token_infos[type].name;
+    return token_infos[type].ident.text;
 }
 
 const char* ac_token_to_str(ac_token token) {
@@ -1562,12 +1540,21 @@ const char* ac_token_to_str(ac_token token) {
 
 strv ac_token_to_strv(ac_token token) {
 
-    if (token.type == ac_token_type_IDENTIFIER
-        || token.type == ac_token_type_LITERAL_CHAR
-        || token.type == ac_token_type_LITERAL_STRING)
+    if (token.type == ac_token_type_IDENTIFIER)
     {
-        return (strv){ token.text.size, token.text.data };
+        return token.ident->text;
     }
+    else if (token.type == ac_token_type_LITERAL_CHAR
+        || token.type == ac_token_type_LITERAL_STRING
+        || token.type == ac_token_type_LITERAL_INTEGER
+        || token.type == ac_token_type_LITERAL_FLOAT
+        || token.type == ac_token_type_HORIZONTAL_WHITESPACE
+        || token.type == ac_token_type_COMMENT
+        || token.type == ac_token_type_NEW_LINE)
+    {
+        return token.text;
+    }
+    
     return ac_token_type_to_strv(token.type);
 }
 
@@ -1589,7 +1576,8 @@ void ac_token_fprint(FILE* file, ac_token t)
     else  if (t.type == ac_token_type_LITERAL_CHAR)
         format = "'%.*s'";
 
-    fprintf(file, format, (int)t.text.size, t.text.data);
+    strv s = ac_token_to_strv(t);
+    fprintf(file, format, (int)s.size, s.data);
 }
 
 void ac_token_sprint(dstr* str, ac_token t)
@@ -1610,13 +1598,14 @@ void ac_token_sprint(dstr* str, ac_token t)
     else  if (t.type == ac_token_type_LITERAL_CHAR)
         format = "'%.*s'";
 
-    dstr_append_f(str, format, (int)t.text.size, t.text.data);
+    strv s = ac_token_to_strv(t);
+    dstr_append_f(str, format, (int)s.size, s.data);
 }
 
-bool ac_token_is_keyword_or_identifier(ac_token t) {
+bool ac_token_is_keyword_or_identifier(enum ac_token_type type) {
 
-    return t.type == ac_token_type_IDENTIFIER
-        || (t.type >= ac_token_type_ALIGNAS && t.type <= ac_token_type_WHILE);
+    return type == ac_token_type_IDENTIFIER
+        || (type >= ac_token_type_ALIGNAS && type <= ac_token_type_WHILE);
 }
 
 strv ac_token_prefix(ac_token token) {
@@ -1644,7 +1633,7 @@ strv ac_token_prefix(ac_token token) {
 static size_t token_str_len(enum ac_token_type type) {
     AC_ASSERT(!token_type_is_literal(type));
 
-    return token_infos[type].name.size;
+    return token_infos[type].ident.text.size;
 }
 
 static bool token_type_is_literal(enum ac_token_type type) {

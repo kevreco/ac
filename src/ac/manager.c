@@ -10,9 +10,12 @@
 
 static bool try_get_file_content(const char* filepath, dstr* content);
 
-static ht_hash_t identifier_hash(ac_token* sv);                   /* For the hash table. */
-static ht_bool identifiers_are_same(ac_token* left, ac_token* right); /* For the hash table. */
-static void swap_identifiers(ac_token* left, ac_token* right);        /* For the hash table. */
+static ht_hash_t identifier_hash(ac_ident_holder* i);                               /* For hash table. */
+static ht_bool identifiers_are_same(ac_ident_holder* left, ac_ident_holder* right); /* For hash table. */
+static void swap_identifiers(ac_ident_holder* left, ac_ident_holder* right);        /* For hash table. */
+static ht_hash_t literal_hash(strv* sv);                                /* For hash table. */
+static ht_bool literals_are_same(strv* left, strv* right);              /* For hash table. */
+static void swap_literals(strv* left, strv* right);                     /* For hash table. */
 
 void ac_options_init_default(ac_options* o)
 {
@@ -50,10 +53,17 @@ void ac_manager_init(ac_manager* m, ac_options* o)
     ac_allocator_arena_init(&m->identifiers_arena, 16 * 1024);
 
     ht_init(&m->identifiers,
-        sizeof(ac_token),
+        sizeof(ac_ident_holder),
         (ht_hash_function_t)identifier_hash,
         (ht_predicate_t)identifiers_are_same,
         (ht_swap_function_t)swap_identifiers,
+        0);
+
+    ht_init(&m->literals,
+        sizeof(strv),
+        (ht_hash_function_t)literal_hash,
+        (ht_predicate_t)literals_are_same,
+        (ht_swap_function_t)swap_literals,
         0);
 
     m->options = *o;
@@ -63,6 +73,8 @@ void ac_manager_init(ac_manager* m, ac_options* o)
 void ac_manager_destroy(ac_manager* m)
 {
     ht_destroy(&m->identifiers);
+    ht_destroy(&m->literals);
+
     ac_allocator_arena_destroy(&m->identifiers_arena);
     ac_allocator_arena_destroy(&m->ast_arena);
 
@@ -103,33 +115,68 @@ ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath)
     }
 }
 
-void ac_create_or_reuse_identifier(ac_manager* mgr, strv ident, ac_token* result)
+ac_ident_holder ac_create_or_reuse_identifier(ac_manager* m, strv ident)
 {
-    ac_create_or_reuse_identifier_h(mgr, ident, ac_djb2_hash((char*)ident.data, ident.size), result);
+    return ac_create_or_reuse_identifier_h(m, ident, ac_djb2_hash((char*)ident.data, ident.size));
 }
 
-void ac_create_or_reuse_identifier_h(ac_manager* mgr, strv ident, size_t hash, ac_token* result)
+ac_ident_holder ac_create_or_reuse_identifier_h(ac_manager* m, strv ident_text, size_t hash)
 {
-    ac_token token_for_search;
-    token_for_search.type = ac_token_type_NONE;
-    token_for_search.text = ident;
-    ac_token* result_item = (ac_token*)ht_get_item_h(&mgr->identifiers, &token_for_search, hash);
+    ac_ident i;
+    i.text = ident_text;
+    ac_ident_holder ident_to_find = {&i};
+    ac_ident_holder* result_ident = (ac_ident_holder*)ht_get_item_h(&m->identifiers, &ident_to_find, hash);
 
     /* If the identifier is new, a new entry is created. */
-    if (result_item == NULL)
+    if (result_ident == NULL)
     {
-        ac_token t;
-        t.text.data = ac_allocator_allocate(&mgr->identifiers_arena.allocator, ident.size);
-        t.text.size = ident.size;
-        t.type = ac_token_type_IDENTIFIER;
-        memcpy((char*)t.text.data, ident.data, ident.size);
+        ac_ident* i = ac_allocator_allocate(&m->identifiers_arena.allocator, sizeof(ac_ident));
+        memset(i, 0, sizeof(ac_ident));
 
-        ht_insert_h(&mgr->identifiers, &t, hash);
-        *result = t;
+        i->text.data = ac_allocator_allocate(&m->identifiers_arena.allocator, ident_text.size);
+        memcpy((char*)i->text.data, ident_text.data, ident_text.size);
+
+        i->text.size = ident_text.size;
+        ac_ident_holder holder = { .ident = i, .token_type = ac_token_type_IDENTIFIER };
+        ht_insert_h(&m->identifiers, &holder, hash);
+        return holder;
     }
     else
     {
-        *result = *result_item;
+        return *result_ident;
+    }
+}
+
+void ac_register_known_identifier(ac_manager* m, ac_ident* id, /* enum ac_token_type */ size_t token_type)
+{
+    ac_ident_holder holder = { .ident = id, .token_type = token_type };
+  
+    ht_hash_t h = ac_djb2_hash((char*)id->text.data, id->text.size);
+    ht_insert_h(&m->identifiers, &holder, h);
+}
+
+strv ac_create_or_reuse_literal(ac_manager* m, strv literal_text)
+{
+    return ac_create_or_reuse_literal_h(m, literal_text, ac_djb2_hash((char*)literal_text.data, literal_text.size));
+}
+
+strv ac_create_or_reuse_literal_h(ac_manager* m, strv literal_text, size_t hash)
+{
+    strv* result_literal = (strv*)ht_get_item_h(&m->literals, &literal_text, hash);
+
+    /* If the identifier is new, a new entry is created. */
+    if (result_literal == NULL)
+    {
+        strv v;
+        v.data = (const char*)ac_allocator_allocate(&m->identifiers_arena.allocator, literal_text.size);
+        memcpy((char*)v.data, literal_text.data, literal_text.size);
+        v.size = literal_text.size;
+        ht_insert_h(&m->literals, &v, hash);
+        return v;
+    }
+    else
+    {
+        return *result_literal;
     }
 }
 
@@ -154,19 +201,37 @@ static bool try_get_file_content(const char* filepath, dstr* content)
     return true;
 }
 
-static ht_hash_t identifier_hash(ac_token* sv)
+static ht_hash_t identifier_hash(ac_ident_holder* i)
 {
-    return ac_djb2_hash((char*)sv->text.data, sv->text.size);
+    return ac_djb2_hash((char*)i->ident->text.data, i->ident->text.size);
 }
 
-static ht_bool identifiers_are_same(ac_token* left, ac_token* right)
+static ht_bool identifiers_are_same(ac_ident_holder* left, ac_ident_holder* right)
 {
-    return strv_equals(left->text, right->text);
+    return strv_equals(left->ident->text, right->ident->text);
 }
 
-static void swap_identifiers(ac_token* left, ac_token* right)
+static void swap_identifiers(ac_ident_holder* left, ac_ident_holder* right)
 {
-    ac_token tmp;
+    ac_ident_holder tmp;
+    tmp = *left;
+    *left = *right;
+    *right = tmp;
+}
+
+static ht_hash_t literal_hash(strv* literal)
+{
+    return ac_djb2_hash((char*)literal->data, literal->size);
+}
+
+static ht_bool literals_are_same(strv* left, strv* right)
+{
+    return strv_equals(*left, *right);
+}
+
+static void swap_literals(strv* left, strv* right)
+{
+    strv tmp;
     tmp = *left;
     *left = *right;
     *right = tmp;

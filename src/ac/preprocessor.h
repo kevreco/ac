@@ -12,12 +12,27 @@ typedef struct ac_macro ac_macro;
 
 typedef darrT(ac_token) darr_token;
 
-typedef struct ac_token_list ac_token_list;
-struct ac_token_list {
-	darr_token* tokens;
-	size_t i;        /* Next token to pick up. */
-	ac_macro* macro; /* Not null if it's coming from a macro. */
-	int macro_depth; /* Macro depth of the list of token. To avoid counting argument delimiter if the tokens are coming from expanded macros. */
+enum ac_token_cmd_type {
+	ac_token_cmd_type_TOKEN_LIST,   /* Expanded tokens coming from macro. */
+	ac_token_cmd_type_MACRO_POP,    /* To make a macro expandable again. */
+};
+
+typedef struct ac_token_cmd ac_token_cmd;
+struct ac_token_cmd {
+	enum ac_token_cmd_type type;
+	
+	union {
+		struct {
+			ac_token* data;
+			size_t count;
+			size_t i;
+		} token_list;
+
+		struct {
+			ac_macro* macro;
+			darr_token tokens;
+		} macro_pop;
+	};
 };
 
 typedef struct ac_pp ac_pp;
@@ -28,8 +43,8 @@ struct ac_pp {
 	ht macros;         /* Hash table containing macros. */
 
 	/* Stack of list of tokens. It's mostly used for macro but we should be able to add tokens if we peek some next ones. */
-	darrT(ac_token_list) stack;
-	ac_token expanded_token;    /* Last token retrieved from the stack. */
+	darrT(ac_token_cmd) cmd_stack;
+
 	ac_token* current_token;
 	
 	/* previous_was_space: to know if the previous token was a space. This is only relevant in case of macro expansion. */

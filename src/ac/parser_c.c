@@ -420,7 +420,7 @@ static ac_ast_identifier* parse_identifier(ac_parser_c* p) {
     assert(token_is(p, ac_token_type_IDENTIFIER));
 
     AST_NEW(p, ac_ast_identifier, result, location(p), ac_ast_type_IDENTIFIER);
-    result->name = token(p).text;
+    result->name = token(p).ident->text;
 
     goto_next_token(p); /* skip identifier */
 
@@ -808,7 +808,7 @@ static bool expect_and_consume(ac_parser_c* p, enum ac_token_type type)
                 && previous.type != ac_token_type_SEMI_COLON
                 && previous.type != ac_token_type_BRACE_R)
             {
-                strv current_string = previous.text;
+                strv current_string = ac_token_to_strv(previous);
 
                 ac_report_error_loc(loc, "Syntax error: unexpected end-of-file after: '%.*s'\n"
                     , current_string.size, current_string.data

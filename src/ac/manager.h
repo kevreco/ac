@@ -11,8 +11,7 @@
 extern "C" {
 #endif
 
-typedef struct ac_token ac_token;
-
+typedef struct ac_ident ac_ident;
 typedef struct ac_ast_top_level ac_ast_top_level;
 
 typedef struct ac_source_file ac_source_file;
@@ -51,7 +50,6 @@ struct ac_options {
     bool debug_parser;                   /* Will print some debugging values in the output. */ 
     bool preprocess;                     /* Print preprocess result in the standard output. */
     bool reject_hex_float;               /* Prevent hex float parsing. */
-    bool reject_stray;                   /* Prevent stray parsing */
 };
 
 void ac_options_init_default(ac_options* o);
@@ -70,6 +68,7 @@ struct ac_manager {
     ac_allocator_arena ast_arena;
     ac_allocator_arena identifiers_arena;
     ht identifiers; /* Hash table with all identifiers to compare them faster with a hash. */
+    ht literals;    /* Hash table with all literals to compare them faster with a hash. */
     /* keep reference to destroy it. */
     ac_source_file source_file;
     ac_ast_top_level* top_level;
@@ -80,11 +79,20 @@ void ac_manager_destroy(ac_manager* m);
 
 ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath);
 
+typedef struct ac_ident_holder ac_ident_holder;
+struct ac_ident_holder
+{
+    ac_ident* ident;
+    /* enum ac_token_type */ size_t token_type;
+};
 /* NOTE: An ac_token is returned as result simply because we want a string view and a token type. */
-/* @TODO rename this. */
-void ac_create_or_reuse_identifier(ac_manager* mgr, strv ident, ac_token* result);
-/* @TODO rename this. */
-void ac_create_or_reuse_identifier_h(ac_manager* mgr, strv ident, size_t hash, ac_token* result);
+ac_ident_holder ac_create_or_reuse_identifier(ac_manager* m, strv ident_text);
+ac_ident_holder ac_create_or_reuse_identifier_h(ac_manager* m, strv ident_text, size_t hash);
+/* Register keywords or known identifier. It helps to retrieve the type of a token from it's text value. */
+void ac_register_known_identifier(ac_manager* m, ac_ident* id, /* enum ac_token_type */ size_t type);
+
+strv ac_create_or_reuse_literal(ac_manager* m, strv literal_text);
+strv ac_create_or_reuse_literal_h(ac_manager* m, strv literal_text, size_t hash);
 
 #ifdef __cplusplus
 } /* extern "C" */

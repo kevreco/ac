@@ -7,7 +7,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+typedef enum ac_token_type ac_token_type;
 enum ac_token_type {
     ac_token_type_NONE,
 
@@ -153,10 +153,19 @@ struct ac_token_number {
     } u;
 };
 
+typedef struct ac_ident ac_ident;
+struct ac_ident {
+    strv text;
+    bool cannot_expand;
+};
+
 typedef struct ac_token ac_token;
 struct ac_token {
     enum ac_token_type type;
-    strv text;
+    union {
+        ac_ident* ident; /* Keywords or identifiers. */
+        strv text;       /* Literals, comments, or tokens known at compile time like "<<". */
+    };
     union {
         ac_token_number number;
         struct {
@@ -184,7 +193,6 @@ struct ac_token {
 typedef struct ac_lex_options ac_lex_options;
 struct ac_lex_options {
     bool reject_hex_float;
-    bool reject_stray;
 };
 
 typedef struct ac_lex ac_lex;
@@ -233,7 +241,7 @@ strv ac_token_to_strv(ac_token t);
 void ac_token_fprint(FILE* file, ac_token t); /* Print to file. */
 void ac_token_sprint(dstr* str, ac_token t);  /* Print to dynamic string. */
 
-bool ac_token_is_keyword_or_identifier(ac_token t);
+bool ac_token_is_keyword_or_identifier(enum ac_token_type type);
 strv ac_token_prefix(ac_token t);
 
 #ifdef __cplusplus

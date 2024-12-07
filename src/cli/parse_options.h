@@ -17,7 +17,6 @@ static const struct options {
     strv parse_only;
     strv preprocess;
     strv reject_hex_float;
-    strv reject_stray;
 } cli_options = {
     .colored_output = STRV("--colored-output"),
     .debug_parser     = STRV("--debug-parser"),
@@ -26,7 +25,6 @@ static const struct options {
     .parse_only = STRV("--parse-only"),
     .preprocess = STRV("--preprocess"),
     .reject_hex_float = STRV("--reject-hex-float"),
-    .reject_stray = STRV("--reject-stray")
 };
 /*
     We don't treat the --option-file option the same way.
@@ -86,10 +84,6 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         else if (arg_equals(arg, cli_options.reject_hex_float))
         {
             o->reject_hex_float = true;
-        }
-        else if (arg_equals(arg, cli_options.reject_stray))
-        {
-            o->reject_stray = true;
         }
         
         /* Ignore --option-file since it has been handled at this point */
