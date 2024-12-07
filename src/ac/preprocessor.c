@@ -736,8 +736,8 @@ static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac
     AC_ASSERT(count == 1);
 
     /* If the token is the macro identifier we mark it as non expandable. */
-    /* @TODO create a method to encapsulate this. */
-    if (m->identifier.ident == tokens[0].ident)
+    if (ac_token_is_keyword_or_identifier(tokens[0].type)
+        && tokens[0].ident == m->identifier.ident)
     {
         tokens[0].ident->cannot_expand = true;
     }
@@ -956,8 +956,7 @@ static void expand_object_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
             }
 
             if (ac_token_is_keyword_or_identifier(body_token.type)
-                && ( body_token.ident->cannot_expand)
-                )
+                && body_token.ident->cannot_expand)
             {
                 body_token.cannot_expand = true;
             }
