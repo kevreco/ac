@@ -37,9 +37,7 @@ static int consume_one(ac_lex* l);        /* goto next char and keep up with loc
 static void consume_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time.  */
 static int skip_if_stray(ac_lex* l);      /* Get character after the current stray or return the current character. */
 static int next_char_no_stray(ac_lex* l);
-static int next_digit(ac_lex* l);         /* Get next digit, ignoring quotes and underscores. Push the digit to the token_buf.*/
-
-static void skipn(ac_lex* l, unsigned n); /* skip n char */
+static int next_digit(ac_lex* l);         /* Get next digit, ignoring quotes and underscores. Push the digit to the token_buf. */
 
 static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text); /* set current token and got to next */
 static ac_token* token_error(ac_lex* l); /* set current token to error and returns it. */
@@ -315,10 +313,16 @@ switch_start:
                 consume_one(l);
             }
 
-            if (is_eof(l)) {
-                ac_report_error_loc(location, "Cannot find closing comment tag '*/'.\n");
+            int count = 2;
+            while (count) {
+                if (is_eof(l)) {
+                    ac_report_error_loc(location, "Cannot find closing comment tag '*/'.\n");
+                    return token_eof(l);
+                }
+                consume_one(l); /* Skip '*' then '/' */
+                count -= 1;
             }
-            skipn(l, 2); /* Skip closing comment tag. */
+           
             return token_from_text(l, ac_token_type_COMMENT, strv_make_from(start, l->cur - start));;
         }
 
@@ -631,18 +635,6 @@ static int next_digit(ac_lex* l)
     }
     dstr_append_char(&l->tok_buf, c);
     return c;
-}
-
-/* @TODO: Remove this function since it's used only once. */
-static void skipn(ac_lex* l, unsigned n) {
-
-    for (unsigned i = 0; i < n; ++i) {
-        consume_one(l);
-    }
-
-    if (l->cur > l->end) {
-        fprintf(stderr, "skipn, buffer overflow\n");
-    }
 }
 
 static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) {
