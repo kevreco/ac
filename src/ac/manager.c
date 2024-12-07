@@ -68,6 +68,17 @@ void ac_manager_init(ac_manager* m, ac_options* o)
 
     m->options = *o;
     global_options = o->global;
+
+    ac_token_info* infos = ac_token_infos();
+    /* Register keywords and known tokens. */
+    for (int i = 0; i < ac_token_type_COUNT; i += 1)
+    {
+        ac_token_info* info = infos + i;
+        if (info->is_supported && ac_token_is_keyword_or_identifier(info->type))
+        {
+            ac_register_known_identifier(m, &info->ident, info->type);
+        }
+    }
 }
 
 void ac_manager_destroy(ac_manager* m)

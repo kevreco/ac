@@ -13,13 +13,6 @@ enum base_type {
     base16 = 16,
 };
 
-typedef struct token_info token_info;
-struct token_info {
-    bool is_supported;
-    enum ac_token_type type;
-    ac_ident ident;
-};
-
 static const strv empty = STRV("");
 /* char and string literal prefix. */
 static const strv no_prefix = STRV("");
@@ -28,7 +21,7 @@ static const strv utf16 = STRV("u");
 static const strv utf32 = STRV("U");
 static const strv wide = STRV("L");
 
-static token_info token_infos[ac_token_type_COUNT];
+static ac_token_info token_infos[ac_token_type_COUNT];
 
 static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
 static bool is_horizontal_whitespace(char c);      /* char is alphanumeric */
@@ -106,18 +99,6 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr)
 
     dstr_init(&l->tok_buf);
     dstr_init(&l->str_buf);
-
-    /* Register keywords and known tokens. */
-    int i = 0;
-    for (; i < ac_token_type_COUNT; ++i)
-    {
-        if (token_infos[i].is_supported && ac_token_is_keyword_or_identifier(token_infos[i].type))
-        {
-            /* @FIXME: this should be done once in the manager.
-              Multiple lexer are instanciated however the known identifier won't be registered again. */
-            ac_register_known_identifier(l->mgr, &token_infos[i].ident, token_infos[i].type);
-        }
-    }
 }
 
 void ac_lex_destroy(ac_lex* l)
@@ -1391,7 +1372,7 @@ ac_token
 #define TOKEN_INFO_COUNT (sizeof(token_infos) / sizeof(token_infos[0]))
 #define IDENT(value) { STRV(value) }
 
-static token_info token_infos[] = {
+static ac_token_info token_infos[] = {
 
     { false, ac_token_type_NONE, IDENT("<none>") },
 
@@ -1602,6 +1583,10 @@ void ac_token_sprint(dstr* str, ac_token t)
     dstr_append_f(str, format, (int)s.size, s.data);
 }
 
+ac_token_info* ac_token_infos()
+{
+    return token_infos;
+}
 bool ac_token_is_keyword_or_identifier(enum ac_token_type type) {
 
     return type == ac_token_type_IDENTIFIER

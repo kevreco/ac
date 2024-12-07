@@ -189,6 +189,14 @@ struct ac_token {
     bool cannot_expand;      /* @TODO @OPT place this in a flag. */
 };
 
+
+typedef struct ac_token_info ac_token_info;
+struct ac_token_info {
+    bool is_supported;
+    enum ac_token_type type;
+    ac_ident ident;
+};
+
 /* @TODO move this to the compiler options. */
 typedef struct ac_lex_options ac_lex_options;
 struct ac_lex_options {
@@ -240,6 +248,8 @@ const char* ac_token_to_str(ac_token t);
 strv ac_token_to_strv(ac_token t);
 void ac_token_fprint(FILE* file, ac_token t); /* Print to file. */
 void ac_token_sprint(dstr* str, ac_token t);  /* Print to dynamic string. */
+
+ac_token_info* ac_token_infos();
 
 bool ac_token_is_keyword_or_identifier(enum ac_token_type type);
 strv ac_token_prefix(ac_token t);
