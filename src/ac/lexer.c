@@ -59,16 +59,11 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
 static int hex_string_to_int(const char* c, size_t len);
 static ac_token* parse_integer_or_float_literal(ac_lex* l);
 
-static int hex_digit_to_int(char c);
-static bool try_parse_escaped_char(ac_lex* l, int* result);
 static void* utf8_decode(void* p, int32_t* pc);
 
 static strv string_or_char_literal_to_buffer(ac_lex* l, char quote);
-static ac_token* parse_string_literal(ac_lex* l);
-static ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix);
-static ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix);
-static ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix);
-static ac_token* token_string(ac_lex* l, strv literal, strv content, strv kind);
+static ac_token* parse_string_literal(ac_lex* l, strv prefix);
+static ac_token* token_string(ac_lex* l, strv literal, strv kind);
 
 static ac_token* token_char(ac_lex* l, strv prefix);
 
@@ -367,7 +362,7 @@ switch_start:
         return token_from_type(l, ac_token_type_DOT);
     }
     
-    case '"' : return parse_string_literal(l);
+    case '"' : return parse_string_literal(l, no_prefix);
     case '\'': return token_char(l, no_prefix);
     case '\0': return token_eof(l);
 
@@ -440,10 +435,10 @@ parse_identifier:
 
         if (l->cur[0] == '"') /* Handle string literal. */
         {
-            if (strv_equals(ident, utf8)) return parse_utf8_string_literal(l, utf8);
-            else if (strv_equals(ident, utf16)) return parse_utf16_string_literal(l, utf16);
-            else if (strv_equals(ident, utf32)) return parse_utf32_string_literal(l, utf32);
-            else if (strv_equals(ident, wide)) return parse_utf32_string_literal(l, wide);
+            if (strv_equals(ident, utf8)) return parse_string_literal(l, utf8);
+            else if (strv_equals(ident, utf16)) return parse_string_literal(l, utf16);
+            else if (strv_equals(ident, utf32)) return parse_string_literal(l, utf32);
+            else if (strv_equals(ident, wide)) return parse_string_literal(l, wide);
             else {
                 ac_report_error_loc(l->leading_location, "Invalid string literal prefix '%.*s'", ident.size, ident.data);
                 return token_eof(l);
@@ -631,6 +626,7 @@ static int next_digit(ac_lex* l)
     int c = next_char_no_stray(l);
 
     while (c == '\'' || c == '_') {
+        dstr_append_char(&l->tok_buf, c);
         c = next_char_no_stray(l);
     }
     dstr_append_char(&l->tok_buf, c);
@@ -1037,78 +1033,6 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l)
     return token_integer_literal(l, num);
 }
 
-static int hex_digit_to_int(char c) {
-    if (c >= '0' && c <= '9')
-        return c - '0';
-    if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-    return c - 'A' + 10;
-}
-
-static bool try_parse_escaped_char(ac_lex* l, int* result) {
-   
-    int c = l->cur[0];
-    AC_ASSERT(c == '\\');
-
-    c = next_char_no_stray(l); /* Skip '\' */
-
-    *result = 0;
-    int ch = 0;
-    if (is_octal_digit(c)) { /* Try to parse octal. */
-        ch = c - '0';
-        c = next_char_no_stray(l);
-        if (is_octal_digit(c)) {
-            ch = (ch * base8) + (c - '0');
-            c = next_char_no_stray(l);
-            if (is_octal_digit(c)) {
-                ch = (ch * base8) + (c - '0');
-                c = next_char_no_stray(l);
-            }
-        }
-        *result = ch;
-        return true;
-    }
-
-    if (c == 'x') {
-        c = next_char_no_stray(l); /* Skip 'x' */
-
-        int count = 0;
-        while(is_hex_digit(c)) {
-            ch = (ch * base16) + hex_digit_to_int(c);
-            c = next_char_no_stray(l); /* Skip current hex char */
-            count += 1;
-        }
-        if (count == 0) {
-            ac_report_error_loc(l->leading_location, "Invalid hexadecimal escape sequence.");
-        }
-           
-        *result = ch;
-        return true;
-    }
-
-    switch (c) {
-    case 'a':  { *result = '\a'; c = next_char_no_stray(l); return true; } /* 0x07 */
-    case 'b':  { *result = '\b'; c = next_char_no_stray(l); return true; } /* 0x08 */
-    case 't':  { *result = '\t'; c = next_char_no_stray(l); return true; } /* 0x09 */
-    case 'n':  { *result = '\n'; c = next_char_no_stray(l); return true; } /* 0x0a */
-    case 'v':  { *result = '\v'; c = next_char_no_stray(l); return true; } /* 0x0b */
-    case 'f':  { *result = '\f'; c = next_char_no_stray(l); return true; } /* 0x0c */
-    case '\'': { *result = '\''; c = next_char_no_stray(l); return true; } /* 0x27 */
-    case '"':  { *result = '"';  c = next_char_no_stray(l); return true; } /* 0x22 */
-    case '?':  { *result = '?';  c = next_char_no_stray(l); return true; } /* 0x3f */
-    case '\\': { *result = '\\'; c = next_char_no_stray(l); return true; } /* 0x5c */
-    case 'U':
-    case 'u' : { 
-        ac_report_error_loc(l->location, "Universal character names are not supported yet.");
-        return false;
-    }
-    default: 
-        ac_report_warning_loc(l->location, "Unknown escape sequence '\\%c'", c);
-        *result = c;
-        return true;
-    }
-}
-
 static void* utf8_decode(void* p, int32_t* pc)
 {
     const int replacement = 0xFFFD;
@@ -1143,7 +1067,6 @@ static void* utf8_decode(void* p, int32_t* pc)
     return NULL;
 }
 
-
 static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
 {
     strv inner_content = empty;
@@ -1177,17 +1100,8 @@ static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
                 && is_not_char(l, '\n')
                 && is_not_char(l, '\r'))
         {
-            if (c == '\\')
-            {
-                if (!try_parse_escaped_char(l, &c))
-                    return empty;
-                dstr_append_char(&l->tok_buf, c);
-            }
-            else
-            {
-                dstr_append_char(&l->tok_buf, c);
-                c = next_char_no_stray(l);
-            }
+            dstr_append_char(&l->tok_buf, c);
+            c = next_char_no_stray(l);
         }
 
         strv sv = dstr_to_strv(&l->tok_buf);
@@ -1209,99 +1123,25 @@ static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
     return inner_content;
 }
 
-static ac_token* parse_string_literal(ac_lex* l) {
-    return parse_utf8_string_literal(l, no_prefix);
-}
-
-static ac_token* parse_utf8_string_literal(ac_lex* l, strv prefix) {
+static ac_token* parse_string_literal(ac_lex* l, strv prefix) {
     AC_ASSERT(is_char(l, '"'));
-    AC_ASSERT(prefix.data == no_prefix.data || prefix.data == utf8.data);
+    AC_ASSERT(prefix.data == no_prefix.data
+        || prefix.data == utf8.data
+        || prefix.data == utf16.data
+        || prefix.data == utf32.data);
 
     strv literal = string_or_char_literal_to_buffer(l, '"');
     if (literal.size <= 0)
         return token_eof(l);
 
-    return token_string(l, literal, literal, prefix);
+    return token_string(l, literal, prefix);
 }
 
-static ac_token* parse_utf16_string_literal(ac_lex* l, strv prefix) {
-    AC_ASSERT(is_char(l, '"'));
-    AC_ASSERT(prefix.data == utf16.data);
-
-    strv literal = string_or_char_literal_to_buffer(l, '"');
-    if (literal.size <= 0)
-        return token_eof(l);
-
-    /* Reserve enough space to hold new utf16 content */
-    dstr_reserve(&l->str_buf, (2 * (literal.size + 1)));
-    l->str_buf.size = 0;
-    uint16_t* buffer = (uint16_t*)l->str_buf.data;
-    int buffer_len = 0;
-
-    char* cursor = (char*)literal.data;
-    char* end = (char*)literal.data + literal.size;
-    while (cursor < end) {
-        uint32_t c;
-        cursor = utf8_decode(cursor, &c);
-
-        if (c < 0x10000) { /* Encode a code point in 2 bytes. */
-            buffer[buffer_len++] = c;
-        } else {  /* Encode a code point in 4 bytes. */
-            c -= 0x10000;
-            buffer[buffer_len++] = 0xd800 + ((c >> 10) & 0x3ff);
-            buffer[buffer_len++] = 0xdc00 + (c & 0x3ff);
-        }
-    }
-
-    buffer[buffer_len] = '\0';
-
-    strv utf16_content;
-    utf16_content.data = l->str_buf.data;
-    utf16_content.size = buffer_len * sizeof(uint16_t);
-
-    return token_string(l, literal, utf16_content, prefix);
-}
-
-static ac_token* parse_utf32_string_literal(ac_lex* l, strv prefix)
-{
-    AC_ASSERT(prefix.data == utf32.data || prefix.data == wide.data);
-
-    AC_ASSERT(is_char(l, '"'));
-
-    strv literal = string_or_char_literal_to_buffer(l, '"');
-    if (literal.size <= 0)
-        return token_eof(l);
-
-    /* Reserve enough space to hold new utf32 content */
-    dstr_reserve(&l->str_buf, (4 * (literal.size + 1)));
-    l->str_buf.size = 0;
-    uint32_t* buffer = (uint32_t*)l->str_buf.data;
-    int buffer_len = 0;
-
-    char* cursor = (char*)literal.data;
-    char* end = (char*)literal.data + literal.size;
-    while (cursor < end) {
-        uint32_t c;
-        cursor = utf8_decode(cursor, &c);
-        buffer[buffer_len++] = c;
-    }
-
-    buffer[buffer_len] = '\0';
-
-    strv utf16_content;
-    utf16_content.data = l->str_buf.data;
-    utf16_content.size = buffer_len * sizeof(uint32_t);
-
-    return token_string(l, literal, utf16_content, prefix);
-}
-
-static ac_token* token_string(ac_lex* l, strv literal, strv encoded_content, strv prefix)
+static ac_token* token_string(ac_lex* l, strv literal, strv prefix)
 {
     l->token.type = ac_token_type_LITERAL_STRING;
 
     l->token.text = ac_create_or_reuse_literal(l->mgr, literal);
-
-    l->token.u.str.encoded_content = ac_create_or_reuse_literal(l->mgr, encoded_content);
 
     if (prefix.data == utf8.data)
         l->token.u.str.is_utf8 = true;

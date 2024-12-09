@@ -692,7 +692,6 @@ static ac_token stringize(ac_pp* pp, ac_token* tokens, size_t count)
     strv sv = ac_create_or_reuse_literal(pp->mgr, dstr_to_strv(& pp->concat_buffer));
     t.type = ac_token_type_LITERAL_STRING;
     t.text = sv;
-    t.u.str.encoded_content = sv;
     return t;
 }
 

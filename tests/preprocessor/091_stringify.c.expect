@@ -1,0 +1,11 @@
+"'foo'"
+"'\"'"
+"\"'\""
+"\n"
+"'\\n'"
+"\"\\n\""
+"\"\\\\\""
+"'\\\\'"
+"\"foo\\nbar\""
+"1'0'1'0" /* Number with quote spacing. */
+"'\\x09'" /* Charater with escape sequence. */

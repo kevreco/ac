@@ -163,13 +163,17 @@ typedef struct ac_token ac_token;
 struct ac_token {
     enum ac_token_type type;
     union {
-        ac_ident* ident; /* Keywords or identifiers. */
-        strv text;       /* Literals, comments, or tokens known at compile time like "<<". */
+        /* Keywords or identifiers. */
+        ac_ident* ident; 
+        /* Literals, comments, or tokens known at compile time like "<<".
+           It contains the verbatim content.
+           It's necessary to keep a reference of this for the preprocessor part.
+           Example: "\n" count for two characters. */
+        strv text;       
     };
     union {
         ac_token_number number;
         struct {
-            strv encoded_content;
             bool is_utf8;    /* @TODO @OPT place this in a flag. */
             bool is_utf16;   /* @TODO @OPT place this in a flag. */
             bool is_utf32;   /* @TODO @OPT place this in a flag. */
