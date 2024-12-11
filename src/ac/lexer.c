@@ -1207,6 +1207,7 @@ ac_token
 static ac_token_info token_infos[] = {
 
     { false, ac_token_type_NONE, IDENT("<none>") },
+    { false, ac_token_type_EMPTY, IDENT("") },
 
     /* Keywords */
 

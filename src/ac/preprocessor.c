@@ -6,6 +6,8 @@ struct range {
     size_t end;
 };
 
+typedef darrT(range) darr_range;
+
 size_t range_size(range r) { return r.end - r.start; }
 
 typedef struct ac_macro ac_macro;
@@ -548,6 +550,7 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
 
     if (m->identifier.ident->cannot_expand)
     {
+        /* @FIXME this might be totally uncessary because token.cannot_expand is setup when it's added to the command stack. */
         tok->cannot_expand = true;
     }
 
@@ -618,6 +621,12 @@ static size_t find_parameter_index(ac_token* token, ac_macro* m)
 
 static void concat(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token left, ac_token right)
 {
+    /* When two empty tokens are concatenated no new tokens are created. */
+    if (left.type == ac_token_type_EMPTY && right.type == ac_token_type_EMPTY)
+    {
+        return;
+    }
+
     bool previous_was_space = left.previous_was_space;
     left.previous_was_space = false;  /* Avoid space in future concatenation. */
     right.previous_was_space = false; /* Avoid space in future concatenation. */
@@ -743,6 +752,27 @@ static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac
     darrT_push_back(arr, tokens[0]);
 }
 
+static void add_empty_arg(darr_token* args, darr_range* ranges)
+{
+    range r = { 0 };
+    r.start = darrT_size(args);
+    
+    {
+        /* Add empty token */
+        ac_token t = { 0 };
+        t.type = ac_token_type_EMPTY;
+        darrT_push_back(args, t);
+
+        /* Add EOF token */
+        ac_token eof = *ac_token_eof();
+        darrT_push_back(args, eof);
+    }
+
+    r.end = darrT_size(args);
+    /* Add the range. */
+    darrT_push_back(ranges, r);
+}
+
 static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
 {
     bool result = false;
@@ -754,8 +784,8 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
     nesting_level += 1;
 
 
-    darrT(ac_token) args; /* @OPT: Use a pool allocator to avoid unncessary malloc/free. */
-    darrT(range) ranges;  /* @OPT: Use a pool allocator to avoid unncessary malloc/free. */
+    darr_token args; /* @OPT: Use a pool allocator to avoid unncessary malloc/free. */
+    darr_range ranges;  /* @OPT: Use a pool allocator to avoid unncessary malloc/free. */
 
     darrT_init(&args);
     darrT_init(&ranges);
@@ -813,23 +843,39 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
             {
                 goto_next_token_from_macro_agrument(pp); /* Skip ',' */
             }
-
-            ac_token eof = *ac_token_eof();
-            darrT_push_back(&args, eof);
-            r.end = darrT_size(&args);
             
-            darrT_push_back(&ranges, r);
+            bool no_token_added = r.start == darrT_size(&args);
+            if (no_token_added) /* Add empty token if there is no token in the arguments. */
+            {
+                add_empty_arg(&args, &ranges);
+            }
+            else
+            {
+                /* Add EOF token as sentinel value to be able to know where this sequence of tokens is ending. */
+                /* @FIXME: create a special token to avoid confusion. */
+                ac_token eof = *ac_token_eof();
+                darrT_push_back(&args, eof);
 
+                r.end = darrT_size(&args);
+
+                /* Add range. */
+                darrT_push_back(&ranges, r);
+                
+            }
             r.start = darrT_size(&args);
-
             current_param_index += 1;
         }
     }
 
     if (current_param_index < param_count) /* No parameter should be left. */
     {
-        ac_report_error_loc(location(pp), "Macro call is missing arguments.");
-        goto cleanup;
+        ac_report_warning_loc(location(pp), "Macro call is missing arguments.");
+
+        /* Where macro is missing argument we replace them with empty arguments. */
+        for (int i = current_param_index; i < param_count; i += 1)
+        {
+            add_empty_arg(&args, &ranges);
+        }
     }
 
     if (token(pp).type != ac_token_type_PAREN_R) {
@@ -923,9 +969,13 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
     }
 
     macro_push(pp, m);
-
     push_cmd(pp, make_cmd_macro_pop(m, exp));
-    push_cmd(pp, to_cmd_token_list(&exp));
+
+    /* Only push tokens if there are some. */
+    if (exp.arr.size)
+    {
+        push_cmd(pp, to_cmd_token_list(&exp));
+    }
 
     result = true;
 cleanup:

@@ -10,6 +10,7 @@ extern "C" {
 typedef enum ac_token_type ac_token_type;
 enum ac_token_type {
     ac_token_type_NONE,
+    ac_token_type_EMPTY, /* Special token which mean "no token". */
 
     /* Keywords */
 

@@ -2,3 +2,4 @@
 /* Empty arguments */
 foo(1+2,)
 foo(,3+4)
+foo()
