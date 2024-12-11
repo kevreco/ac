@@ -738,9 +738,8 @@ static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac
     if (ac_token_is_keyword_or_identifier(tokens[0].type)
         && tokens[0].ident == m->identifier.ident)
     {
-        tokens[0].ident->cannot_expand = true;
+        tokens[0].cannot_expand = true;
     }
-
     darrT_push_back(arr, tokens[0]);
 }
 
