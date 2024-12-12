@@ -220,13 +220,13 @@ static ac_token* goto_next_normal_token(ac_pp* pp)
 
 static ac_token* goto_next_token_from_directive(ac_pp* pp)
 {
-    ac_token* token = goto_next_normal_token(pp);
+    ac_token* token = goto_next_raw_token(pp);
     ac_token* previous_token = token;
 
     while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
         || token->type == ac_token_type_COMMENT)
     {
-        token = goto_next_normal_token(pp);
+        token = goto_next_raw_token(pp);
         token->previous_was_space = true;
     }
 
