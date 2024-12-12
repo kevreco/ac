@@ -84,6 +84,9 @@ static ac_token stringize(ac_pp* pp, ac_token* tokens, size_t count);
    This also handle the concat operator '##'. */
 static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token* tokens, size_t count);
 
+/* Add empty argument to sequence of tokens. */
+static void add_empty_arg(darr_token* args, darr_range* ranges);
+
 /* Return true if something has been expanded.
    The expanded tokens are pushed into a stack used to pick the next token. */
 static bool expand_function_macro(ac_pp* pp, ac_token* ident, ac_macro* m);
