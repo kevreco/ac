@@ -782,6 +782,7 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
     AC_ASSERT(m->is_function_like);
     AC_ASSERT(token(pp).type == ac_token_type_PAREN_L);
 
+    ac_location loc = location(pp);
     int nesting_level = 0;
     goto_next_token_from_macro_agrument(pp); /* Skip '('. */
     nesting_level += 1;
@@ -800,14 +801,19 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
        expanded tokens (commas, right parenthesis) should not be counted as argument separator. */
     int depth = pp->macro_depth;
 
-    /* Collect all the arguments. */
+    /*** Collect all the arguments. ***/
 
-    if (token(pp).type != ac_token_type_PAREN_R)
+    /* Next token is a right parenthesis we only adjust the nesting level. */
+    if (token(pp).type == ac_token_type_PAREN_R)
+    {
+        --nesting_level;
+    }
+    else
     {
         range r = { 0 };
-        while (current_param_index < param_count)
-        {
-            ac_token param = darrT_at(&m->definition, current_param_index);
+        /* Continue until we can the correct right parenthesis. */
+        while (nesting_level != 0)
+        {   
             while (token(pp).type != ac_token_type_EOF)
             {
                 if (token(pp).type == ac_token_type_PAREN_L)
@@ -817,6 +823,7 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
                 else if (token(pp).type == ac_token_type_PAREN_R)
                 {
                     nesting_level -= 1;
+                    /* @TODO check if we can just get rid of this one since there is another one on top*/
                     if (nesting_level == 0) /* Stop if the right parenthesis as been reached on the level 0. */
                     {
                         break;
@@ -838,8 +845,8 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
             if (token(pp).type == ac_token_type_EOF
                 && nesting_level != 0)
             {
-                ac_report_error_loc(m->location, "Unexpected end of file in macro expansion '%.*s'.", (int)m->identifier.ident->text.size, m->identifier.ident->text.data);
-                goto cleanup;
+                ac_report_error_loc(loc, "Unexpected end of file in macro expansion "STRV_FMT".", STRV_ARG(identifier->ident->text));
+                break;
             }
 
             if (token(pp).type == ac_token_type_COMMA)
@@ -870,20 +877,25 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
         }
     }
 
+    if (nesting_level != 0) {
+        ac_report_error_loc(loc, "Function-like macro invocation '"STRV_FMT"' does not end with ')'.", STRV_ARG(m->identifier.ident->text));
+        goto cleanup;
+    }
+
+    if (current_param_index > param_count) /* No parameter should be left. */
+    {
+        ac_report_warning_loc(loc, "Too many argument in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
+    }
+
     if (current_param_index < param_count) /* No parameter should be left. */
     {
-        ac_report_warning_loc(location(pp), "Macro call is missing arguments.");
+        ac_report_warning_loc(loc, "Missing arguments in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
 
         /* Where macro is missing argument we replace them with empty arguments. */
         for (int i = current_param_index; i < param_count; i += 1)
         {
             add_empty_arg(&args, &ranges);
         }
-    }
-
-    if (token(pp).type != ac_token_type_PAREN_R) {
-        ac_report_error_loc(location(pp), "Macro does not end with ')'.");
-        goto cleanup;
     }
 
     size_t body_count = m->body.end - m->body.start;

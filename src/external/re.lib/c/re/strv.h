@@ -53,6 +53,14 @@ extern "C" {
 
 static const size_t STRV_NPOS = (size_t)-1;
 
+#ifndef STRV_FMT
+#define STRV_FMT "%.*s"
+#endif
+
+#ifndef STRV_ARG
+#define STRV_ARG(strv) (int) (strv).size, (strv).data
+#endif
+
 typedef struct strv strv;
 struct strv {
 	size_t size;
