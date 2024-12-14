@@ -57,7 +57,7 @@ static ac_token* token_integer_literal(ac_lex* l, ac_token_number num); /* Creat
 static ac_token* token_float_literal(ac_lex* l, ac_token_number num);   /* Create float token from parsed value. */
 static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base); /* Parse float after the whole number part. */
 static int hex_string_to_int(const char* c, size_t len);
-static ac_token* parse_integer_or_float_literal(ac_lex* l);
+static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c);
 
 static void* utf8_decode(void* p, int32_t* pc);
 
@@ -130,7 +130,8 @@ ac_token* ac_lex_goto_next(ac_lex* l)
 
     int c;
 switch_start:
-    switch (l->cur[0]) {
+    c = l->cur[0];
+    switch (c) {
 
     case '\\':
         if (!next_is(l, '\n')
@@ -174,6 +175,7 @@ switch_start:
     case ';': return token_from_single_char(l, ac_token_type_SEMI_COLON);
     case ',': return token_from_single_char(l, ac_token_type_COMMA);
     case '?': return token_from_single_char(l, ac_token_type_QUESTION);
+    case '@': return token_from_single_char(l, ac_token_type_AT);
 
     case '#': {
         c = next_char_no_stray(l); /* Skip '#' */
@@ -282,6 +284,15 @@ switch_start:
         }
         return token_from_type(l, ac_token_type_STAR);
     }
+    case '~': {
+        c = next_char_no_stray(l); /* Skip '~' */
+        if (c == '=') {
+            c = next_char_no_stray(l); /* Skip '=' */
+            return token_from_type(l, ac_token_type_TILDE_EQUAL);
+        }
+        return token_from_type(l, ac_token_type_TILDE);
+    }
+            
 
     case '/': {
         c = next_char_no_stray(l); /* Skip '/' */
@@ -344,13 +355,15 @@ switch_start:
     }
 
     case '.': {
+        dstr_clear(&l->tok_buf);
+        c = next_digit(l); /* Skip '.' */
        
         /* Float can also starts with a dot. */
-        ac_token* token = parse_integer_or_float_literal(l);
-        if (token)
-            return token;
+        if (c >= '0' && c <= '9')
+        {
+            return parse_integer_or_float_literal(l, '.', c);
+        }
 
-        c = l->cur[0];
         if (c == '.') {
             c = next_char_no_stray(l); /* Skip '.' */
             if (c == '.') {
@@ -368,7 +381,12 @@ switch_start:
 
     case '0': case '1': case '2': case '3': case '4':
     case '5': case '6': case '7': case '8': case '9':
-        return parse_integer_or_float_literal(l);
+    {
+        dstr_clear(&l->tok_buf);
+        dstr_append_char(&l->tok_buf, c);
+        int next = next_digit(l); /* Skip first number ang get the following one. */
+        return parse_integer_or_float_literal(l, c, next);
+    }
 
     case 'a': case 'b': case 'c': case 'd': case 'e':
     case 'f': case 'g': case 'h': case 'i': case 'j':
@@ -933,19 +951,13 @@ static int hex_string_to_int(const char* c, size_t len)
     return n;
 }
 
-static ac_token* parse_integer_or_float_literal(ac_lex* l)
+static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
 {
     ac_token_number num = { 0 };
-    int c = l->cur[0];
-
-    dstr_clear(&l->tok_buf);
-    dstr_append_char(&l->tok_buf, c);
-
-    bool leading_zero = c == '0';
+    bool leading_zero = previous == '0';
 
     if (leading_zero)
     {
-        c = next_digit(l); /* Skip '0' */
         /* Need to parse hex integer or float */
         if (c == 'x' || c == 'X') {
             c = next_digit(l); /* Skip 'x' or 'X */
@@ -999,9 +1011,12 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l)
     /* Try to parse float starting with decimals (not hexadecimal). */
 
     int n = 0;
-    while (is_decimal_digit(c)) {
-        n = n * base10 + (c - '0'); /* @FIXME check for overflow. */
-        c = next_digit(l);
+    if (is_decimal_digit(previous)) {
+        n = n * base10 + (previous - '0');
+        while (is_decimal_digit(c)) {
+            n = n * base10 + (c - '0'); /* @FIXME check for overflow. */
+            c = next_digit(l);
+        }
     }
     if (!is_eof(l)) {
         if (c == '.' || c == 'e' || c == 'E') {
@@ -1215,6 +1230,7 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_ALIGNAS2, IDENT("_Alignas") },
     { false, ac_token_type_ALIGNOF, IDENT("alignof") },
     { false, ac_token_type_ALIGNOF2, IDENT("_Alignof") },
+    { true, ac_token_type_AT, IDENT("@") },
     { false, ac_token_type_ATOMIC, IDENT("_Atomic") },
     { false, ac_token_type_AUTO, IDENT("auto") },
     { false, ac_token_type_BOOL, IDENT("bool") },

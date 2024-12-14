@@ -1,0 +1,7 @@
+/* Taken from the C standard documentation and slightly altered. #cpp.concat 15.6.3.4 */
+printf("x" "1" "= %d, x" "2" "= %s", x1, x2);
+fputs("strncmp(\"abc\\0d\", \"abc\", '\\4') == 0" ": @\n", s);
+//#include xstr(INCFILE(2).h)  // Disabled and replace with the line below
+"vers2.h"
+"hello";
+"hello" ", world"

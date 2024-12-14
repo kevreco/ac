@@ -18,6 +18,7 @@ enum ac_token_type {
     ac_token_type_ALIGNAS2,
     ac_token_type_ALIGNOF,
     ac_token_type_ALIGNOF2,
+    ac_token_type_AT,
     ac_token_type_ATOMIC,
     ac_token_type_AUTO,
     ac_token_type_BITINT,
