@@ -1,0 +1,2 @@
+/* Taken from the C standard documentation. #cpp.concat-5 15.6.3.5 */
+char p[] = "x ## y";

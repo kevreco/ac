@@ -82,15 +82,14 @@ static ac_token stringize(ac_pp* pp, ac_token* tokens, size_t count);
 
 /* Add token to the expanded_token array of the macro.
    This also handle the concat operator '##'. */
-static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token* tokens, size_t count);
+static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token token);
 
 /* Add empty argument to sequence of tokens. */
 static void add_empty_arg(darr_token* args, darr_range* ranges);
 
 /* Return true if something has been expanded.
    The expanded tokens are pushed into a stack used to pick the next token. */
-static bool expand_function_macro(ac_pp* pp, ac_token* ident, ac_macro* m);
-static void expand_object_macro(ac_pp* pp, ac_token* ident, ac_macro* m);
+static bool expand_macro(ac_pp* pp, ac_token* ident, ac_macro* m);
 
 static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location);
 
@@ -196,18 +195,16 @@ static ac_token* goto_next_normal_token(ac_pp* pp)
 {
     goto_next_raw_token(pp);
 
-    if (token_ptr(pp)->type == ac_token_type_HASH)
+    /* macro_depth is used because we don't want to parse directives for tokens '#' coming from macros. */
+    while (token_ptr(pp)->type == ac_token_type_HASH && pp->macro_depth == 0)
     {
-        while (token_ptr(pp)->type == ac_token_type_HASH)
+        if (!parse_directive(pp)
+            || token_ptr(pp)->type == ac_token_type_EOF)
         {
-            if (!parse_directive(pp)
-                || token_ptr(pp)->type == ac_token_type_EOF)
-            {
-                return ac_token_eof(pp);
-            }
-
-            goto_next_raw_token(pp);
+            return ac_token_eof(pp);
         }
+
+        goto_next_raw_token(pp);
     }
 
     if (token_ptr(pp)->type == ac_token_type_EOF)
@@ -564,7 +561,6 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
 
     ac_token identifier = *tok;
 
-    bool expanded = false;
     if (m->is_function_like)
     {
         goto_next_token_from_macro_agrument(pp); /* Skip identifier. */
@@ -589,16 +585,9 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
 
             return false;
         }
-
-        expanded = expand_function_macro(pp, &identifier, m);
-    }
-    else
-    {
-        expand_object_macro(pp, &identifier, m);
-        expanded = true;
     }
 
-    return expanded;
+    return expand_macro(pp, &identifier, m);
 }
 
 static size_t find_parameter_index(ac_token* token, ac_macro* m)
@@ -624,9 +613,20 @@ static size_t find_parameter_index(ac_token* token, ac_macro* m)
 
 static void concat(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token left, ac_token right)
 {
-    /* When two empty tokens are concatenated no new tokens are created. */
+    /* Special case: when two empty tokens are concatenated a single empty token is created. */
     if (left.type == ac_token_type_EMPTY && right.type == ac_token_type_EMPTY)
     {
+        darrT_push_back(arr, left);
+        return;
+    }
+
+    /* Special case: when two hash are concatenated it should not result in the '##' operator.
+       Hance, two different '#' are added. */
+    if (left.type == ac_token_type_HASH && right.type == ac_token_type_HASH)
+    {
+        darrT_push_back(arr, left);
+        right.previous_was_space = false;
+        darrT_push_back(arr, right);
         return;
     }
 
@@ -707,21 +707,20 @@ static ac_token stringize(ac_pp* pp, ac_token* tokens, size_t count)
     return t;
 }
 
-static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token* tokens, size_t count)
+static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token token)
 {
     size_t size = darrT_size(arr);
 
     if (size)
     {
         ac_token last = darrT_last(arr);
+        
         /* The previous token was a ##, concatenation needed. */
         if (last.type == ac_token_type_DOUBLE_HASH)
         {
-            AC_ASSERT(count == 1);
-
             size_t left_index = size - 2;
             ac_token left = darrT_at(arr, left_index);
-            ac_token right = *tokens;
+            ac_token right = token;
 
             /* Change current size because we want to override the left token and the '##' token. */
             arr->arr.size = left_index;
@@ -729,30 +728,15 @@ static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac
             concat(pp, arr, m, left, right);
             return;
         }
-        else if (last.type == ac_token_type_HASH)
-        {
-            /* Index of the '#' */
-            size_t hash_index = size - 1;
-            arr->arr.size -= 1;
-
-            ac_token t = stringize(pp, tokens, count);
-
-            t.previous_was_space = last.previous_was_space;
-            /* Replace '#'  token with the new stringified token*/
-            darrT_push_back(arr, t);
-            return;
-        }
     }
-
-    AC_ASSERT(count == 1);
 
     /* If the token is the macro identifier we mark it as non expandable. */
-    if (ac_token_is_keyword_or_identifier(tokens[0].type)
-        && tokens[0].ident == m->identifier.ident)
+    if (ac_token_is_keyword_or_identifier(token.type)
+        && token.ident == m->identifier.ident)
     {
-        tokens[0].cannot_expand = true;
+        token.cannot_expand = true;
     }
-    darrT_push_back(arr, tokens[0]);
+    darrT_push_back(arr, token);
 }
 
 static void add_empty_arg(darr_token* args, darr_range* ranges)
@@ -776,17 +760,11 @@ static void add_empty_arg(darr_token* args, darr_range* ranges)
     darrT_push_back(ranges, r);
 }
 
-static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
+static bool expand_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
 {
     bool result = false;
-    AC_ASSERT(m->is_function_like);
-    AC_ASSERT(token(pp).type == ac_token_type_PAREN_L);
 
     ac_location loc = location(pp);
-    int nesting_level = 0;
-    goto_next_token_from_macro_agrument(pp); /* Skip '('. */
-    nesting_level += 1;
-
 
     darr_token args; /* @OPT: Use a pool allocator to avoid unncessary malloc/free. */
     darr_range ranges;  /* @OPT: Use a pool allocator to avoid unncessary malloc/free. */
@@ -794,107 +772,112 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
     darrT_init(&args);
     darrT_init(&ranges);
 
-    size_t param_count = m->params.end - m->params.start;
-    size_t current_param_index = m->params.start;
-
-    /* We need to store the macro depth to check commas and right parenthesis,
-       expanded tokens (commas, right parenthesis) should not be counted as argument separator. */
-    int depth = pp->macro_depth;
-
-    /*** Collect all the arguments. ***/
-
-    /* Next token is a right parenthesis we only adjust the nesting level. */
-    if (token(pp).type == ac_token_type_PAREN_R)
+    if (m->is_function_like)
     {
-        --nesting_level;
-    }
-    else
-    {
-        range r = { 0 };
-        /* Continue until we can the correct right parenthesis. */
-        while (nesting_level != 0)
-        {   
-            while (token(pp).type != ac_token_type_EOF)
+        AC_ASSERT(token(pp).type == ac_token_type_PAREN_L);
+
+        int nesting_level = 0;
+        goto_next_token_from_macro_agrument(pp); /* Skip '('. */
+        nesting_level += 1;
+
+        size_t param_count = m->params.end - m->params.start;
+        size_t current_param_index = m->params.start;
+
+        /*** Collect all the arguments. ***/
+
+        /* Next token is a right parenthesis we only adjust the nesting level. */
+        if (token(pp).type == ac_token_type_PAREN_R)
+        {
+            --nesting_level;
+        }
+        else
+        {
+            range r = { 0 };
+            /* Continue until we can the correct right parenthesis. */
+            while (nesting_level != 0)
             {
-                if (token(pp).type == ac_token_type_PAREN_L)
+                while (token(pp).type != ac_token_type_EOF)
                 {
-                    nesting_level += 1;
-                }
-                else if (token(pp).type == ac_token_type_PAREN_R)
-                {
-                    nesting_level -= 1;
-                    /* @TODO check if we can just get rid of this one since there is another one on top*/
-                    if (nesting_level == 0) /* Stop if the right parenthesis as been reached on the level 0. */
+                    if (token(pp).type == ac_token_type_PAREN_L)
+                    {
+                        nesting_level += 1;
+                    }
+                    else if (token(pp).type == ac_token_type_PAREN_R)
+                    {
+                        nesting_level -= 1;
+                        /* @TODO check if we can just get rid of this one since there is another one on top*/
+                        if (nesting_level == 0) /* Stop if the right parenthesis as been reached on the level 0. */
+                        {
+                            break;
+                        }
+                    }
+                    /* Stop if a comma has been reached on the same depth. */
+                    else if (token(pp).type == ac_token_type_COMMA && nesting_level == 1)
                     {
                         break;
                     }
+
+                    ac_token t = token(pp);
+
+                    darrT_push_back(&args, t);
+
+                    goto_next_token_from_macro_agrument(pp);
                 }
-                /* Stop if a comma has been reached on the same depth. */
-                else if (token(pp).type == ac_token_type_COMMA && nesting_level == 1)
+
+                if (token(pp).type == ac_token_type_EOF
+                    && nesting_level != 0)
                 {
+                    ac_report_error_loc(loc, "Unexpected end of file in macro expansion "STRV_FMT".", STRV_ARG(identifier->ident->text));
                     break;
                 }
 
-                ac_token t = token(pp);
+                if (token(pp).type == ac_token_type_COMMA)
+                {
+                    goto_next_token_from_macro_agrument(pp); /* Skip ',' */
+                }
 
-                darrT_push_back(&args, t);
+                bool no_token_added = r.start == darrT_size(&args);
+                if (no_token_added) /* Add empty token if there is no token in the arguments. */
+                {
+                    add_empty_arg(&args, &ranges);
+                }
+                else
+                {
+                    /* Add EOF token as sentinel value to be able to know where this sequence of tokens is ending. */
+                    /* @FIXME: create a special token to avoid confusion. */
+                    ac_token eof = *ac_token_eof();
+                    darrT_push_back(&args, eof);
 
-                goto_next_token_from_macro_agrument(pp);
+                    r.end = darrT_size(&args);
+
+                    /* Add range. */
+                    darrT_push_back(&ranges, r);
+
+                }
+                r.start = darrT_size(&args);
+                current_param_index += 1;
             }
+        }
 
-            if (token(pp).type == ac_token_type_EOF
-                && nesting_level != 0)
-            {
-                ac_report_error_loc(loc, "Unexpected end of file in macro expansion "STRV_FMT".", STRV_ARG(identifier->ident->text));
-                break;
-            }
+        if (nesting_level != 0) {
+            ac_report_error_loc(loc, "Function-like macro invocation '"STRV_FMT"' does not end with ')'.", STRV_ARG(m->identifier.ident->text));
+            goto cleanup;
+        }
 
-            if (token(pp).type == ac_token_type_COMMA)
-            {
-                goto_next_token_from_macro_agrument(pp); /* Skip ',' */
-            }
-            
-            bool no_token_added = r.start == darrT_size(&args);
-            if (no_token_added) /* Add empty token if there is no token in the arguments. */
+        if (current_param_index > param_count) /* No parameter should be left. */
+        {
+            ac_report_warning_loc(loc, "Too many argument in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
+        }
+
+        if (current_param_index < param_count) /* No parameter should be left. */
+        {
+            ac_report_warning_loc(loc, "Missing arguments in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
+
+            /* Where macro is missing argument we replace them with empty arguments. */
+            for (int i = current_param_index; i < param_count; i += 1)
             {
                 add_empty_arg(&args, &ranges);
             }
-            else
-            {
-                /* Add EOF token as sentinel value to be able to know where this sequence of tokens is ending. */
-                /* @FIXME: create a special token to avoid confusion. */
-                ac_token eof = *ac_token_eof();
-                darrT_push_back(&args, eof);
-
-                r.end = darrT_size(&args);
-
-                /* Add range. */
-                darrT_push_back(&ranges, r);
-                
-            }
-            r.start = darrT_size(&args);
-            current_param_index += 1;
-        }
-    }
-
-    if (nesting_level != 0) {
-        ac_report_error_loc(loc, "Function-like macro invocation '"STRV_FMT"' does not end with ')'.", STRV_ARG(m->identifier.ident->text));
-        goto cleanup;
-    }
-
-    if (current_param_index > param_count) /* No parameter should be left. */
-    {
-        ac_report_warning_loc(loc, "Too many argument in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
-    }
-
-    if (current_param_index < param_count) /* No parameter should be left. */
-    {
-        ac_report_warning_loc(loc, "Missing arguments in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
-
-        /* Where macro is missing argument we replace them with empty arguments. */
-        for (int i = current_param_index; i < param_count; i += 1)
-        {
-            add_empty_arg(&args, &ranges);
         }
     }
 
@@ -909,26 +892,33 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
     darrT_init(&exp);
 
     /* Substitute body and expand arguments. */
-    
+
     for (int i = m->body.start; i < m->body.end; i += 1)
     {
         ac_token body_token = darrT_at(&m->definition, i);
-      
-        size_t parameter_index = find_parameter_index(&body_token, m);
+
+        size_t parameter_index = m->is_function_like ? find_parameter_index(&body_token, m) : -1;
         if (parameter_index != (size_t)(-1)) /* Parameter found. */
         {
             range original_range = darrT_at(&ranges, parameter_index);
             AC_ASSERT(darrT_at(&args, original_range.end - 1).type == ac_token_type_EOF);
             range adjusted_range = { original_range.start, original_range.end - 1 }; /* Adjust range to remove the last EOF. */
 
-
+            /* If the previous tokan was '#' handle stringification. */
             if (darrT_size(&exp) && darrT_last(&exp).type == ac_token_type_HASH)
             {
+                ac_token last = darrT_last(&exp);
                 ac_token* tokens = darrT_ptr(&args, adjusted_range.start);
                 size_t token_count = range_size(adjusted_range);
 
-                /* Will call stringize */
-                push_back_expanded_token(pp, &exp, m, tokens, token_count);
+                size_t hash_index = darrT_size(&exp) - 1;
+                exp.arr.size -= 1;
+                
+                ac_token t = stringize(pp, tokens, token_count);
+                
+                t.previous_was_space = last.previous_was_space;
+                /* Replace '#'  token with the new stringified token*/
+                darrT_push_back(&exp, t);
             }
             else
             {
@@ -966,7 +956,7 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
                             token_from_argument.previous_was_space = body_token.previous_was_space;
                         }
 
-                        push_back_expanded_token(pp, &exp, m, &token_from_argument, 1);
+                        push_back_expanded_token(pp, &exp, m, token_from_argument);
                         count++;
                     }
                 }
@@ -979,7 +969,7 @@ static bool expand_function_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
                 body_token.previous_was_space = identifier->previous_was_space;
             }
 
-            push_back_expanded_token(pp, &exp, m, &body_token, 1);
+            push_back_expanded_token(pp, &exp, m, body_token);
         }
     }
 
@@ -997,38 +987,6 @@ cleanup:
     darrT_destroy(&args);
     darrT_destroy(&ranges);
     return result;
-}
-
-static void expand_object_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
-{
-    AC_ASSERT(!m->is_function_like);
-
-    macro_push(pp, m);
-
-    darrT_clear(&m->expanded_args);
-
-    size_t body_size = m->body.end - m->body.start;
-    if (body_size) /* No items to add to the stack, but the macro is considered expanded. */
-    {
-        for (int i = m->body.start; i < m->body.end; i += 1)
-        {
-            ac_token body_token = darrT_at(&m->definition, i);
-            if (i == 0)
-            {
-                body_token.previous_was_space = identifier->previous_was_space;
-            }
-
-            if (ac_token_is_keyword_or_identifier(body_token.type)
-                && body_token.ident->cannot_expand)
-            {
-                body_token.cannot_expand = true;
-            }
-            push_back_expanded_token(pp, &m->expanded_args, m, &body_token, 1);
-        }
-         
-        push_cmd(pp, make_cmd_macro_pop(m, (darr_token){0} ));
-        push_cmd(pp, to_cmd_token_list(&m->expanded_args));
-    }
 }
 
 static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location)
