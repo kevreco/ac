@@ -24,11 +24,6 @@ struct ac_macro {
     range body;                 /* Range of token from definition representing the body. Parsed at directive-time.*/
 
     ac_location location;
-    bool is_undef;
-    /* expanded_args contains the expanded tokens of the current macro,
-       since macro cannot be called recursively we can use a single struct
-       to host the definition and the instantiation. */
-    darr_token expanded_args;
 };
 
 static void ac_macro_init(ac_macro* m)
@@ -36,13 +31,11 @@ static void ac_macro_init(ac_macro* m)
     memset(m, 0, sizeof(ac_macro));
 
     darrT_init(&m->definition);
-    darrT_init(&m->expanded_args);
 }
 
 static void ac_macro_destroy(ac_macro* m)
 {
     darrT_destroy(&m->definition);
-    darrT_destroy(&m->expanded_args);
 }
 
 static strv directive_define = STRV("define");
@@ -110,7 +103,7 @@ static ac_token_cmd to_cmd_token_list(darr_token* arr);
 static ht_hash_t macro_hash(ht_ptr_handle* handle);
 static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright);
 static void add_macro(ac_pp* pp, ac_macro* m);
-static void remove_macro(ac_pp* pp, ac_macro* m);
+static void undefine_macro(ac_pp* pp, ac_macro* m);
 static ac_macro* find_macro(ac_pp* pp, ac_token* identifer);
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath)
@@ -125,6 +118,7 @@ void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath)
     ht_ptr_init(&pp->macros, (ht_hash_function_t)macro_hash, (ht_predicate_t)macros_are_same);
 
     darrT_init(&pp->cmd_stack);
+    darrT_init(&pp->undef_macros);
     darrT_init(&pp->buffer_for_peek);
     dstr_init(&pp->concat_buffer);
 }
@@ -133,9 +127,17 @@ void ac_pp_destroy(ac_pp* pp)
 {
     dstr_destroy(&pp->concat_buffer);
     darrT_destroy(&pp->buffer_for_peek);
-    darrT_destroy(&pp->cmd_stack);
+    
     ac_lex_destroy(&pp->concat_lex);
     ac_lex_destroy(&pp->lex);
+
+    /* Wnroll the remaining item in the stack. */
+    while(stack_pop(pp) != NULL)
+    {
+        /* Do nothing. */
+    }
+
+    darrT_destroy(&pp->cmd_stack);
 
     /* Destroy all macros before destroying the macro hash table.
        @FIXME: macros should be using an allocator and we should be able to destroy them all at once.
@@ -148,22 +150,17 @@ void ac_pp_destroy(ac_pp* pp)
         ac_macro* m = h->ptr;
         ac_macro_destroy(m);
     }
-
     ht_ptr_destroy(&pp->macros);
-
-    /* Clean macro related entities in case there was an error and few things are still in the command stack. */
-    for (int i = 0; i < darrT_size(&pp->cmd_stack); i += 1)
+   
+    /* Destroy all undef macros. */
+    for (int i = 0; i < darrT_size(&pp->undef_macros); i += 1)
     {
-        ac_token_cmd cmd = darrT_at(&pp->cmd_stack, i);
-        if (cmd.type == ac_token_cmd_type_MACRO_POP)
-        {
-            darrT_destroy(&cmd.macro_pop.tokens);
-            if (cmd.macro_pop.macro->is_undef)
-            {
-                ac_macro_destroy(cmd.macro_pop.macro);
-            }
-        }
+        ac_macro* m = darrT_at(&pp->undef_macros, i);
+        ac_macro_destroy(m);
     }
+
+    darrT_destroy(&pp->undef_macros);
+
 }
 
 ac_token* ac_pp_goto_next(ac_pp* pp)
@@ -306,7 +303,7 @@ static bool parse_directive(ac_pp* pp)
             ac_macro* m = find_macro(pp, &identifier);
             if (m)
             {
-                remove_macro(pp, m);
+                undefine_macro(pp, m);
             }
         }
         else
@@ -493,16 +490,8 @@ static ac_token* process_cmd(ac_pp* pp, ac_token_cmd* cmd)
 
         m->identifier.ident->cannot_expand = false;
 
-        /* If function-like the expanded tokens array needs to be free. */
-        if (m->is_function_like) {
-            darrT_destroy(&cmd->macro_pop.tokens);
-        }
+        darrT_destroy(&cmd->macro_pop.tokens);
 
-        /* If the macro was undefined then we need to destroy it because it's not referenced in the macro hash table. */
-        if (m->is_undef)
-        {
-            ac_macro_destroy(m);
-        }
         darrT_pop_back(&pp->cmd_stack);
         break;
     }
@@ -1068,11 +1057,12 @@ static void add_macro(ac_pp* pp, ac_macro* m)
     ht_ptr_insert(&pp->macros, m);
 }
 
-static void remove_macro(ac_pp* pp, ac_macro* m)
+static void undefine_macro(ac_pp* pp, ac_macro* m)
 {
     ht_ptr_remove(&pp->macros, m);
 
-    m->is_undef = true;
+    /* Add reference to undefined macro to garbage collect them. */
+    darrT_push_back(&pp->undef_macros, m);
 }
 
 static ac_macro* find_macro(ac_pp* pp, ac_token* identifer)

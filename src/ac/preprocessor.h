@@ -44,6 +44,11 @@ struct ac_pp {
 
 	/* Stack of list of tokens. It's mostly used for macro but we should be able to add tokens if we peek some next ones. */
 	darrT(ac_token_cmd) cmd_stack;
+	/* Array of undefined macro.
+	   It's possible to undefine and redefine a macro while it's being expanded.
+	   We store the undefined macro here and destroy them when the preprocessor is destroyed.
+	   @OPT: find a better way to destroy them. It's a bit wastefull to keep instances of macro that we won't use. */
+	darrT(ac_macro*) undef_macros;
 
 	ac_token* current_token;
 	
