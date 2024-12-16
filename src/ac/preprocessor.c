@@ -1,5 +1,7 @@
 #include "preprocessor.h"
 
+#include <time.h>
+
 typedef struct range range;
 struct range {
     size_t start;
@@ -64,6 +66,7 @@ static ac_token* process_cmd(ac_pp* pp, ac_token_cmd* cmd);
 static ac_token* stack_pop(ac_pp* pp);
 static void push_cmd(ac_pp* pp, ac_token_cmd list);
 
+static void handle_some_special_macros(ac_pp* pp, ac_token* tok);
 /* Try to expand the token. Return true if it was expanded, false otherwise. */
 static bool try_expand(ac_pp* pp, ac_token* token);
 static size_t find_parameter_index(ac_token* token, ac_macro* m);
@@ -518,6 +521,67 @@ static void push_cmd(ac_pp* pp, ac_token_cmd cmd)
     darrT_push_back(&pp->cmd_stack, cmd);
 }
 
+static void handle_some_special_macros(ac_pp* pp, ac_token* tok)
+{
+    /* Buffer used for
+        __DATE__:    "MMM DD YYYY\0"
+        __TIME__:    "HH:mm:ss\0"
+        __LINE__:    "XXXXXXXXXXXXXXXXXXXXX\0" - max int64 digits + '\0'
+        __COUNTER__: "XXXXXXXXXXXXXXXXXXXXX\0" - max int64 digits + '\0'
+   */
+
+    char buffer[22];
+
+    if (tok->type == ac_token_type__FILE__)
+    {
+        tok->type = ac_token_type_LITERAL_STRING;
+        tok->text = ac_create_or_reuse_literal(pp->mgr, strv_make_from_str(pp->lex.filepath));
+    }
+    else if (tok->type == ac_token_type__LINE__
+        || tok->type == ac_token_type__COUNTER__)
+    {
+        int number = tok->type == ac_token_type__COUNTER__
+            ? pp->counter_value
+            : pp->lex.location.row;
+
+        pp->counter_value += tok->type == ac_token_type__COUNTER__;
+        snprintf(buffer, sizeof(buffer), "%d", number);
+    
+        tok->text = ac_create_or_reuse_literal(pp->mgr, strv_make_from_str(buffer));
+        tok->type = ac_token_type_LITERAL_INTEGER;
+        tok->u.number.is_unsigned = true;
+        tok->u.number.u.int_value = number;
+    }
+    else if (tok->type == ac_token_type__DATE__
+        || tok->type == ac_token_type__TIME__)
+    {
+        time_t t;
+        struct tm* tm;
+        time(&t);
+        tm = localtime(&t);
+
+        if (tok->type == ac_token_type__DATE__)
+        {
+            static char const months[12][4] = {
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+            };
+            snprintf(buffer, sizeof(buffer),
+                "%s %2d %d",
+                months[tm->tm_mon], tm->tm_mday, tm->tm_year + 1900);
+        }
+        else
+        {
+            snprintf(buffer, sizeof(buffer),
+                "%02d:%02d:%02d",
+                tm->tm_hour, tm->tm_min, tm->tm_sec);
+        }
+
+        tok->type = ac_token_type_LITERAL_STRING;
+        tok->text = ac_create_or_reuse_literal(pp->mgr, strv_make_from_str(buffer));
+    }
+}
+
 static bool try_expand(ac_pp* pp, ac_token* tok)
 {
     if (!ac_token_is_keyword_or_identifier(tok->type))
@@ -529,6 +593,8 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
 
     if (!m)
     {
+        /* @OPT: create an inline function or a macro like 'ac_token_is_special_macro' to avoid unnecessary function call (if it ever matters). */
+        handle_some_special_macros(pp, tok);
         return false;
     }
 

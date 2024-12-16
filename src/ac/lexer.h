@@ -75,7 +75,19 @@ enum ac_token_type {
     ac_token_type_VOLATILE,
     ac_token_type_WHILE,
 
+    /* Special macros */
+
+    ac_token_type__FILE__,            /* __FILE__  */
+    ac_token_type__LINE__,            /* __LINE__  */
+    ac_token_type__DATE__,            /* __DATE__  */
+    ac_token_type__TIME__,            /* __TIME__  */
+    ac_token_type__COUNTER__,         /* __COUNTER__ */
+    ac_token_type__FUNC__,            /* __func__  */
+    ac_token_type__FUNCTION__,        /* __FUNCTION__ */
+    ac_token_type__PRETTY_FUNCTION__, /* __PRETTY_FUNCTION__ */
+
     /* Symbols */
+
     ac_token_type_AMP,             /* &  */ 
     ac_token_type_AMP_EQUAL,       /* &= */
     ac_token_type_ARROW,           /* -> */
@@ -136,8 +148,6 @@ enum ac_token_type {
     ac_token_type_TILDE,           /* ~   */
     ac_token_type_TILDE_EQUAL,     /* ~=  */
     ac_token_type_TRIPLE_DOT,      /* ... */
-
-    /* Other known identifiers like the preprocessor directives . @TODO */
 
     ac_token_type_COUNT
 };

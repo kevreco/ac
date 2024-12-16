@@ -57,6 +57,7 @@ struct ac_pp {
 	dstr concat_buffer;         /* Concatenation of token is done via tokenizing a string. */
 	int macro_depth;            /* Macro depth is not currently needed, it's mostly for inspectiong purpose. */
 	darr_token buffer_for_peek; /* Sometimes we need to peek some tokens and send them on the stack. */
+	int counter_value;
 };
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath);

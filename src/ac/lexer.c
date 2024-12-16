@@ -1216,7 +1216,6 @@ ac_token
 -------------------------------------------------------------------------------
 */
 
-#define TOKEN_INFO_COUNT (sizeof(token_infos) / sizeof(token_infos[0]))
 #define IDENT(value) { STRV(value) }
 
 static ac_token_info token_infos[] = {
@@ -1288,6 +1287,17 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_VOLATILE, IDENT("volatile") },
     { false, ac_token_type_WHILE, IDENT("while") },
 
+    /* Special Macros */
+
+    { true,  ac_token_type__FILE__, IDENT("__FILE__") },
+    { true,  ac_token_type__LINE__, IDENT("__LINE__") },
+    { true,  ac_token_type__DATE__, IDENT("__DATE__") },
+    { true,  ac_token_type__TIME__, IDENT("__TIME__") },
+    { true,  ac_token_type__COUNTER__, IDENT("__COUNTER__") },
+    { false, ac_token_type__FUNC__, IDENT("__func__") },
+    { false, ac_token_type__FUNCTION__, IDENT("__FUNCTION__") },
+    { false, ac_token_type__PRETTY_FUNCTION__, IDENT("__PRETTY_FUNCTION__") },
+
     /* Symbols */
 
     { false, ac_token_type_AMP, IDENT("&") },
@@ -1350,8 +1360,6 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_TILDE, IDENT("~") },
     { false, ac_token_type_TILDE_EQUAL, IDENT("~=") },
     { false, ac_token_type_TRIPLE_DOT, IDENT("...") }
-
-    /* Other known identifiers like the preprocessor directives . @TODO */
 };
 
 const char* ac_token_type_to_str(enum ac_token_type type) {
@@ -1436,10 +1444,11 @@ ac_token_info* ac_token_infos()
 {
     return token_infos;
 }
+
 bool ac_token_is_keyword_or_identifier(enum ac_token_type type) {
 
     return type == ac_token_type_IDENTIFIER
-        || (type >= ac_token_type_ALIGNAS && type <= ac_token_type_WHILE);
+        || (type >= ac_token_type_ALIGNAS && type <= ac_token_type__PRETTY_FUNCTION__);
 }
 
 strv ac_token_prefix(ac_token token) {
