@@ -534,7 +534,6 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
 
     if (m->identifier.ident->cannot_expand)
     {
-        /* @FIXME this might be totally uncessary because token.cannot_expand is setup when it's added to the command stack. */
         tok->cannot_expand = true;
     }
 
