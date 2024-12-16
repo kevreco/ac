@@ -20,15 +20,21 @@
         - [./] Strays '\' in other literal (numbers, boolean, etc.).
         - [./] Strays '\' in string and character literals.
         - [./] Function-like macro.
-        - [./] Token concatenation.
+        - [./] Support concatenation operator "##".
         - [./] Macro should not be visible from the expanded tokens.
-        - [] Support Stringification operator #
-        - [] Implement special macro like __COUNT__, __LINE__, __FILE__ etc.
-        
+        - [./] Support stringification operator "#".
+        - [] Support special macro __FILE__.
+        - [] Support special macro __LINE__.
+        - [] Support special macro __DATE__.
+        - [] Support special macro __TIME__.
+        - [] Support special macro __COUNT__?
+        - [] Support special macro __func__, __FUNCTION__ and __PRETTY_FUNCTION__.
+        - [] Support special macro __STDC_VERSION__?
+
     - [] Support basic #if/#endif
     - [] Support #elif
-    - [] Support #if defined(XXX)
     - [] Support evaluation if #if
+    - [] Support defined(XXX) expression in #if/#elif
     
 # Stage 2 - C Parser and C converter
 
