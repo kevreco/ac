@@ -640,12 +640,9 @@ static void concat(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token left, ac_to
     AC_ASSERT(tok);
     AC_ASSERT(tok->type != ac_token_type_EOF);
 
-    darrT_push_back(arr, *tok);
-
-    while ((tok = ac_lex_goto_next(&pp->lex))->type != ac_token_type_EOF)
-    {
+    do {
         darrT_push_back(arr, *tok);
-    }
+    } while ((tok = ac_lex_goto_next(&pp->lex))->type != ac_token_type_EOF);
 
     /* Restore lexer. */
     ac_lex_swap(&pp->lex, &pp->concat_lex);
