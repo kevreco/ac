@@ -433,19 +433,14 @@ static bool parse_macro_body(ac_pp* pp, ac_macro* m)
 
     tok->previous_was_space = false; /* Don't take into account the space before the first token of the macro body. */
     
-    /* Create first token of the body with the current one and go to the next token. */
-    darrT_push_back(&m->definition, *tok);
-
-    tok = goto_next_token_from_directive(pp);
-
     /* Get every token until the end of the body. */
-    while (tok->type != ac_token_type_NEW_LINE
-       && tok->type != ac_token_type_EOF)
+    do
     {
         darrT_push_back(&m->definition, *tok);
 
         tok = goto_next_token_from_directive(pp);
-    };
+    } while (tok->type != ac_token_type_NEW_LINE
+           && tok->type != ac_token_type_EOF);
 
     if (tok->type == ac_token_type_DOUBLE_HASH)
     {
