@@ -24,12 +24,11 @@ enum ac_ast_type {
     ac_ast_type_BLOCK,
     ac_ast_type_EMPTY_STATEMENT,
     ac_ast_type_DECLARATION_UNKNOWN,
-    ac_ast_type_DECLARATION_BEGIN,
-    ac_ast_type_DECLARATION_SIMPLE = ac_ast_type_DECLARATION_BEGIN,    /* const int i  |  int *i  |  int i = 0  |  int i[0]  |  int func() */
+    ac_ast_type_DECLARATION_SIMPLE,               /* const int i  |  int *i  |  int i = 0  |  int i[0]  |  int func() */
     ac_ast_type_DECLARATION_TYPEDEF,              /* @TODO */          /* typedef int my_int */
-    ac_ast_type_DECLARATION_FUNCTION_DEFINITION,                       /* int func() { } */
+    ac_ast_type_DECLARATION_FUNCTION_DEFINITION,  /* int func() { } */
     ac_ast_type_DECLARATION_END,
-    ac_ast_type_DECLARATOR,                                            /* i  |  *i  |  i = 0  |  i[0]  |  func() */
+    ac_ast_type_DECLARATOR,                       /* i  |  *i  |  i = 0  |  i[0]  |  func() */
     ac_ast_type_IDENTIFIER,
     ac_ast_type_LITERAL_BOOL,
     ac_ast_type_LITERAL_FLOAT,
@@ -119,9 +118,10 @@ struct ac_ast_declarator {
 
     int pointer_depth;
     ac_ast_identifier* ident;
-    ac_ast_array_specifier* array_specifier;                  /* dummy member so that we already pre-handle this case */
-    ac_ast_expr* initializer;      /* optional */
-    ac_ast_parameters* parameters; /* optional */
+    ac_ast_array_specifier* array_specifier; /* No member so that we already pre-handle this case */
+    /* NOTE: declarator cannot have parameter and initializer at the same time. */
+    ac_ast_expr* initializer;      /* Optional. If the variable is initialized with something. */
+    ac_ast_parameters* parameters; /* Optional. If it's a function declaration. */
 };
 
 void ac_ast_declarator_init(ac_ast_declarator* node);

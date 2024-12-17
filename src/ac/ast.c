@@ -46,7 +46,7 @@ void ac_ast_declaration_init(ac_ast_declaration* node)
 
 bool ac_ast_is_declaration(ac_ast_expr* expr)
 {
-    return expr->type >= ac_ast_type_DECLARATION_BEGIN
+    return expr->type >= ac_ast_type_DECLARATION_SIMPLE
         && expr->type < ac_ast_type_DECLARATION_END;
 }
 

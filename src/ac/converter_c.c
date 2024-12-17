@@ -179,7 +179,7 @@ static void print_parameter(ac_converter_c* c, ac_ast_parameter* parameter)
 static void print_declaration(ac_converter_c* c, ac_ast_declaration* declaration)
 {
     /* @OPT: ac_ast_type_DECLARATION_SIMPLE and ac_ast_type_DECLARATION_FUNCTION_DEFINITION are really close to each other
-       This can be optimized if it's still true in few years.
+       This could be unified if it makes sense once the compiler is more complete.
     */
     if (declaration->type == ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
     {
@@ -203,25 +203,13 @@ static void print_declaration(ac_converter_c* c, ac_ast_declaration* declaration
 
         if (declaration->function_block) new_line(c); /* make extra space if it's a function definition */
     }
-    // simple declaration 
+    /* Simple declaration. */
     else if (declaration->type == ac_ast_type_DECLARATION_SIMPLE)
     {
         indent(c);
-
-        print_identifier(c, declaration->type_specifier->identifier);
+        print_type_specifier(c, declaration->type_specifier);
         print_str(c, " ");
-        print_identifier(c, declaration->declarator->ident);
-        
-        if (declaration->declarator->parameters)
-        {
-            print_parameters(c, declaration->declarator->parameters);
-        }
-
-        if (declaration->declarator->initializer)
-        {
-            print_str(c, " = ");
-            print_expr(c, declaration->declarator->initializer);
-        }
+        print_declarator(c, declaration->declarator);
         
         print_str(c, ";");
         print_str(c, "\n");
@@ -257,8 +245,7 @@ static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator)
         print_str(c, " = ");
         print_expr(c, declarator->initializer);
     }
-
-    if (declarator->parameters)
+    else if (declarator->parameters)
     {
         print_parameters(c, declarator->parameters);
     }
