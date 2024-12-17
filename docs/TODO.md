@@ -12,24 +12,39 @@
     
 # Stage 1 - C Preprocessor
 
-    - [WIP] Handle macro.
-        - [./] Object-like macro.
-        - [./] Strays '\' between tokens.
-        - [./] Strays '\' for identifiers.
-        - [./] Strays '\' for other multiple-char token.
-        - [./] Strays '\' in other literal (numbers, boolean, etc.).
-        - [./] Strays '\' in string and character literals.
-        - [./] Function-like macro.
-        - [./] Support concatenation operator "##".
-        - [./] Macro should not be visible from the expanded tokens.
-        - [./] Support stringification operator "#".
-        - [./] Support special macro __FILE__.
-        - [./] Support special macro __LINE__.
-        - [./] Support special macro __DATE__.
-        - [./] Support special macro __TIME__.
-        - [./] Support special macro __COUNTER__.
-        - [] Support special macro __func__, __FUNCTION__ and __PRETTY_FUNCTION__.
-        - [] Support special macro __STDC_VERSION__?
+### 1.0
+
+    - [./] Object-like macro.
+    - [./] Strays '\' between tokens.
+    - [./] Strays '\' for identifiers.
+    - [./] Strays '\' for other multiple-char token.
+    - [./] Strays '\' in other literal (numbers, boolean, etc.).
+    - [./] Strays '\' in string and character literals.
+    - [./] Function-like macro.
+    - [./] Support concatenation operator "##".
+    - [./] Macro should not be visible from the expanded tokens.
+    - [./] Support stringification operator "#".
+    
+### 1.1
+
+    - [./] Support special macro __FILE__.
+    - [./] Support special macro __LINE__.
+    - [./] Support special macro __DATE__.
+    - [./] Support special macro __TIME__.
+    - [./] Support special macro __COUNTER__.
+    
+### 1.2
+
+    We need the following feature to test __func__, __FUNCTION__ and __PRETTY_FUNCTION__:
+    
+    - [] Support basic types (bool, int, char, short, long, signed, unsigned, float, double).
+    - [] Support dereferencing.
+    
+### 1.3
+
+    - [] Support special macro __func__, __FUNCTION__ and __PRETTY_FUNCTION__.
+    
+### 1.4
 
     - [] Support basic #if/#endif
     - [] Support #elif
@@ -50,8 +65,9 @@
     - Handle number overflows.
     
 # Later
-    - Handle raw string literals and utf8/utf16/utf32 raw literal as well.
-    - Add __STDC_NO_VLA__ as default macro. We don't want to support VLA at all.
+    - [] Handle raw string literals and utf8/utf16/utf32 raw literal as well.
+    - [] Add __STDC_NO_VLA__ as default macro. We don't want to support VLA at all.
+    - [] Support special macro __STDC_VERSION__?
     
 # Documentation
     - Expand the "Generic type" section.
