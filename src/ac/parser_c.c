@@ -51,6 +51,8 @@ static ac_ast_expr* parse_statement_from_identifier(ac_parser_c* p, ac_ast_ident
 static ac_ast_expr* parse_unary(ac_parser_c* p);
 static ac_ast_type_specifier* try_parse_type(ac_parser_c* p, ac_ast_identifier* identifier);
 
+static bool is_basic_type_or_identifier(enum ac_token_type type);
+
 static ac_token token(const ac_parser_c* p); /* Current token by value. */
 static const ac_token* token_ptr(const ac_parser_c * p);  /* Current token by pointer. */
 static ac_location location(const ac_parser_c* p);
@@ -317,32 +319,12 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
 
     ac_ast_expr* result = 0;
 
-    switch (token_type(p)) {
+    ac_token_type type = token_type(p);
+    switch (type) {
     case ac_token_type_BRACE_L: { /* parse nested block statement */
 
-        ac_report_error_loc(location(p), "internal error: nested block not handled yet, case not handled %d\n", token_type(p));
+        ac_report_error_loc(location(p), "internal error: nested block not handled yet, case not handled %d\n", type);
         return 0;
-    }
-    case ac_token_type_IDENTIFIER: { /* <identifier> */
-        ac_ast_identifier* ident = parse_identifier(p);
-
-        /* any kind of declarations etc. */
-        ac_ast_expr* declaration = parse_statement_from_identifier(p, ident);
-
-        if (!declaration) { return 0; }
-
-        assert(ac_ast_is_declaration(declaration));
-
-        /* all declarations (exception function definition) requires a trailing semi-colon */
-        if (declaration->type != ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
-        {
-            if (!expect_and_consume(p, ac_token_type_SEMI_COLON))
-            {
-                return 0;
-            }
-        }
-
-        return declaration;
     }
     case ac_token_type_RETURN: {
         goto_next_token(p); /* Skip 'return' */
@@ -368,7 +350,32 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
     }
 
     default: {
-        ac_report_error_loc(location(p), "Internal error token type not handled: '%s'", ac_token_type_to_str(token_type(p)));
+        if (is_basic_type_or_identifier(type))
+        {
+            ac_ast_identifier* ident = parse_identifier(p);
+
+            /* Any kind of declarations etc. */
+            ac_ast_expr* declaration = parse_statement_from_identifier(p, ident);
+
+            if (!declaration) { return 0; }
+
+            AC_ASSERT(ac_ast_is_declaration(declaration));
+
+            /* All declarations (exception function definition) requires a trailing semi-colon. */
+            if (declaration->type != ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
+            {
+                if (!expect_and_consume(p, ac_token_type_SEMI_COLON))
+                {
+                    return 0;
+                }
+            }
+
+            return declaration;
+        }
+        else
+        {
+            ac_report_error_loc(location(p), "Internal error token type not handled: '%s'", ac_token_type_to_str(token_type(p)));
+        }
     }
     }
 
@@ -394,11 +401,6 @@ static ac_ast_expr* parse_unary(ac_parser_c* p) {
 
 static ac_ast_type_specifier* try_parse_type(ac_parser_c* p, ac_ast_identifier* identifier)
 {
-    if (!strv_equals_str(identifier->name, "int"))
-    {
-        ac_report_error_loc(location(p), "This parser can only handle 'int' as type.");
-    }
-
     AST_NEW_CTOR(p, ac_ast_type_specifier, type_specifier, location(p), ac_ast_type_specifier_init);
     type_specifier->identifier = identifier;
 
@@ -417,7 +419,7 @@ static ac_ast_expr* parse_rhs(ac_parser_c* p, ac_ast_expr* lhs, int lhs_preceden
 
 static ac_ast_identifier* parse_identifier(ac_parser_c* p) {
 
-    assert(token_is(p, ac_token_type_IDENTIFIER));
+    AC_ASSERT(ac_token_is_keyword_or_identifier(token(p).type));
 
     AST_NEW(p, ac_ast_identifier, result, location(p), ac_ast_type_IDENTIFIER);
     result->name = token(p).ident->text;
@@ -623,8 +625,9 @@ static ac_ast_parameter* parse_parameter(ac_parser_c* p)
         return param;
     }
 
-    if (!expect(p, ac_token_type_IDENTIFIER))
+    if (!is_basic_type_or_identifier(token(p).type))
     {
+        ac_report_error_loc(location(p), "Parameter must start with a basic type or an identifier.");
         return 0;
     }
     
@@ -725,6 +728,20 @@ static ac_ast_array_specifier* parse_array_specifier(ac_parser_c* p)
     }
 
     return first;
+}
+
+static bool is_basic_type_or_identifier(enum ac_token_type type)
+{
+    return type == ac_token_type_IDENTIFIER
+        || type == ac_token_type_CHAR
+        || type == ac_token_type_DOUBLE
+        || type == ac_token_type_FLOAT
+        || type == ac_token_type_INT
+        || type == ac_token_type_LONG
+        || type == ac_token_type_SHORT
+        || type == ac_token_type_SIGNED
+        || type == ac_token_type_UNSIGNED
+        || type == ac_token_type_VOID;
 }
 
 static ac_token token(const ac_parser_c* p)
