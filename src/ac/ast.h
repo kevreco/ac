@@ -175,13 +175,13 @@ void ac_ast_return_init(ac_ast_return* node);
 
 struct ac_ast_unary {
     INCLUDE_AST_EXPR_BASE
-    enum ac_token_type op;       /* which type of unary operator */
-    ac_ast_expr* operand; /* primary ast expr */
+    enum ac_token_type op; /* Which type of unary operator. */
+    ac_ast_expr* operand;  /* Primary ast expression. */
 };
 
 struct ac_ast_binary {
     INCLUDE_AST_EXPR_BASE
-    enum ac_token_type op;     /* which type of binary operator */
+    enum ac_token_type op; /* Which type of binary operator. */
     ac_ast_expr* left;
     ac_ast_expr* right;
 };

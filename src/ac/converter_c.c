@@ -19,6 +19,7 @@ static void print_parameters(ac_converter_c* c, ac_ast_parameters* parameters);
 static void print_parameter(ac_converter_c* c, ac_ast_parameter* parameter);
 static void print_declaration(ac_converter_c* c, ac_ast_declaration* declaration);
 static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator);
+static void print_unary_op(ac_converter_c* c, enum ac_token_type type);
 
 static void print_fv(ac_converter_c* c, const char* fmt, va_list args);
 static void print_f(ac_converter_c* c, const char* fmt, ...);
@@ -85,6 +86,12 @@ static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
 
         print_declarator(c, declarator);
     }
+    else if (expr->type == ac_ast_type_IDENTIFIER)
+    {
+        CAST_TO(ac_ast_identifier*, identifier, expr);
+
+        print_identifier(c, identifier);
+    }
     else if (expr->type == ac_ast_type_LITERAL_INTEGER)
     {
         /* handle unsigned integer */
@@ -110,9 +117,15 @@ static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
         CAST_TO(ac_ast_type_specifier*, type_specifier, expr);
         print_type_specifier(c, type_specifier);
     }
+    else if (expr->type == ac_ast_type_UNARY)
+    {
+        CAST_TO(ac_ast_unary*, unary, expr);
+        print_unary_op(c, unary->op);
+        print_expr(c, unary->operand);
+    }
     else
     {
-        assert(0 && "internal error: unhandled ast type.");
+        AC_ASSERT(0 && "Internal error: Unhandled ast expression, cannot print it.");
     }
 }
 
@@ -249,6 +262,41 @@ static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator)
     {
         print_parameters(c, declarator->parameters);
     }
+}
+
+static void print_unary_op(ac_converter_c* c, enum ac_token_type type)
+{
+    const char* str = "";
+    switch (type)
+    {
+    case ac_token_type_AMP:
+        str = "&";
+        break;
+    case ac_token_type_DOUBLE_MINUS:
+        str = "--";
+        break;
+    case ac_token_type_DOUBLE_PLUS:
+        str = "++";
+        break;
+    case ac_token_type_EXCLAM:
+        str = "!";
+        break;
+    case ac_token_type_MINUS:
+        str = "-";
+        break;
+    case ac_token_type_PLUS:
+        str = "+";
+        break;
+    case ac_token_type_STAR:
+        str = "*";
+        break;
+    case ac_token_type_TILDE:
+        str = "~";
+        break;
+    default:
+        AC_ASSERT(0 && "Internal error: Unsupported unary operator.");
+    }
+    print_str(c, str);
 }
 
 static void print_fv(ac_converter_c* c, const char* fmt, va_list args)
