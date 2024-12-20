@@ -20,6 +20,7 @@ static void print_parameter(ac_converter_c* c, ac_ast_parameter* parameter);
 static void print_declaration(ac_converter_c* c, ac_ast_declaration* declaration);
 static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator);
 static void print_unary_op(ac_converter_c* c, enum ac_token_type type);
+static void print_binary_op(ac_converter_c* c, enum ac_token_type type);
 
 static void print_fv(ac_converter_c* c, const char* fmt, va_list args);
 static void print_f(ac_converter_c* c, const char* fmt, ...);
@@ -79,6 +80,15 @@ static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
     else if (expr->type == ac_ast_type_ARRAY_EMPTY_SIZE)
     {
         /* print nothing */
+    }
+    else if (expr->type == ac_ast_type_BINARY)
+    {
+        CAST_TO(ac_ast_binary*, binary, expr);
+        print_expr(c, binary->left);
+        print_str(c, " ");
+        print_binary_op(c, binary->op);
+        print_str(c, " ");
+        print_expr(c, binary->right);
     }
     else if (expr->type == ac_ast_type_DECLARATOR)
     {
@@ -266,37 +276,55 @@ static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator)
 
 static void print_unary_op(ac_converter_c* c, enum ac_token_type type)
 {
-    const char* str = "";
     switch (type)
     {
     case ac_token_type_AMP:
-        str = "&";
-        break;
     case ac_token_type_DOUBLE_MINUS:
-        str = "--";
-        break;
     case ac_token_type_DOUBLE_PLUS:
-        str = "++";
-        break;
     case ac_token_type_EXCLAM:
-        str = "!";
-        break;
     case ac_token_type_MINUS:
-        str = "-";
-        break;
     case ac_token_type_PLUS:
-        str = "+";
-        break;
     case ac_token_type_STAR:
-        str = "*";
-        break;
     case ac_token_type_TILDE:
-        str = "~";
         break;
     default:
         AC_ASSERT(0 && "Internal error: Unsupported unary operator.");
     }
-    print_str(c, str);
+    print_strv(c, ac_token_type_to_strv(type));
+}
+
+static void print_binary_op(ac_converter_c* c, enum ac_token_type type)
+{
+    switch (type)
+    {
+    case ac_token_type_AMP:
+    case ac_token_type_CARET:
+    case ac_token_type_CARET_EQUAL:
+    case ac_token_type_DOUBLE_AMP:
+    case ac_token_type_DOUBLE_GREATER:
+    case ac_token_type_DOUBLE_EQUAL:
+    case ac_token_type_DOUBLE_LESS:
+    case ac_token_type_DOUBLE_PIPE:
+    case ac_token_type_EQUAL:
+    case ac_token_type_GREATER:
+    case ac_token_type_GREATER_EQUAL:
+    case ac_token_type_LESS:
+    case ac_token_type_LESS_EQUAL:
+    case ac_token_type_MINUS:
+    case ac_token_type_MINUS_EQUAL:
+    case ac_token_type_NOT_EQUAL:
+    case ac_token_type_PIPE:
+    case ac_token_type_PLUS:
+    case ac_token_type_PLUS_EQUAL:
+    case ac_token_type_SLASH:
+    case ac_token_type_SLASH_EQUAL:
+    case ac_token_type_STAR:
+    case ac_token_type_STAR_EQUAL:
+        break;
+    default:
+        AC_ASSERT(0 && "Internal error: Unsupported unary operator.");
+    }
+    print_strv(c, ac_token_type_to_strv(type));
 }
 
 static void print_fv(ac_converter_c* c, const char* fmt, va_list args)

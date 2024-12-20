@@ -22,6 +22,7 @@
         
 #define if_printf(condition_, ...) do { if(condition_) printf(__VA_ARGS__); } while(0);
 
+static int LOWEST_PRIORITY_PRECEDENCE = 999;
 
 typedef bool (*ensure_expr_t)(ac_ast_expr* expr);
 
@@ -29,13 +30,13 @@ static void* allocate(ac_parser_c * p, size_t byte_size);
 static ac_options* options(ac_parser_c* p);
 
 static ac_ast_top_level* parse_top_level(ac_parser_c* p);
-static ac_ast_expr* parse_expr(ac_parser_c* p, ac_ast_expr* lhs);
+static int get_precedence_if_binary_op(enum ac_token_type type);
+static ac_ast_expr* parse_expr(ac_parser_c* p, int previous_precedence);
 static ac_ast_expr* parse_primary(ac_parser_c* p);
 static ac_ast_block* parse_block(ac_parser_c* p);
 static ac_ast_block* parse_block_or_inline_block(ac_parser_c* p);
 static bool parse_statements(ac_parser_c* p, ensure_expr_t post_check, const char* message);
 static ac_ast_expr* parse_statement(ac_parser_c* p);
-static ac_ast_expr* parse_rhs(ac_parser_c* p, ac_ast_expr* lhs, int lhs_precedence);
 static ac_ast_identifier* parse_identifier(ac_parser_c* p);
 static ac_ast_declaration* parse_declaration_list(ac_parser_c* p, ac_ast_type_specifier* type_specifier);
 static ac_ast_declaration* make_simple_declaration(ac_parser_c* p, ac_ast_type_specifier* type_specifier, ac_ast_declarator* declarator);
@@ -127,31 +128,111 @@ static ac_ast_top_level* parse_top_level(ac_parser_c* p)
     return top_level;
 }
 
-static ac_ast_expr* parse_expr(ac_parser_c* p, ac_ast_expr* lhs)
+static int get_precedence_if_binary_op(enum ac_token_type type)
 {
-    if_printf(options(p)->debug_parser, "parse_expression\n");
+    switch (type) {
+    case ac_token_type_PERCENT: /* Remainder. */
+    case ac_token_type_SLASH:   /* Division. */
+    case ac_token_type_STAR:    /* Multiplication. */
+        return 50;
+    case ac_token_type_MINUS:
+    case ac_token_type_PLUS:
+        return 60;
+    case ac_token_type_DOUBLE_LESS:     /* Bitwise left shift. */
+    case ac_token_type_DOUBLE_GREATER:  /* Bitwise right shift. */
+        return 70;
+    case ac_token_type_GREATER:
+    case ac_token_type_GREATER_EQUAL:
+    case ac_token_type_LESS:
+    case ac_token_type_LESS_EQUAL:
+        return 90;
+    case ac_token_type_DOUBLE_EQUAL:
+    case ac_token_type_NOT_EQUAL:
+        return 100;
+    case ac_token_type_AMP:   /* Bitwise AND */
+        return 110;
+    case ac_token_type_CARET: /* Bitwise XOR */
+        return 120;
+    case ac_token_type_PIPE:  /* Bitwise OR */
+        return 130;
+    case ac_token_type_DOUBLE_AMP:  /* Logicel AND */
+        return 140;
+    case ac_token_type_DOUBLE_PIPE: /* Logicel OR */
+        return 160;
+    case ac_token_type_EQUAL:
+    case ac_token_type_CARET_EQUAL:
+    case ac_token_type_MINUS_EQUAL:
+    case ac_token_type_PERCENT_EQUAL:
+    case ac_token_type_PLUS_EQUAL:
+    case ac_token_type_SLASH_EQUAL:
+    case ac_token_type_STAR_EQUAL:
+        return 160;
+    default:
+        return LOWEST_PRIORITY_PRECEDENCE;
+    }
+}
 
-    if (token_is(p, ac_token_type_EOF))
+/*
+    The following algorithm to parse an expression is a reimplementation of what Jonathan Blow and Casey Muratori
+    have been discussing in this video: https://www.youtube.com/watch?v=fIPO4G42wYE
+
+    Here is an interpretation considering those examples:
+    
+    A: 1 + 2 + 3 + 4
+    B: 1 + 2 * 3 + 4
+    C: 1 * 2 + 3 + 4
+
+    We take the first primary expression "1" as left expression, check if there is a binary operator right after.
+    If so we need to combine this "1" with the result a following expression since that the purpose a binary operator.
+    The result of following expression can be known depending on the precendences of the previous operator and next operator.
+
+    A: Since the second "+" is equal precedence to the first "+" we can can combine "2 + 3" we would become the expression next to "1 +"
+    B: Is the same case as A. Since "*" is higher priority we an also combine "2 * 3" and can also use it as right node for "1 +".
+    C: The second operator is a "+" and is lower priority over "*", hence we return only "2" as right node for "1 *".
+
+    In all cases we continue combine those new nodes until there is no remaining operators.
+*/
+static ac_ast_expr* parse_expr(ac_parser_c* p, int previous_precedence)
+{
+    ac_ast_expr* left = parse_primary(p);
+
+    if (left == NULL)
     {
-        return 0;
+        return NULL;
     }
 
-    lhs = lhs ? lhs : parse_primary(p);
-
-    if (!lhs)
+    while (true) /* Left can be NULL if */
     {
-        return 0;
+        enum ac_token_type new_token_type = token(p).type;
+        int new_precedence = get_precedence_if_binary_op(new_token_type);
+
+        /* While the next token is a binary operator and if the new precedence is higher priority,
+           We need to combine the left expression with a following expression one. */
+        if (new_precedence < previous_precedence)
+        {
+            goto_next_token(p); /* Skip binary op. */
+
+            AST_NEW_CTOR(p, ac_ast_binary, binary, location(p), ac_ast_binary_init);
+            binary->op = new_token_type;
+            binary->left = left;
+
+            /* Get the right expression. */
+            ac_ast_expr* right = parse_expr(p, new_precedence);
+            if (right == NULL)
+            {
+                return NULL;
+            }
+            binary->right = right;
+
+            /* Left node has been merged with next expression so it became the left node itself and we continue to try to combine.
+               The combination above could have been ended if the prioritt was lower than the previous one. */
+            left = to_expr(binary);
+        }
+        else
+        {
+            return left;
+        }
     }
-
-    int lhs_precedence = 0;
-    ac_ast_expr* rhs = parse_rhs(p, lhs, lhs_precedence);
-
-    if (!rhs)
-    {
-        return lhs;
-    }
-
-    return rhs;
 }
 
 /* A primary expression can be a constant/literal, an identifier or _Generic. */
@@ -330,8 +411,7 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
         goto_next_token(p); /* Skip 'return' */
         AST_NEW_CTOR(p, ac_ast_return, ret, location(p), ac_ast_return_init);
 
-        ac_ast_expr* lhs = 0;
-        ret->expr = parse_expr(p, lhs);
+        ret->expr = parse_expr(p, LOWEST_PRIORITY_PRECEDENCE);
         result = to_expr(ret);
 
         if (!expect_and_consume(p, ac_token_type_SEMI_COLON))
@@ -405,16 +485,6 @@ static ac_ast_type_specifier* try_parse_type(ac_parser_c* p, ac_ast_identifier* 
     type_specifier->identifier = identifier;
 
     return type_specifier;
-}
-
-static ac_ast_expr* parse_rhs(ac_parser_c* p, ac_ast_expr* lhs, int lhs_precedence) {
-    if_printf(options(p)->debug_parser, "parse_rhs\n");
-
-    /* @TODO: handle precedence, binary operators etc.*/
-    (void)lhs_precedence;
-    (void)lhs;
-    
-    return lhs;
 }
 
 static ac_ast_identifier* parse_identifier(ac_parser_c* p) {
@@ -525,8 +595,7 @@ static ac_ast_declarator* parse_declarator_core(ac_parser_c* p, bool identifier_
     if (token_is(p, ac_token_type_EQUAL)) /* = */
     {
         goto_next_token(p); /* skip = */
-        ac_ast_expr* lhs = 0;
-        declarator->initializer = parse_expr(p, lhs);
+        declarator->initializer = parse_expr(p, LOWEST_PRIORITY_PRECEDENCE);
         return declarator;
     }
 
@@ -711,8 +780,7 @@ static ac_ast_array_specifier* parse_array_specifier(ac_parser_c* p)
             continue;
         }
 
-        ac_ast_expr* lhs = 0;
-        ac_ast_expr* array_size_expr = parse_expr(p, lhs);
+        ac_ast_expr* array_size_expr = parse_expr(p, LOWEST_PRIORITY_PRECEDENCE);
 
         if (!array_size_expr)
         {

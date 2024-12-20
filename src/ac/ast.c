@@ -93,6 +93,16 @@ void ac_ast_unary_init(ac_ast_unary* node)
     node->operand = 0;
 }
 
+void ac_ast_binary_init(ac_ast_binary* node)
+{
+    memset(node, 0, sizeof(ac_ast_binary));
+    node->type = ac_ast_type_BINARY;
+
+    node->op = ac_ast_type_UNKNOWN;
+    node->left = 0;
+    node->right = 0;
+}
+
 void ac_ast_top_level_init(ac_ast_top_level* node)
 {
     memset(node, 0, sizeof(ac_ast_top_level));

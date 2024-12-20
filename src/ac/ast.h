@@ -22,6 +22,7 @@ enum ac_ast_type {
     ac_ast_type_ARRAY_EMPTY_SIZE,
     ac_ast_type_ARRAY_SPECIFIER,
     ac_ast_type_BLOCK,
+    ac_ast_type_BINARY,
     ac_ast_type_EMPTY_STATEMENT,
     ac_ast_type_DECLARATION_UNKNOWN,
     ac_ast_type_DECLARATION_SIMPLE,               /* const int i  |  int *i  |  int i = 0  |  int i[0]  |  int func() */
@@ -179,6 +180,8 @@ struct ac_ast_unary {
     ac_ast_expr* operand;  /* Primary ast expression. */
 };
 
+void ac_ast_unary_init(ac_ast_unary* node);
+
 struct ac_ast_binary {
     INCLUDE_AST_EXPR_BASE
     enum ac_token_type op; /* Which type of binary operator. */
@@ -186,7 +189,7 @@ struct ac_ast_binary {
     ac_ast_expr* right;
 };
 
-void ac_ast_unary_init(ac_ast_unary* unary);
+void ac_ast_binary_init(ac_ast_binary* node);
 
 struct ac_ast_top_level {
     INCLUDE_AST_EXPR_BASE
