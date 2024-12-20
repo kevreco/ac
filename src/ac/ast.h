@@ -79,12 +79,7 @@ void ac_expr_list_add(ac_expr_list* list, ac_ast_expr* next);
 
 struct ac_ast_literal {
     INCLUDE_AST_EXPR_BASE
-    union {
-        strv str;
-        intmax_t integer;
-        double _float;
-        bool boolean;
-    } u;
+    ac_token token; /* The token itself is stored to have access to the original string. */
 };
 
 struct ac_ast_identifier {

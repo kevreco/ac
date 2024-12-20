@@ -255,7 +255,7 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
         }
         case ac_token_type_FALSE: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_BOOL);
-            literal->u.boolean = false;
+            literal->token = token(p);
             result = to_expr(literal);
             goto_next_token(p);
             break;
@@ -268,28 +268,28 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
         }
         case ac_token_type_LITERAL_INTEGER: { 
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_INTEGER);
-            literal->u.integer = token(p).u.number.u.int_value;
+            literal->token = token(p);
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_FLOAT: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_FLOAT);
-            literal->u._float = token(p).u.number.u.float_value;
+            literal->token = token(p);
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_LITERAL_STRING: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_STRING);
-            literal->u.str = token(p).text;
+            literal->token = token(p);
             result = to_expr(literal);
             goto_next_token(p);
             break;
         }
         case ac_token_type_TRUE: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_BOOL);
-            literal->u.boolean = true;
+            literal->token = token(p);
             result = to_expr(literal);
             goto_next_token(p);
             break;
@@ -299,7 +299,19 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
             return NULL;
             break;
         }
-        
+        /* Special macro*/
+        case ac_token_type__FUNC__:
+        case ac_token_type__FUNCTION__:
+        case ac_token_type__PRETTY_FUNCTION__:
+        {
+            /* Similar code as for ac_token_type_LITERAL_STRING but we use the current function name. */
+            AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_STRING);
+            literal->token.type = ac_token_type_LITERAL_STRING;
+            literal->token.text = ac_create_or_reuse_literal(p->mgr, p->current_function_name);
+            result = to_expr(literal);
+            goto_next_token(p);
+            break;
+        }
         default: {
             ac_report_error_loc(location(p), "parse_primary, case not handled %d\n", token_type(p));
             return 0;
@@ -521,13 +533,18 @@ static ac_ast_declaration* parse_declaration_list(ac_parser_c* p, ac_ast_type_sp
         && declarator->array_specifier == 0
         && token_is(p, ac_token_type_BRACE_L))
     {
+        p->current_function_name = declarator->ident->name;
+        
         ac_ast_block* block = parse_block(p);
         if (!block)
         {
             return 0;
         }
+        ac_ast_declaration* declaration = make_function_declaration(p, type_specifier, declarator, block);
+        
+        p->current_function_name = (strv)STRV("");
 
-        return make_function_declaration(p, type_specifier, declarator, block);
+        return declaration;
     }
 
     last_declaration = make_simple_declaration(p, type_specifier, declarator);

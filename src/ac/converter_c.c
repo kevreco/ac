@@ -1,7 +1,6 @@
 #include "converter_c.h"
 
 #include <stdio.h> /* FILE */
-#include <inttypes.h> /* PRIiMAX, PRIuMAX */
 
 #include "ast.h"
 #include "manager.h"
@@ -102,12 +101,11 @@ static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
 
         print_identifier(c, identifier);
     }
-    else if (expr->type == ac_ast_type_LITERAL_INTEGER)
+    else if (expr->type == ac_ast_type_LITERAL_INTEGER
+        || expr->type == ac_ast_type_LITERAL_STRING)
     {
-        /* handle unsigned integer */
         CAST_TO(ac_ast_literal*, literal, expr);
-        /* print maximal size possible value of an integer with PRIiMAX */
-        print_f(c, "%" PRIiMAX "", literal->u.integer);
+        ac_token_sprint(&c->string_buffer, literal->token);
     }
     else if (expr->type == ac_ast_type_PARAMETER)
     {

@@ -15,6 +15,7 @@ struct ac_parser_c {
     ac_manager* mgr;
     ac_pp pp;
 
+    strv current_function_name;
     ac_ast_block* current_block;
 };
 

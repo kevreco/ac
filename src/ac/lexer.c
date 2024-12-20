@@ -1289,14 +1289,14 @@ static ac_token_info token_infos[] = {
 
     /* Special Macros */
 
-    { true,  ac_token_type__FILE__, IDENT("__FILE__") },
-    { true,  ac_token_type__LINE__, IDENT("__LINE__") },
-    { true,  ac_token_type__DATE__, IDENT("__DATE__") },
-    { true,  ac_token_type__TIME__, IDENT("__TIME__") },
-    { true,  ac_token_type__COUNTER__, IDENT("__COUNTER__") },
-    { false, ac_token_type__FUNC__, IDENT("__func__") },
-    { false, ac_token_type__FUNCTION__, IDENT("__FUNCTION__") },
-    { false, ac_token_type__PRETTY_FUNCTION__, IDENT("__PRETTY_FUNCTION__") },
+    { true, ac_token_type__FILE__, IDENT("__FILE__") },
+    { true, ac_token_type__LINE__, IDENT("__LINE__") },
+    { true, ac_token_type__DATE__, IDENT("__DATE__") },
+    { true, ac_token_type__TIME__, IDENT("__TIME__") },
+    { true, ac_token_type__COUNTER__, IDENT("__COUNTER__") },
+    { true, ac_token_type__FUNC__, IDENT("__func__") },
+    { true, ac_token_type__FUNCTION__, IDENT("__FUNCTION__") },
+    { true, ac_token_type__PRETTY_FUNCTION__, IDENT("__PRETTY_FUNCTION__") },
 
     /* Symbols */
 
