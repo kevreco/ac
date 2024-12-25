@@ -32,6 +32,7 @@ enum ac_ast_type {
     ac_ast_type_DECLARATOR,                       /* i  |  *i  |  i = 0  |  i[0]  |  func() */
     ac_ast_type_IDENTIFIER,
     ac_ast_type_LITERAL_BOOL,
+    ac_ast_type_LITERAL_CHAR,
     ac_ast_type_LITERAL_FLOAT,
     ac_ast_type_LITERAL_INTEGER,
     ac_ast_type_LITERAL_NULL,

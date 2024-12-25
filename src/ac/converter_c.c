@@ -101,7 +101,10 @@ static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
 
         print_identifier(c, identifier);
     }
-    else if (expr->type == ac_ast_type_LITERAL_INTEGER
+    else if (
+        expr->type == ac_ast_type_LITERAL_CHAR
+        || expr->type == ac_ast_type_LITERAL_FLOAT
+        || expr->type == ac_ast_type_LITERAL_INTEGER
         || expr->type == ac_ast_type_LITERAL_STRING)
     {
         CAST_TO(ac_ast_literal*, literal, expr);

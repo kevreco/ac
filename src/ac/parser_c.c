@@ -266,8 +266,8 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
             result = to_expr(ident);
             break;
         }
-        case ac_token_type_LITERAL_INTEGER: { 
-            AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_INTEGER);
+        case ac_token_type_LITERAL_CHAR: {
+            AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_CHAR);
             literal->token = token(p);
             result = to_expr(literal);
             goto_next_token(p);
@@ -275,6 +275,13 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
         }
         case ac_token_type_LITERAL_FLOAT: {
             AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_FLOAT);
+            literal->token = token(p);
+            result = to_expr(literal);
+            goto_next_token(p);
+            break;
+        }
+        case ac_token_type_LITERAL_INTEGER: { 
+            AST_NEW(p, ac_ast_literal, literal, location(p), ac_ast_type_LITERAL_INTEGER);
             literal->token = token(p);
             result = to_expr(literal);
             goto_next_token(p);
