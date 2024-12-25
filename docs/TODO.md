@@ -37,12 +37,15 @@
 
     We need the following feature to test __func__, __FUNCTION__ and __PRETTY_FUNCTION__:
     
-    - [] Support basic types (bool, int, char, short, long, signed, unsigned, float, double).
-    - [] Support dereferencing.
+    - [./] Support basic types (bool, int, char, short, long, signed, unsigned, float, double).
+    - [./] Support pointers.
+    - [./] Support dereferencing.
+    - [./] Support string literal.
+    - [./] Support char literal.
     
 ### 1.3
 
-    - [] Support special macro __func__, __FUNCTION__ and __PRETTY_FUNCTION__.
+    - [./] Support special macro __func__, __FUNCTION__ and __PRETTY_FUNCTION__.
     
 ### 1.4
 
@@ -53,7 +56,6 @@
     
 # Stage 2 - C Parser and C converter
 
-    - [] Support pointer declaration.
     - [] Support array declaration.
     - [] Handle typedef.
     - [] Handle struct.
