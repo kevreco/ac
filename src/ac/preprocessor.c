@@ -40,9 +40,6 @@ static void ac_macro_destroy(ac_macro* m)
     darrT_destroy(&m->definition);
 }
 
-static strv directive_define = STRV("define");
-static strv directive_undef = STRV("undef");
-
 /* Get token from the stack or from the lexer. */
 static ac_token* goto_next_raw_token(ac_pp* pp);
 /* Get next raw token and resolve directives. */
@@ -268,52 +265,64 @@ static bool parse_directive(ac_pp* pp)
 
     ac_token* tok = goto_next_token_from_directive(pp); /* Skip '#' */
 
-    if (tok->type == ac_token_type_IDENTIFIER)
+    switch (tok->type)
     {
-        /* #define */
-        if (strv_equals(tok->ident->text, directive_define))
+    case ac_token_type_DEFINE:
+    {
+        goto_next_token_from_directive(pp); /* Skip 'define' */
+        if (!parse_macro_definition(pp))
         {
-            goto_next_token_from_directive(pp); /* Skip 'define' */
-            if (!parse_macro_definition(pp))
-            {
-                return false;
-            }
-        }
-        /* #undef */
-        else if (strv_equals(tok->ident->text, directive_undef))
-        {
-            goto_next_token_from_directive(pp); /* Skip 'undef' */
-            expect(pp, ac_token_type_IDENTIFIER);
-            ac_token identifier = token(pp);
-            goto_next_token_from_directive(pp); /* Skip 'identifier' */
-
-            if (token_ptr(pp)->type != ac_token_type_COMMENT
-                && token_ptr(pp)->type != ac_token_type_HORIZONTAL_WHITESPACE
-                && token_ptr(pp)->type != ac_token_type_NEW_LINE
-                && token_ptr(pp)->type != ac_token_type_EOF)
-            {
-                ac_report_warning("Extra tokens at end of '#undef' directive");
-            }
-
-            /* Skip all tokens until end of line */
-            while (token_ptr(pp)->type != ac_token_type_NEW_LINE
-                && token_ptr(pp)->type != ac_token_type_EOF)
-            {
-                goto_next_token_from_directive(pp);
-            }
-
-            /* Remove macro it's previously defined. */
-            ac_macro* m = find_macro(pp, &identifier);
-            if (m)
-            {
-                undefine_macro(pp, m);
-            }
-        }
-        else
-        {
-            ac_report_error_loc(location(pp), "Unknown directive.");
             return false;
         }
+        break;
+    }
+    case ac_token_type_UNDEF:
+    {
+        goto_next_token_from_directive(pp); /* Skip 'undef' */
+        expect(pp, ac_token_type_IDENTIFIER);
+        ac_token identifier = token(pp);
+        goto_next_token_from_directive(pp); /* Skip 'identifier' */
+
+        if (token_ptr(pp)->type != ac_token_type_COMMENT
+            && token_ptr(pp)->type != ac_token_type_HORIZONTAL_WHITESPACE
+            && token_ptr(pp)->type != ac_token_type_NEW_LINE
+            && token_ptr(pp)->type != ac_token_type_EOF)
+        {
+            ac_report_warning("Extra tokens at end of '#undef' directive");
+        }
+
+        /* Skip all tokens until end of line */
+        while (token_ptr(pp)->type != ac_token_type_NEW_LINE
+            && token_ptr(pp)->type != ac_token_type_EOF)
+        {
+            goto_next_token_from_directive(pp);
+        }
+
+        /* Remove macro it's previously defined. */
+        ac_macro* m = find_macro(pp, &identifier);
+        if (m)
+        {
+            undefine_macro(pp, m);
+        }
+        break;
+    }
+    case ac_token_type_ELIF:
+    case ac_token_type_ELIFDEF:
+    case ac_token_type_ELIFNDEF:
+    case ac_token_type_ENDIF:
+    case ac_token_type_ERROR:
+    case ac_token_type_EMBED:
+    case ac_token_type_IFDEF:
+    case ac_token_type_IFNDEF:
+    case ac_token_type_INCLUDE:
+    case ac_token_type_PRAGMA:
+    case ac_token_type_LINE:
+    case ac_token_type_WARNING:
+        ac_report_error_loc(location(pp), "Internal error: Unsupported directive.");
+        return false;
+    case ac_token_type_IDENTIFIER:
+        ac_report_error_loc(location(pp), "Unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
+        return false;
     }
 
     /* All directives must end with a new line of a EOF. */

@@ -659,7 +659,7 @@ static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) 
 }
 
 static ac_token* token_error(ac_lex* l) {
-    l->token.type = ac_token_type_ERROR;
+    l->token.type = ac_token_type_INTERNAL_ERROR;
     return &l->token;
 }
 
@@ -1222,6 +1222,7 @@ static ac_token_info token_infos[] = {
 
     { false, ac_token_type_NONE, IDENT("<none>") },
     { false, ac_token_type_EMPTY, IDENT("") },
+    { false, ac_token_type_INTERNAL_ERROR, IDENT("<internal-error>") },
 
     /* Keywords */
 
@@ -1258,7 +1259,6 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_GOTO, IDENT("goto") },
     { false, ac_token_type_IF, IDENT("if") },
     { false, ac_token_type_INLINE, IDENT("inline") },
-
     { true,  ac_token_type_INT, IDENT("int") },
     { false, ac_token_type_IMAGINARY, IDENT("_Imaginary") },
     { true,  ac_token_type_LONG, IDENT("long") },
@@ -1286,6 +1286,23 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_VOID, IDENT("void") },
     { false, ac_token_type_VOLATILE, IDENT("volatile") },
     { false, ac_token_type_WHILE, IDENT("while") },
+
+    /* Preprocessor conditionals */
+
+    { true,  ac_token_type_DEFINE, IDENT("define") },
+    { false, ac_token_type_ELIF, IDENT("elif") },
+    { false, ac_token_type_ELIFDEF, IDENT("elifdef") },
+    { false, ac_token_type_ELIFNDEF, IDENT("elifndef") },
+    { false, ac_token_type_ENDIF, IDENT("endif") },
+    { false, ac_token_type_ERROR, IDENT("error") },
+    { false, ac_token_type_EMBED, IDENT("embed") },
+    { false, ac_token_type_IFDEF, IDENT("ifdef") },
+    { false, ac_token_type_IFNDEF, IDENT("ifndef") },
+    { false, ac_token_type_INCLUDE, IDENT("include") },
+    { false, ac_token_type_PRAGMA, IDENT("pragma") },
+    { false, ac_token_type_LINE, IDENT("line") },
+    { true,  ac_token_type_UNDEF, IDENT("undef") },
+    { false, ac_token_type_WARNING, IDENT("warning") },
 
     /* Special Macros */
 
@@ -1325,7 +1342,6 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_DOUBLE_QUOTE , IDENT("\"") },
     { true,  ac_token_type_EOF, IDENT("<end-of-line>") },
     { true,  ac_token_type_EQUAL, IDENT("=") },
-    { false, ac_token_type_ERROR, IDENT("<error>") },
     { true,  ac_token_type_EXCLAM, IDENT("!") },
     { true,  ac_token_type_GREATER, IDENT(">") },
     { true,  ac_token_type_GREATER_EQUAL, IDENT(">=") },

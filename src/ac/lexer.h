@@ -11,6 +11,7 @@ typedef enum ac_token_type ac_token_type;
 enum ac_token_type {
     ac_token_type_NONE,
     ac_token_type_EMPTY, /* Special token which mean "no token". */
+    ac_token_type_INTERNAL_ERROR,
 
     /* Keywords */
 
@@ -75,6 +76,23 @@ enum ac_token_type {
     ac_token_type_VOLATILE,
     ac_token_type_WHILE,
 
+    /* Preprocessor keywords */
+   
+    ac_token_type_DEFINE,
+    ac_token_type_ELIF,
+    ac_token_type_ELIFDEF,  /* C23 */
+    ac_token_type_ELIFNDEF, /* C23 */
+    ac_token_type_ENDIF,
+    ac_token_type_ERROR,
+    ac_token_type_EMBED,
+    ac_token_type_IFDEF,
+    ac_token_type_IFNDEF,
+    ac_token_type_INCLUDE,
+    ac_token_type_PRAGMA,
+    ac_token_type_LINE,
+    ac_token_type_UNDEF,
+    ac_token_type_WARNING,  /* C23 */
+
     /* Special macros */
 
     ac_token_type__FILE__,            /* __FILE__  */
@@ -113,7 +131,6 @@ enum ac_token_type {
     ac_token_type_DOUBLE_QUOTE,    /* "  */
     ac_token_type_EOF,
     ac_token_type_EQUAL,           /* =  */
-    ac_token_type_ERROR,
     ac_token_type_EXCLAM,          /* !  */
     ac_token_type_GREATER,         /* >  */
     ac_token_type_GREATER_EQUAL,   /* >= */
