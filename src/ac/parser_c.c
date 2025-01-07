@@ -158,7 +158,7 @@ static int get_precedence_if_binary_op(enum ac_token_type type)
     case ac_token_type_DOUBLE_AMP:  /* Logicel AND */
         return 140;
     case ac_token_type_DOUBLE_PIPE: /* Logicel OR */
-        return 160;
+        return 150;
     case ac_token_type_EQUAL:
     case ac_token_type_CARET_EQUAL:
     case ac_token_type_MINUS_EQUAL:
