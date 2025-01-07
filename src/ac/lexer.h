@@ -275,6 +275,9 @@ bool ac_lex_expect(ac_lex* l, enum ac_token_type type);
 
 void ac_lex_swap(ac_lex* left, ac_lex* right);
 
+/* Skip block of text between #if and #endif. */
+bool ac_skip_preprocessor_block(ac_lex* l);
+
 ac_token* ac_token_eof();
 
 const char* ac_token_type_to_str(enum ac_token_type type); /* this should be used only for printf */

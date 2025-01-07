@@ -96,15 +96,29 @@ static ac_token_cmd make_cmd_token_list(ac_token* ptr, size_t count);
 static ac_token_cmd make_cmd_macro_pop(ac_macro* m, darr_token tokens);
 static ac_token_cmd to_cmd_token_list(darr_token* arr);
 
-/*------------------*/
+
+/*-----------------------------------------------------------------------*/
 /* macro hash table */
-/*------------------*/
+/*-----------------------------------------------------------------------*/
 
 static ht_hash_t macro_hash(ht_ptr_handle* handle);
 static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright);
 static void add_macro(ac_pp* pp, ac_macro* m);
 static void undefine_macro(ac_pp* pp, ac_macro* m);
 static ac_macro* find_macro(ac_pp* pp, ac_token* identifer);
+
+/*-----------------------------------------------------------------------*/
+/* Preprocessor evaluation */
+/*-----------------------------------------------------------------------*/
+
+static int LOWEST_PRIORITY_PRECEDENCE = 999;
+static ac_token* goto_next_for_eval(ac_pp* pp);
+
+static int get_precedence_if_binary_op(enum ac_token_type type);
+
+static int64_t eval_binary(ac_pp* pp, enum ac_token_type binary_op, int64_t left, int64_t right);
+static int64_t eval_expr2(ac_pp* pp, int previous_precedence);
+static int64_t eval_expr(ac_pp* pp);
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath)
 {
@@ -267,6 +281,12 @@ static bool parse_directive(ac_pp* pp)
 
     switch (tok->type)
     {
+case_endif:
+    case ac_token_type_ENDIF:
+    {
+        goto_next_token_from_directive(pp); /* Skip 'endif' */
+        break;
+    }
     case ac_token_type_DEFINE:
     {
         goto_next_token_from_directive(pp); /* Skip 'define' */
@@ -275,6 +295,26 @@ static bool parse_directive(ac_pp* pp)
             return false;
         }
         break;
+    }
+    case ac_token_type_IF:
+    {
+        goto_next_for_eval(pp); /* Skip 'if' and get the next expanded token. */
+
+        /* If expression is non-zero we skip the preprocessor block. */
+        if (!eval_expr(pp)) /* Eval expression */
+        {
+            if (!ac_skip_preprocessor_block(&pp->lex))
+            {
+                return false;
+            }
+        }
+
+        if (!expect(pp, ac_token_type_ENDIF))
+        {
+            return false;
+        }
+
+        goto case_endif;
     }
     case ac_token_type_UNDEF:
     {
@@ -309,7 +349,6 @@ static bool parse_directive(ac_pp* pp)
     case ac_token_type_ELIF:
     case ac_token_type_ELIFDEF:
     case ac_token_type_ELIFNDEF:
-    case ac_token_type_ENDIF:
     case ac_token_type_ERROR:
     case ac_token_type_EMBED:
     case ac_token_type_IFDEF:
@@ -1137,4 +1176,201 @@ static ac_macro* find_macro(ac_pp* pp, ac_token* identifer)
     key.identifier = *identifer;
 
     return ht_ptr_get(&pp->macros, &key);
+}
+
+static ac_token* goto_next_for_eval(ac_pp* pp)
+{
+    ac_token* token = ac_pp_goto_next(pp);
+    while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
+       || token->type == ac_token_type_COMMENT)
+    {
+        token = ac_pp_goto_next(pp);
+    }
+
+    return token;
+}
+
+static int get_precedence_if_binary_op(enum ac_token_type type)
+{
+    switch (type) {
+    case ac_token_type_PERCENT: /* Remainder. */
+    case ac_token_type_SLASH:   /* Division. */
+    case ac_token_type_STAR:    /* Multiplication. */
+        return 50;
+    case ac_token_type_MINUS:
+    case ac_token_type_PLUS:
+        return 60;
+    case ac_token_type_DOUBLE_LESS:     /* Bitwise left shift. */
+    case ac_token_type_DOUBLE_GREATER:  /* Bitwise right shift. */
+        return 70;
+    case ac_token_type_GREATER:
+    case ac_token_type_GREATER_EQUAL:
+    case ac_token_type_LESS:
+    case ac_token_type_LESS_EQUAL:
+        return 90;
+    case ac_token_type_DOUBLE_EQUAL:
+    case ac_token_type_NOT_EQUAL:
+        return 100;
+    case ac_token_type_AMP:   /* Bitwise AND */
+        return 110;
+    case ac_token_type_CARET: /* Bitwise XOR */
+        return 120;
+    case ac_token_type_PIPE:  /* Bitwise OR */
+        return 130;
+    case ac_token_type_DOUBLE_AMP:  /* Logicel AND */
+        return 140;
+    case ac_token_type_DOUBLE_PIPE: /* Logicel OR */
+        return 150;
+    default:
+        return LOWEST_PRIORITY_PRECEDENCE;
+    }
+}
+
+static int64_t eval_primary(ac_pp* pp)
+{
+    int64_t result = 0;
+    enum ac_token_type type = token(pp).type;
+    switch (type) {
+    case ac_token_type_EOF: { /* Error must have been reported by "goto_next_token" or "expect_and_consume" */
+        result = 0;
+        break;
+    }
+    case ac_token_type_PAREN_L: {
+        goto_next_for_eval(pp); /* Skip '(' */
+        result = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+        if (!result)
+            return 0;
+
+        if (!expect(pp, ac_token_type_PAREN_R))
+            return 0;
+
+        goto_next_for_eval(pp); /* Skip ')' */
+        break;
+    }
+    case ac_token_type_FALSE: {
+        result = 0;
+        goto_next_for_eval(pp);
+        break;
+    }
+    /* Macros are already expanded, hence an identifier here means an non-existing macro.
+       They are replaced with 0. */
+    case ac_token_type_IDENTIFIER: {
+        result = 0;
+        goto_next_for_eval(pp);
+        break;
+    }
+    case ac_token_type_LITERAL_CHAR: {
+        result = ac_token_type_to_strv(type).data[0];
+        goto_next_for_eval(pp);
+        break;
+    }
+    case ac_token_type_LITERAL_INTEGER: {
+        result = token(pp).u.number.u.int_value;
+        goto_next_for_eval(pp);
+        break;
+    }
+    case ac_token_type_TRUE: {
+        result = 1;
+        goto_next_for_eval(pp);
+        break;
+    }
+    case ac_token_type_EXCLAM: {
+        goto_next_for_eval(pp); /* Skip '!' */
+        result = !eval_primary(pp);
+        break;
+    }
+
+    case ac_token_type_MINUS:
+    case ac_token_type_PLUS:
+    case ac_token_type_TILDE: /* '~' Bitwise NOT */
+    {
+        goto_next_for_eval(pp); /* Skip operator */
+        int64_t right = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+        /* Evaluation unary operation as binary operation with zero value on the left.*/
+        result = eval_binary(pp, type, 0, right);
+        break;
+    }
+    /* Binary operator used as unary operator*/
+    default: {
+        ac_report_error_loc(location(pp), "Not a valid preprocessor expression:" STRV_FMT "", STRV_ARG(ac_token_type_to_strv(type)));
+        result = 0;
+        break;
+    }
+    }
+    return result;
+}
+
+static int64_t eval_binary(ac_pp* pp, enum ac_token_type binary_op, int64_t left, int64_t right)
+{
+    switch (binary_op)
+    {
+    case ac_token_type_PERCENT:        return left % right;
+    case ac_token_type_SLASH:          return left / right;
+    case ac_token_type_STAR:           return left * right;
+    case ac_token_type_MINUS:          return left - right;
+    case ac_token_type_PLUS:           return left + right;
+    case ac_token_type_DOUBLE_LESS:    return left << right;
+    case ac_token_type_DOUBLE_GREATER: return left >> right;
+    case ac_token_type_GREATER:        return (int64_t)(left > right);
+    case ac_token_type_GREATER_EQUAL:  return (int64_t)(left >= right);
+    case ac_token_type_LESS:           return (int64_t)(left < right);
+    case ac_token_type_LESS_EQUAL:     return (int64_t)(left <= right);
+    case ac_token_type_DOUBLE_EQUAL:   return (int64_t)(left == right);
+    case ac_token_type_NOT_EQUAL:      return (int64_t)(left != right);
+    case ac_token_type_AMP:            return left & right;
+    case ac_token_type_CARET:          return left ^ right;
+    case ac_token_type_PIPE:           return left | right;
+    case ac_token_type_DOUBLE_AMP:     return (int64_t)(left && right);
+    case ac_token_type_DOUBLE_PIPE:    return (int64_t)(left || right);
+    default:
+        AC_ASSERT(0 && "Unexpected binary operator.");
+    }
+    AC_ASSERT(0 && "Unreachable.");
+    return 0;
+}
+
+static int64_t eval_expr2(ac_pp* pp, int previous_precedence)
+{
+    int64_t left = eval_primary(pp);
+
+    while (true) /* Left can be NULL if */
+    {
+        enum ac_token_type new_token_type = token(pp).type;
+        int new_precedence = get_precedence_if_binary_op(new_token_type);
+
+        /* While the next token is a binary operator and if the new precedence is higher priority,
+           We need to combine the left expression with a following one. */
+        if (new_precedence < previous_precedence)
+        {
+            goto_next_for_eval(pp); /* Skip binary op. */
+
+            int64_t right = eval_expr2(pp, new_precedence);
+
+            left = eval_binary(pp, new_token_type, left, right);
+        }
+        else
+        {
+            return left;
+        }
+    }
+}
+
+static int64_t eval_expr(ac_pp* pp)
+{
+    if (token(pp).type == ac_token_type_EOF)
+    {
+        ac_report_error("Unexpected end-of-file for #if");
+        return 0;
+    }
+
+    int64_t result = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+
+    /* */
+    if (!expect(pp, ac_token_type_NEW_LINE))
+    {
+        return 0;
+    }
+    goto_next_raw_token(pp); /* Skip new line. */
+
+    return result;
 }

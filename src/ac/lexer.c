@@ -33,8 +33,10 @@ static bool is_str(const ac_lex* l, const char* str, size_t count); /* current c
 static bool next_is(const ac_lex* l, char c);      /* next char equal to */
 static bool next_next_is(const ac_lex* l, char c); /* next next char equal to */
 
-static int consume_one(ac_lex* l);        /* goto next char and keep up with location of the token. */
-static void consume_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time.  */
+static int consume_one(ac_lex* l);     /* Goto next char and keep up with location of the token. */
+static void skip_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time. */
+static bool skip_comment(ac_lex* l);         /* Skip C comment. */
+static void skip_inline_comment(ac_lex* l);  /* Skip inline comment. */
 static int skip_if_stray(ac_lex* l);      /* Get character after the current stray or return the current character. */
 static int next_char_no_stray(ac_lex* l);
 static int next_digit(ac_lex* l);         /* Get next digit, ignoring quotes and underscores. Push the digit to the token_buf. */
@@ -161,7 +163,7 @@ switch_start:
     {
         /* Parse single line ending: \n or \r or \r\n */
         const char* start = l->cur;
-        consume_newlines(l);
+        skip_newlines(l);
         return token_from_text(l, ac_token_type_NEW_LINE, strv_make_from(start, l->cur - start));
     }
     
@@ -302,32 +304,15 @@ switch_start:
         }
         else if (c == '/') {  /* Parse inline comment. */
             const char* start = l->cur - 1;
-            consume_one(l); /* Skip '/' */
-            
-            while (!is_eof(l) && !is_end_line(l)) {
-                consume_one(l);
-            }
+
+            skip_inline_comment(l);
             return token_from_text(l, ac_token_type_COMMENT, strv_make_from(start, l->cur - start));
         }
         else if (c == '*') {  /* Parse C comment. */
             const char* start = l->cur - 1;
-            consume_one(l); /* Skip opening comment tag. */
-            
-            ac_location location = l->location;
-            /* Skip until closing comment tag. */
-            while (!is_eof(l) && !(is_char(l, '*') && next_is(l, '/'))) {
-                consume_one(l);
-            }
 
-            int count = 2;
-            while (count) {
-                if (is_eof(l)) {
-                    ac_report_error_loc(location, "Cannot find closing comment tag '*/'.\n");
-                    return token_eof(l);
-                }
-                consume_one(l); /* Skip '*' then '/' */
-                count -= 1;
-            }
+            if(!skip_comment(l))
+                return token_eof(l);
            
             return token_from_text(l, ac_token_type_COMMENT, strv_make_from(start, l->cur - start));;
         }
@@ -518,6 +503,92 @@ void ac_lex_swap(ac_lex* left, ac_lex* right)
     *right = tmp;
 }
 
+/*
+    NOTE: We want to go as fast as possible to skip preprocessor block.
+    However, we still need to tokenize directive identifiers because we need to count nested #if/#endif
+    We also need to skip comments and string literal because we don't care about #endif within comments and string literals.
+
+    Example of the issue:
+        #if 1
+          
+           #if 0
+           #endif
+           //#endif
+           "#endif"
+        #endif
+
+    @TODO handle string literals.
+    @TODO write test for nested #if/#endif
+*/
+bool ac_skip_preprocessor_block(ac_lex* l)
+{
+    bool was_end_of_line = false;
+    int c;
+    int nesting_level = 0;
+
+    for (;;)
+    {
+        c = *l->cur;
+        switch (c) {
+        case '\0': /* We should not encounter EOF in a preprocessor block. */
+            ac_report_error("Expect #endif, #else of #elif, #elifdef or #elifndef.");
+            return false;
+        case '\r':
+        case '\n':
+            skip_newlines(l);
+            was_end_of_line = true;
+            continue;
+        case '/':
+            c = consume_one(l); /* We need to handle the stray. */
+            if (c == '*') {
+                skip_comment(l);
+            }
+            else if (c == '/') {
+                skip_inline_comment(l);
+            }
+            /* Fallthrough */
+        case ' ':
+        case '\t':
+        case '\f':
+        case '\v':
+        {
+            consume_one(l);
+            continue;
+        }
+        case '#':
+            if (was_end_of_line)
+            {
+                consume_one(l);
+                ac_token* t = ac_lex_goto_next(l);
+
+                bool is_ending_token = t->type == ac_token_type_ELSE
+                    || t->type == ac_token_type_ELIF
+                    || t->type == ac_token_type_ENDIF;
+
+                if (nesting_level == 0 && is_ending_token)
+                {
+                    return true;
+                }
+
+                bool is_starting_token = t->type == ac_token_type_IF
+                    || t->type == ac_token_type_IFDEF
+                    || t->type == ac_token_type_IFNDEF;
+                if (is_starting_token)
+                    nesting_level += 1;
+                else if (t->type == ac_token_type_ENDIF)
+                    nesting_level -= 1;
+
+                continue;
+            }
+            /* Fallthrough */
+        default:
+            consume_one(l);
+            was_end_of_line = false;
+        }
+    }
+    return true;
+}
+
 static ac_token eof = {ac_token_type_EOF};
 
 ac_token* ac_token_eof()
@@ -579,7 +650,7 @@ static inline int consume_one(ac_lex* l) {
     return l->cur[0];
 }
 
-static void consume_newlines(ac_lex* l) {
+static void skip_newlines(ac_lex* l) {
 
     switch (l->cur[0])
     {
@@ -599,6 +670,37 @@ static void consume_newlines(ac_lex* l) {
     }
     default:
         AC_ASSERT(0 && "Unreachable");
+    }
+}
+
+static bool skip_comment(ac_lex* l)
+{
+    consume_one(l); /* Skip '*' */
+
+    ac_location location = l->location;
+    /* Skip until closing comment tag. */
+    while (!is_eof(l) && !(is_char(l, '*') && next_is(l, '/'))) {
+        consume_one(l);
+    }
+
+    int count = 2;
+    while (count) {
+        if (is_eof(l)) {
+            ac_report_error_loc(location, "Cannot find closing comment tag '*/'.\n");
+            return false;
+        }
+        consume_one(l); /* Skip '*' then '/' */
+        count -= 1;
+    }
+    return true;
+}
+
+static void skip_inline_comment(ac_lex* l)
+{
+    consume_one(l); /* Skip '/' */
+
+    while (!is_eof(l) && !is_end_line(l)) {
+        consume_one(l);
     }
 }
 
@@ -1257,7 +1359,7 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_FOR, IDENT("for") },
     { false, ac_token_type_GENERIC, IDENT("_Generic") },
     { false, ac_token_type_GOTO, IDENT("goto") },
-    { false, ac_token_type_IF, IDENT("if") },
+    { true,  ac_token_type_IF, IDENT("if") },
     { false, ac_token_type_INLINE, IDENT("inline") },
     { true,  ac_token_type_INT, IDENT("int") },
     { false, ac_token_type_IMAGINARY, IDENT("_Imaginary") },
@@ -1293,7 +1395,7 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_ELIF, IDENT("elif") },
     { false, ac_token_type_ELIFDEF, IDENT("elifdef") },
     { false, ac_token_type_ELIFNDEF, IDENT("elifndef") },
-    { false, ac_token_type_ENDIF, IDENT("endif") },
+    { true,  ac_token_type_ENDIF, IDENT("endif") },
     { false, ac_token_type_ERROR, IDENT("error") },
     { false, ac_token_type_EMBED, IDENT("embed") },
     { false, ac_token_type_IFDEF, IDENT("ifdef") },

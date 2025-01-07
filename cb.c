@@ -39,7 +39,8 @@ int main()
 	test_parse_only(ac_exe,   "./tests/parse_declarations/");
 	test_c_generation(ac_exe, "./tests/generate_c/");
 	test_preprocessor(ac_exe, "./tests/literals/");
-	test_preprocessor(ac_exe, "./tests/preprocessor/");
+	test_preprocessor(ac_exe, "./tests/preprocessor_macro/");
+    test_preprocessor(ac_exe, "./tests/preprocessor_conditional/");
 
 	cb_destroy();
 
