@@ -51,9 +51,7 @@ struct ac_pp {
 	darrT(ac_macro*) undef_macros;
 
 	ac_token* current_token;
-	
-	/* previous_was_space: to know if the previous token was a space. This is only relevant in case of macro expansion. */
-	bool previous_was_space;    
+
 	dstr concat_buffer;         /* Concatenation of token is done via tokenizing a string. */
 	int macro_depth;            /* Macro depth is not currently needed, it's mostly for inspectiong purpose. */
 	darr_token buffer_for_peek; /* Sometimes we need to peek some tokens and send them on the stack. */
