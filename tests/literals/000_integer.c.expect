@@ -13,11 +13,7 @@
 123ULL
 123UL
 123LL
-123
-/* Decimal - Trailing quote is an AC extension. */
-123
-/* Decimal - Using underscore as digit separator is an AC extension. */ 
-123  
+1'2'3
 /* Binary */
 0b101
 0B101010

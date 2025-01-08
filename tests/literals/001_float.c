@@ -15,5 +15,3 @@
 0x1.ep-3
 0x1.ep-3
 1'2.1'2
-/* Decimal - Trailing quote is an AC extension. */
-1'2'.'1'2

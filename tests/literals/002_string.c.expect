@@ -1,6 +1,6 @@
 "Hello"
-"Hello	"
-"Hello	"
+"Hello\t"
+"Hello\x09"
 u8"Helloぁ"
 u"Hello"
 U"Hello"

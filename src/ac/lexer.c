@@ -57,7 +57,8 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num); /* Parse inte
 static bool parse_float_suffix(ac_lex* l, ac_token_number* num);   /* Parse float suffix like 'f' or 'l' */
 static ac_token* token_integer_literal(ac_lex* l, ac_token_number num); /* Create integer token from parsed value. */
 static ac_token* token_float_literal(ac_lex* l, ac_token_number num);   /* Create float token from parsed value. */
-static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base); /* Parse float after the whole number part. */
+static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base); /* Parse float after the whole number part trying to parse the dot. */
+static ac_token* parse_float_literal_core(ac_lex* l, ac_token_number num, enum base_type base, bool parse_fractional_part); /* Parse float after the whole number part. */
 static int hex_string_to_int(const char* c, size_t len);
 static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c);
 
@@ -341,12 +342,15 @@ switch_start:
 
     case '.': {
         dstr_clear(&l->tok_buf);
+        dstr_append_char(&l->tok_buf, c);
         c = next_digit(l); /* Skip '.' */
        
         /* Float can also starts with a dot. */
         if (c >= '0' && c <= '9')
         {
-            return parse_integer_or_float_literal(l, '.', c);
+            ac_token_number num = { 0 };
+            bool parse_fractional_part = true;
+            return parse_float_literal_core(l, num, base10, parse_fractional_part);
         }
 
         if (c == '.') {
@@ -949,6 +953,19 @@ static ac_token* token_float_literal(ac_lex* l, ac_token_number num)
 
 static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_type base)
 {
+    int c = l->cur[0];
+
+    bool parse_fractional_part = false;
+    if (c == '.') {
+        c = next_digit(l);
+        parse_fractional_part = true;
+    }
+
+    return parse_float_literal_core(l, num, base, parse_fractional_part);
+}
+
+static ac_token* parse_float_literal_core(ac_lex* l, ac_token_number num, enum base_type base, bool parse_fractional_part)
+{
     AC_ASSERT(base == 10 || base == 16 && "Can only parse decimal floats of hexadicemal floats.");
 
     double value = num.u.float_value;
@@ -956,9 +973,7 @@ static ac_token* parse_float_literal(ac_lex* l, ac_token_number num, enum base_t
 
     int c = l->cur[0];
 
-    if (c == '.') {
-        c = next_digit(l);
-
+    if (parse_fractional_part) {
         if (c == '.') { return NULL; } /* If there is a dot after a dot then we are not parsing a number. */
         double pow, addend = 0;
 
