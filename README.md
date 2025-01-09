@@ -18,17 +18,24 @@ This compiler will emit C code to make it cross-platform.
 # Why?
 
 Using C is very often frustrating so I'm just planning to create new extension/syntax/construct to get rid of this frustration.
-Other languages addressing this frustration exists however I'm not satified with their direction.
+Other languages addressing this frustration exist however I'm not satified with their direction.
+
+New language rely on FFI or LLVM to import C projects, however I want AC compiler to compiler C files without external dependencies and without need to create thin a wrapper from AC code.
+
+In the long run, I want to be able to use AC as scripting language and the compiler should be several times faster than a standard C compiler.
+Some design choice as already been made around this (the preprocessor is done during parsing time, no need to run it beforehand) and future design choice will follow,
 
 # Features
 
 ## Currently missing
 
 Since the project is in a very early stage, almost all features (C or AC) are currently missing.
+
 You can check to [TODO](docs/TODO.md) list to see what has been implemented already.
 
 ## Planned
 
+- Comprehensive preprocessor. GCC, MSVC and clang generate the most correct preprocessor output, but all other compilers I tried were generating incorrect output for some tests. I will create a pages to compare all the well known compilers.
 - Basic type alias such as:
   - `i8` `i16` `i32` `i64` `i128` for signed integer.
   - `u8` `u16` `u32` `u64` `u128` for unsigned integer.
@@ -74,10 +81,12 @@ Examples:
 
 ## Not planned
 
-- No package manager.
-- No exceptions.
-- No built-in slice type. They will likely be implemented in a standard library.
+- No [exceptions](docs/not_planned.md#exceptions).
+- No [package manager](docs/not_planned.md#package-manager).
+- No [built-in slice type](docs/not_planned.md#built-in-slice-type). They will likely be implemented in a standard library.
 - No slice operator.
+- No [compilte-time reflection](docs/not_planned.md#compile-time-reflection).
+- No run-time reflection.
 
 # How to build
 
