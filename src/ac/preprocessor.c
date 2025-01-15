@@ -214,8 +214,6 @@ static ac_token* goto_next_normal_token(ac_pp* pp)
         {
             return ac_token_eof(pp);
         }
-
-        goto_next_raw_token(pp);
     }
 
     if (token_ptr(pp)->type == ac_token_type_EOF)
@@ -307,14 +305,14 @@ case_endif:
             {
                 return false;
             }
-        }
+            if (!expect(pp, ac_token_type_ENDIF))
+            {
+                return false;
+            }
 
-        if (!expect(pp, ac_token_type_ENDIF))
-        {
-            return false;
+            goto case_endif;
         }
-
-        goto case_endif;
+        break;
     }
     case ac_token_type_UNDEF:
     {
@@ -362,15 +360,21 @@ case_endif:
     case ac_token_type_IDENTIFIER:
         ac_report_error_loc(location(pp), "Unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
         return false;
+    case ac_token_type_NEW_LINE:
+    case ac_token_type_EOF:
+        /* Null directives, nothing needs to be done. */
+        break;
     }
 
-    /* All directives must end with a new line of a EOF. */
+    /* All directives must end with a new line or a EOF. */
     if (token_ptr(pp)->type != ac_token_type_NEW_LINE
         && token_ptr(pp)->type != ac_token_type_EOF)
     {
         ac_report_error("Internal error: directive did not end with a new line.");
         return false;
     }
+    goto_next_raw_token(pp); /* Skip new line or EOF. */
+
 
     return true;
 }
@@ -1363,14 +1367,5 @@ static int64_t eval_expr(ac_pp* pp)
         return 0;
     }
 
-    int64_t result = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
-
-    /* */
-    if (!expect(pp, ac_token_type_NEW_LINE))
-    {
-        return 0;
-    }
-    goto_next_raw_token(pp); /* Skip new line. */
-
-    return result;
+    return eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);;
 }
