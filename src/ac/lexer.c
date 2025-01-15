@@ -13,6 +13,7 @@ enum base_type {
     base16 = 16,
 };
 
+static const strv strv_error = {0, 0};
 static const strv empty = STRV("");
 /* char and string literal prefix. */
 static const strv no_prefix = STRV("");
@@ -37,8 +38,8 @@ static int consume_one(ac_lex* l);     /* Goto next char and keep up with locati
 static void skip_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time. */
 static bool skip_comment(ac_lex* l);         /* Skip C comment. */
 static void skip_inline_comment(ac_lex* l);  /* Skip inline comment. */
-static int skip_if_stray(ac_lex* l);      /* Get character after the current stray or return the current character. */
-static int next_char_no_stray(ac_lex* l);
+static int skip_if_splice(ac_lex* l);        /* Get character after the current splice or return the current character. */
+static int next_char_no_splice(ac_lex* l);   /* Get next character ignoring splices. */
 static int next_digit(ac_lex* l);         /* Get next digit, ignoring quotes and underscores. Push the digit to the token_buf. */
 
 static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text); /* set current token and got to next */
@@ -64,7 +65,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c);
 
 static void* utf8_decode(void* p, int32_t* pc);
 
-static strv string_or_char_literal_to_buffer(ac_lex* l, char quote);
+static strv string_or_char_literal_to_buffer(ac_lex* l, char quote, dstr* str);
 static ac_token* parse_string_literal(ac_lex* l, strv prefix);
 static ac_token* token_string(ac_lex* l, strv literal, strv kind);
 
@@ -144,7 +145,7 @@ switch_start:
             return token_from_single_char(l, ac_token_type_BACKSLASH);
         }
 
-        skip_if_stray(l);
+        skip_if_splice(l);
         goto switch_start;
     case ' ':
     case '\t':
@@ -181,116 +182,116 @@ switch_start:
     case '@': return token_from_single_char(l, ac_token_type_AT);
 
     case '#': {
-        c = next_char_no_stray(l); /* Skip '#' */
+        c = next_char_no_splice(l); /* Skip '#' */
         if (c == '#') {
-            c = next_char_no_stray(l); /* Skip '#' */
+            c = next_char_no_splice(l); /* Skip '#' */
             return token_from_type(l, ac_token_type_DOUBLE_HASH);
         }
         return token_from_type(l, ac_token_type_HASH);
     }
     case '=': {
-        c = next_char_no_stray(l); /* Skip '=' */
+        c = next_char_no_splice(l); /* Skip '=' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_DOUBLE_EQUAL);
         }
         return token_from_type(l, ac_token_type_EQUAL);
     }
 
     case '!': {
-        c = next_char_no_stray(l); /* Skip '!' */
+        c = next_char_no_splice(l); /* Skip '!' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_NOT_EQUAL);
         }
         return token_from_type(l, ac_token_type_EXCLAM);
     }
 
     case '<': {
-        c = next_char_no_stray(l); /* Skip '<' */
+        c = next_char_no_splice(l); /* Skip '<' */
         if (c == '<') {
-            c = next_char_no_stray(l); /* Skip '<' */
+            c = next_char_no_splice(l); /* Skip '<' */
             return token_from_type(l, ac_token_type_DOUBLE_LESS);
         }
         else if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l,  ac_token_type_LESS_EQUAL);
         }
         return token_from_type(l,  ac_token_type_LESS);
     }
 
     case '>': {
-        c = next_char_no_stray(l); /* Skip '>' */
+        c = next_char_no_splice(l); /* Skip '>' */
         if (c == '>') {
-            c = next_char_no_stray(l); /* Skip '>' */
+            c = next_char_no_splice(l); /* Skip '>' */
             return token_from_type(l, ac_token_type_DOUBLE_GREATER);
         }
         else if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_GREATER_EQUAL);
         }
         return token_from_type(l, ac_token_type_GREATER);
     }
 
     case '&': {
-        c = next_char_no_stray(l); /* Skip '&' */
+        c = next_char_no_splice(l); /* Skip '&' */
         if (c == '&') {
-            c = next_char_no_stray(l); /* Skip '&' */
+            c = next_char_no_splice(l); /* Skip '&' */
             return token_from_type(l, ac_token_type_DOUBLE_AMP);
         }
         else if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_AMP_EQUAL);
         }
         return token_from_type(l, ac_token_type_AMP);
     }
 
     case '|': {
-        c = next_char_no_stray(l); /* Skip '|' */
+        c = next_char_no_splice(l); /* Skip '|' */
         if (c == '|') {
-            c = next_char_no_stray(l); /* Skip '|' */
+            c = next_char_no_splice(l); /* Skip '|' */
             return token_from_type(l, ac_token_type_DOUBLE_PIPE);
         }
         else if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_PIPE_EQUAL);
         }
         return token_from_type(l, ac_token_type_PIPE);
     }
 
     case '+': {
-        c = next_char_no_stray(l); /* Skip '+' */
+        c = next_char_no_splice(l); /* Skip '+' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_PLUS_EQUAL);
         }
         return token_from_type(l, ac_token_type_PLUS);
     }
     case '-': {
-        c = next_char_no_stray(l); /* Skip '-' */
+        c = next_char_no_splice(l); /* Skip '-' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_MINUS_EQUAL);
         }
         else if (c == '>') {
-            c = next_char_no_stray(l); /* Skip '>' */
+            c = next_char_no_splice(l); /* Skip '>' */
             return token_from_type(l, ac_token_type_ARROW);
         }
         return token_from_type(l, ac_token_type_MINUS);
     }
 
     case '*': {
-        c = next_char_no_stray(l); /* Skip '*' */
+        c = next_char_no_splice(l); /* Skip '*' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_STAR_EQUAL);
         }
         return token_from_type(l, ac_token_type_STAR);
     }
     case '~': {
-        c = next_char_no_stray(l); /* Skip '~' */
+        c = next_char_no_splice(l); /* Skip '~' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_TILDE_EQUAL);
         }
         return token_from_type(l, ac_token_type_TILDE);
@@ -298,9 +299,9 @@ switch_start:
             
 
     case '/': {
-        c = next_char_no_stray(l); /* Skip '/' */
+        c = next_char_no_splice(l); /* Skip '/' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_SLASH_EQUAL);
         }
         else if (c == '/') {  /* Parse inline comment. */
@@ -322,18 +323,18 @@ switch_start:
     }
 
     case '%': {
-        c = next_char_no_stray(l); /* Skip '%' */
+        c = next_char_no_splice(l); /* Skip '%' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_PERCENT_EQUAL);
         }
         return token_from_type(l, ac_token_type_PERCENT);
     }
 
     case '^': {
-        c = next_char_no_stray(l); /* Skip '^' */
+        c = next_char_no_splice(l); /* Skip '^' */
         if (c == '=') {
-            c = next_char_no_stray(l); /* Skip '=' */
+            c = next_char_no_splice(l); /* Skip '=' */
             return token_from_type(l, ac_token_type_CARET_EQUAL);
         }
 
@@ -354,9 +355,9 @@ switch_start:
         }
 
         if (c == '.') {
-            c = next_char_no_stray(l); /* Skip '.' */
+            c = next_char_no_splice(l); /* Skip '.' */
             if (c == '.') {
-                c = next_char_no_stray(l); /* Skip '.' */
+                c = next_char_no_splice(l); /* Skip '.' */
                 return token_from_type(l, ac_token_type_TRIPLE_DOT);
             }
             return token_from_type(l, ac_token_type_DOUBLE_DOT);
@@ -412,13 +413,13 @@ parse_identifier:
         if (is_char(l, '\\')) /* Stray found. We need to create a new string without it and reparse the identifier. */
         {
             dstr_assign(&l->tok_buf, strv_make_from(start, l->cur - start));
-            int c = skip_if_stray(l);
+            int c = skip_if_splice(l);
 
             while (is_identifier(c))
             {
                 hash = AC_HASH(hash, l->cur[0]);
                 dstr_append_char(&l->tok_buf, c);
-                c = next_char_no_stray(l);
+                c = next_char_no_splice(l);
             }
 
             ident =  dstr_to_strv(&l->tok_buf);
@@ -518,10 +519,13 @@ void ac_lex_swap(ac_lex* left, ac_lex* right)
            #if 0
            #endif
            //#endif
-           "#endif"
+           "\
+           #endif"
+           '\
+           #endif'
+
         #endif
 
-    @TODO handle string literals.
     @TODO write test for nested #if/#endif
 */
 bool ac_skip_preprocessor_block(ac_lex* l)
@@ -543,7 +547,7 @@ bool ac_skip_preprocessor_block(ac_lex* l)
             was_end_of_line = true;
             continue;
         case '/':
-            c = consume_one(l); /* We need to handle the stray. */
+            c = consume_one(l);
             if (c == '*') {
                 skip_comment(l);
             }
@@ -557,6 +561,13 @@ bool ac_skip_preprocessor_block(ac_lex* l)
         case '\v':
         {
             consume_one(l);
+            continue;
+        }
+        case '\'':
+        case '"':
+        {
+            /* Consume the string or char literal but do not create any token. */
+            string_or_char_literal_to_buffer(l, c, NULL);
             continue;
         }
         case '#':
@@ -708,7 +719,7 @@ static void skip_inline_comment(ac_lex* l)
     }
 }
 
-static int skip_if_stray(ac_lex* l)
+static int skip_if_splice(ac_lex* l)
 {
     AC_ASSERT(l->cur[0] == '\\');
 
@@ -735,23 +746,23 @@ static int skip_if_stray(ac_lex* l)
     return l->cur[0];
 }
 
-static int next_char_no_stray(ac_lex* l)
+static int next_char_no_splice(ac_lex* l)
 {
     int c;
     c = consume_one(l);
     if (c == '\\') {
-        c = skip_if_stray(l);
+        c = skip_if_splice(l);
     }
     return c;
 }
 
 static int next_digit(ac_lex* l)
 {
-    int c = next_char_no_stray(l);
+    int c = next_char_no_splice(l);
 
     while (c == '\'' || c == '_') {
         dstr_append_char(&l->tok_buf, c);
-        c = next_char_no_stray(l);
+        c = next_char_no_splice(l);
     }
     dstr_append_char(&l->tok_buf, c);
     return c;
@@ -1199,58 +1210,140 @@ static void* utf8_decode(void* p, int32_t* pc)
     return NULL;
 }
 
-static strv string_or_char_literal_to_buffer(ac_lex* l, char quote)
+/* This function either parse a string or skip a string.
+   The string is skipped and buf can be null in case we just want to skip a preprocessor block.
+   The function is quite ugly because we consider an optimistic path and a pessimistic one.
+   The pessimistic one is when a splice is encountered. */
+static strv string_or_char_literal_to_buffer(ac_lex* l, char quote, dstr* buf)
 {
     strv inner_content = empty;
     AC_ASSERT(is_char(l, quote));
 
+    if (buf) {
+        dstr_clear(buf);
+    }
+
     int c = l->cur[0];
+    int previous_for_splice = 0; /* Keep previous character to handle some behavior due to splice and escaped sequences. */
 
+    int n = 0; /* Number of character from the optimistic path. */
+    int splice_found = false;
+
+    c = consume_one(l); /* Skip '"'. */
     const char* start = l->cur;
-    int n = 0;
-    /* @FIXME try transform the do/while in while. */
-    do {
-        n += 1;
-        c = consume_one(l);
-    } while (!is_eof(l)
-        && c != quote
-        && c != '\n'
-        && c != '\r'
-        && c != '\\'); /* Could be a stray or a escaped char. */
-   
-    /* Check if a stray or escape character has been found we take the slow path. */
-    if (is_char(l, '\\'))
+
+    /* Optimistic path: we assume the string is without any splice, in which case there is no need to add the characters into a buffer. */
+    for (;;)
     {
-        /* Add already parsed part of the string: */
-        size_t s = l->tok_buf.size;
-        dstr_append(&l->tok_buf, strv_make_from(start, l->cur - start));
-
-        c = skip_if_stray(l);
-
-        while (!is_eof(l)
-                && is_not_char(l, quote)
-                && is_not_char(l, '\n')
-                && is_not_char(l, '\r'))
+        switch (c)
         {
-            dstr_append_char(&l->tok_buf, c);
-            c = next_char_no_stray(l);
+            case '\n': /* Unterminated string due to new-line */
+            case '\r': /* Unterminated string due to new-line */
+            case '\0': /* End of file. */
+            {
+                goto exit_loop; /* Unterminated string. */
+            }
+            default:
+            {
+                if (c == quote)
+                {
+                    goto exit_loop; /* Proper end of literal */
+                }
+                break;
+            }
+            case  '\\':
+            {
+                if (next_is(l, '\n') || next_is(l, '\r'))
+                {
+                    splice_found = true;
+                    goto exit_loop;  /* Splice found, we need to place the string in a buffer. */
+                }
+                else if (next_is(l, '\0'))
+                {
+                    consume_one(l); /* Skip character before EOF. */
+                    goto exit_loop; /* Unterminated string. */
+                }
+                else
+                {
+                    n += 1;
+                    previous_for_splice = c;
+                    c = consume_one(l);
+
+                    if (is_eof(l))
+                    {
+                        goto exit_loop; /* Unterminated string. */
+                    }
+                    else if (c == '\\' && (next_is(l, '\n') || next_is(l, '\r')))
+                    {
+                        splice_found = true;
+                        goto exit_loop;  /* Splice found, we need to place the string in a buffer. */
+                    }
+                }
+                break;
+            }
         }
 
-        strv sv = dstr_to_strv(&l->tok_buf);
-        inner_content = strv_remove_left(sv, s + 1); /* Remove first quote from the result. */
+        n += 1;
+        previous_for_splice = c;
+        c = consume_one(l);
+    }
+
+exit_loop:
+
+    /* Pessimistic path: splice is found, we add the string to the buffer. */
+    if (splice_found)
+    {
+        AC_ASSERT(c == '\\');
+        if (buf) {
+            dstr_append(buf, strv_make_from(start, n)); /* Add buffer right before the splice */
+        }
+
+        c = skip_if_splice(l); /* Skip new line */
+        size_t s = buf ? buf->size : 0;
+        for (;;)
+        {
+            if (is_eof(l))
+            {
+                break;
+            }
+            else if (c == quote && previous_for_splice != '\\')
+            {
+                break; /* End of literal */
+            }
+            else if (c == '\n' || c == '\r')
+            {
+                /* Error new-line before string termination. */
+                break;
+            }
+
+            if (buf) {
+                dstr_append_char(buf, c);
+            }
+
+            /* Special case when two \\ has been found we assume the previous is "0" */
+            if (previous_for_splice == '\\' && c == '\\')
+                previous_for_splice = 0;
+            else
+                previous_for_splice = c;
+
+            c = next_char_no_splice(l);
+        }
+
+        if (buf) {
+            inner_content = dstr_to_strv(buf);
+        }
     }
     else
     {
-        strv sv = strv_make_from(start, l->cur - start);
-        inner_content = strv_remove_left(sv, 1); /* Remove first quote from the result. */
+        inner_content = strv_make_from(start, l->cur - start);
     }
 
-    if (is_not_char(l, quote)) {
+    if (c != quote) {
         ac_report_error_loc(l->leading_location, "Missing terminating char '%c' for literal.\n", quote);
-        return empty;
+        return strv_error;
     }
 
-    c = next_char_no_stray(l); /* consume quote or double quote */
+    c = next_char_no_splice(l); /* consume quote or double quote */
 
     return inner_content;
 }
@@ -1262,8 +1355,8 @@ static ac_token* parse_string_literal(ac_lex* l, strv prefix) {
         || prefix.data == utf16.data
         || prefix.data == utf32.data);
 
-    strv literal = string_or_char_literal_to_buffer(l, '"');
-    if (literal.size <= 0)
+    strv literal = string_or_char_literal_to_buffer(l, '"', &l->tok_buf);
+    if (literal.data == strv_error.data)
         return token_eof(l);
 
     return token_string(l, literal, prefix);
@@ -1293,8 +1386,8 @@ static ac_token* token_char(ac_lex* l, strv prefix)
 
     dstr_assign(&l->tok_buf, prefix);
 
-    strv literal = string_or_char_literal_to_buffer(l, '\'');
-    if (literal.size <= 0)
+    strv literal = string_or_char_literal_to_buffer(l, '\'', &l->tok_buf);
+    if (literal.data == strv_error.data)
         return token_eof(l);
 
     l->token.type = ac_token_type_LITERAL_CHAR;

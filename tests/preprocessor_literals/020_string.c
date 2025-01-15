@@ -1,10 +1,8 @@
-"He\
-\
-llo"
-"Hello\t"
-"Hello\x09"
-u8"Helloぁ"
-u"Hello"
-U"Hello"
-//L"Hello"
-/* TODO u\"Hello" should report an error. */
+""
+"a"
+"foo"
+u"foo"
+U"foo"
+u8"fooぁ"
+//L"foo"
+/* TODO u\"foo" should report an error. */
