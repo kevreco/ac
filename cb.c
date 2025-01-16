@@ -24,6 +24,7 @@ const char* build_with(const char* config);
 void my_project(const char* project_name, const char* toolchain, const char* config);
 void test_parse_only(const char* exe, const char* directory);
 void test_preprocessor(const char* exe, const char* directory);
+void test_error(const char* exe, const char* directory);
 void test_c_generation(const char* exe, const char* directory);
 
 int main()
@@ -41,6 +42,7 @@ int main()
 	test_preprocessor(ac_exe, "./tests/preprocessor_literals/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_macro/");
     test_preprocessor(ac_exe, "./tests/preprocessor_conditional/");
+	test_error(ac_exe, "./tests/errors/parsing/");
 
 	cb_destroy();
 
@@ -228,8 +230,40 @@ cb_bool next_non_generated_c_file(cb_file_it* it)
 	return cb_false;
 }
 
-/* Get output of preprocess and ompare it with the .expect file. */
-void test_preprocessor(const char* exe, const char* directory)
+/* Compare two string views as if all new lines (\r, \n, and \r\n) were the same
+   NOTE: string views are assumed to be null terminated. */
+bool compare_strv_newline_insensitive(strv left_str, strv right_str)
+{
+	char* left = (char*)left_str.data;
+	char* right = (char*)right_str.data;
+	char* left_end = (char*)left_str.data + left_str.size;
+	char* right_end = (char*)right_str.data + right_str.size;
+
+	while (left < left_end && right < right_end)
+	{
+		if (left[0] == '\r') ++left;
+		if (left < left_end && left[0] == '\n') ++left;
+
+		if (right[0] == '\r') ++right;
+		if (right < right_end && right[0] == '\n') ++right;
+
+		if (*left != *right) {
+			return false;
+		}
+
+		++left;
+		++right;
+	}
+
+	return true;
+}
+
+enum output_type {
+	output_type_STDOUT,
+	output_type_STDERR
+};
+
+void test_output(const char* exe, const char* directory, enum output_type type, bool new_line_insensitive)
 {
 	assert_path(exe);
 	assert_path(directory);
@@ -259,11 +293,21 @@ void test_preprocessor(const char* exe, const char* directory)
 
 		/* Run compiler and get the preprocessor output. */
 		{
-			cb_process_handle* process = cb_process_to_string(cmd.data, NULL, 0);
+			cb_bool also_get_stderr = type == output_type_STDERR;
+			cb_process_handle* process = cb_process_to_string(cmd.data, NULL, also_get_stderr);
 
-			dstr_assign_f(&preprocessor_content, "%s", cb_process_stdout_string(process));
+			const char* o = type == output_type_STDOUT
+				? cb_process_stdout_string(process)
+				: cb_process_stderr_string(process);
 
-			if (cb_process_end(process) != 0) { exit(1); };
+			dstr_assign_f(&preprocessor_content, "%s", o);
+
+			/* Only exit if we are expecting result from stdout */
+			if (cb_process_end(process) != 0 
+				&& type == output_type_STDOUT)
+			{
+				exit(1);
+			}
 		}
 
 		/* Compare output with the expected content. */
@@ -278,9 +322,19 @@ void test_preprocessor(const char* exe, const char* directory)
 				exit(1);
 			}
 
-			if (!strv_equals(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content)))
+			bool is_same = new_line_insensitive
+				? compare_strv_newline_insensitive(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content))
+				: strv_equals(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content));
+
+			if (!is_same)
 			{
-				fprintf(stderr, "Preprocessor contents do not match.\n");
+				/* In case of failure, display both expected and actual content. */
+				fprintf(stderr,"<<<<<<<<<<<<<<<<<<<<<<<<< EXPECTED\n'" STRV_FMT "'\n", STRV_ARG(expected_content));
+				fprintf(stderr,"==================================\n'" STRV_FMT "'\n", STRV_ARG(preprocessor_content));
+				fprintf(stderr,">>>>>>>>>>>>>>>>>>>>>>>>> ACTUAL  \n'");
+
+				fprintf(stderr, "ERROR: Preprocessor contents do not match.\n");
+
 				exit(1);
 			}
 		}
@@ -293,6 +347,21 @@ void test_preprocessor(const char* exe, const char* directory)
 	dstr_destroy(&expected_filename);
 	dstr_destroy(&expected_content);
 	dstr_destroy(&preprocessor_content);
+}
+
+/* Get stdout of preprocess and compare it with the .expect file. */
+void test_preprocessor(const char* exe, const char* directory)
+{
+	bool new_line_insensitive = false;
+	test_output(exe, directory, output_type_STDOUT, new_line_insensitive);
+}
+
+/* Get stderr of preprocess and compare it with the .expect file.
+   Comparison is new-line insensitive. */
+void test_error(const char* exe, const char* directory)
+{
+	bool new_line_insensitive = true;
+	test_output(exe, directory, output_type_STDERR, new_line_insensitive);
 }
 
 void test_c_generation(const char* exe, const char* directory)

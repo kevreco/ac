@@ -1,0 +1,3 @@
+./tests/errors/parsing/001.c:1:3: error: declaration needs an identifier
+1 | int
+      ^

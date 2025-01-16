@@ -138,8 +138,8 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
         strv current_line;
         while ((current_line = strv_pop_line(&partial_source)).size != 0)
         {
-            dstr256_append_f(&message, "%*d> ", max_line_number_text_size, line_counter);
-            dstr256_append_f(&message, "%.*s", (int)current_line.size, current_line.data);
+            dstr256_append_f(&message, "%*d | ", max_line_number_text_size, line_counter);
+            dstr256_append_f(&message, STRV_FMT, STRV_ARG(current_line));
 
             if (location.row == line_counter)
             {
@@ -149,15 +149,10 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
                 }
 
                 /* Print some space until the character we want, based on the colomn count. */
-                dstr256_append_f(&message, "%*s^\n", max_line_number_text_size + strlen("> ") + (location.col - 1), "");
+                dstr256_append_f(&message, "%*s^\n", max_line_number_text_size + strlen(" | ") + (location.col - 1), "");
             }
             
             ++line_counter;
-        }
-
-        /* print end of line if necessary after last line. */
-        if (!strv_ends_with_str(current_line, "\n") && !strv_ends_with_str(current_line, "\r")) {
-            dstr256_append_f(&message, "%s", "\n");
         }
     }
 
@@ -177,7 +172,7 @@ static const char* get_message_prefix(enum message_type type)
     {
     case message_type_WARNING: return "warning:";
     case message_type_ERROR: return "error:";
-    case message_type_INTERNAL_ERROR: return "internal_ error:";
+    case message_type_INTERNAL_ERROR: return "internal error:";
     default: return "";
     }
     return "";

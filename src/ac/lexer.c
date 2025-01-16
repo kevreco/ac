@@ -491,7 +491,7 @@ bool ac_lex_expect(ac_lex* l, enum ac_token_type type) {
         strv expected = ac_token_type_to_strv(type);
         strv actual = ac_token_to_strv(current);
 
-        ac_report_error_loc(current_location, "syntax error: expected '%.*s', actual '%.*s'\n"
+        ac_report_error_loc(current_location, "syntax error: expected '%.*s', actual '%.*s'"
             , expected.size, expected.data
             , actual.size, actual.data
         );

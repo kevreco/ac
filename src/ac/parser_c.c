@@ -592,7 +592,7 @@ static ac_ast_declaration* make_function_declaration(ac_parser_c* p, ac_ast_type
     return decl;
 }
 
-static ac_ast_declarator* parse_declarator_core(ac_parser_c* p, bool identifier_required)
+static ac_ast_declarator* parse_declarator_core(ac_parser_c* p, bool from_declaration)
 {
     AST_NEW_CTOR(p, ac_ast_declarator, declarator, location(p), ac_ast_declarator_init);
 
@@ -601,8 +601,14 @@ static ac_ast_declarator* parse_declarator_core(ac_parser_c* p, bool identifier_
         declarator->pointer_depth = count_and_consume_pointers(p);
     }
 
-    if ((identifier_required && expect(p, ac_token_type_IDENTIFIER))
-        || token_is(p, ac_token_type_IDENTIFIER))
+    /* Declarator from declaration must contain an identifier */
+    if (from_declaration && !token_is(p, ac_token_type_IDENTIFIER))
+    {
+        ac_report_error_loc(location(p), "declaration needs an identifier");
+        return NULL;
+    }
+
+    if (token_is(p, ac_token_type_IDENTIFIER))
     {
         declarator->ident = parse_identifier(p);
     }
@@ -636,8 +642,8 @@ static ac_ast_declarator* parse_declarator_core(ac_parser_c* p, bool identifier_
 
 static ac_ast_declarator* parse_declarator(ac_parser_c* p)
 {
-    bool identifier_required = true;
-    ac_ast_declarator* declarator = parse_declarator_core(p, identifier_required);
+    bool from_declaration = true;
+    ac_ast_declarator* declarator = parse_declarator_core(p, from_declaration);
 
     if (!declarator) { return 0; }
 
@@ -648,9 +654,8 @@ static ac_ast_declarator* parse_declarator(ac_parser_c* p)
 
 static ac_ast_declarator* parse_declarator_for_parameter(ac_parser_c* p)
 {
-    bool identifier_required = false;
-
-    ac_ast_declarator* declarator = parse_declarator_core(p, identifier_required);
+    bool from_declaration = false;
+    ac_ast_declarator* declarator = parse_declarator_core(p, from_declaration);
 
     if (!declarator) { return 0; }
 
