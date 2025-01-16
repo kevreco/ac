@@ -407,7 +407,7 @@ branch_case:
                     /* Loop again. */
                     continue;
                 default:
-                    ac_report_error("internal error: unterminated branch '%s'.", ac_token_type_to_str(t));
+                    ac_report_internal_error("unterminated branch '%s'", ac_token_type_to_str(t));
                     return false;
                 }
             }
@@ -452,10 +452,10 @@ branch_case:
     case ac_token_type_PRAGMA:
     case ac_token_type_LINE:
     case ac_token_type_WARNING:
-        ac_report_error_loc(location(pp), "Internal error: Unsupported directive.");
+        ac_report_internal_error_loc(location(pp), "unsupported directive");
         return false;
     case ac_token_type_IDENTIFIER:
-        ac_report_error_loc(location(pp), "Unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
+        ac_report_error_loc(location(pp), "unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
         return false;
     case ac_token_type_NEW_LINE:
     case ac_token_type_EOF:
@@ -467,7 +467,7 @@ branch_case:
     if (token_ptr(pp)->type != ac_token_type_NEW_LINE
         && token_ptr(pp)->type != ac_token_type_EOF)
     {
-        ac_report_error("Internal error: directive did not end with a new line.");
+        ac_report_internal_error("directive did not end with a new line");
         return false;
     }
     goto_next_raw_token(pp); /* Skip new line or EOF. */
@@ -579,7 +579,7 @@ static bool parse_macro_body(ac_pp* pp, ac_macro* m)
 
     if (tok->type == ac_token_type_DOUBLE_HASH)
     {
-        ac_report_error_loc(m->location, "'##' cannot appear at either end of a macro expansion.");
+        ac_report_error_loc(m->location, "'##' cannot appear at either end of a macro expansion");
         return false;
     }
 
@@ -596,7 +596,7 @@ static bool parse_macro_body(ac_pp* pp, ac_macro* m)
 
     if (tok->type == ac_token_type_DOUBLE_HASH)
     {
-        ac_report_error_loc(m->location, "'##' cannot appear at either end of a macro expansion.");
+        ac_report_error_loc(m->location, "'##' cannot appear at either end of a macro expansion");
         return false;
     }
 
@@ -1022,7 +1022,7 @@ static bool expand_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
                 if (token(pp).type == ac_token_type_EOF
                     && nesting_level != 0)
                 {
-                    ac_report_error_loc(loc, "Unexpected end of file in macro expansion "STRV_FMT".", STRV_ARG(identifier->ident->text));
+                    ac_report_error_loc(loc, "unexpected end of file in macro expansion "STRV_FMT, STRV_ARG(identifier->ident->text));
                     break;
                 }
 
@@ -1055,18 +1055,18 @@ static bool expand_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
         }
 
         if (nesting_level != 0) {
-            ac_report_error_loc(loc, "Function-like macro invocation '"STRV_FMT"' does not end with ')'.", STRV_ARG(m->identifier.ident->text));
+            ac_report_error_loc(loc, "function-like macro invocation '"STRV_FMT"' does not end with ')'", STRV_ARG(m->identifier.ident->text));
             goto cleanup;
         }
 
         if (current_param_index > param_count) /* No parameter should be left. */
         {
-            ac_report_warning_loc(loc, "Too many argument in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
+            ac_report_warning_loc(loc, "too many argument in function-like macro invocation '"STRV_FMT"'", STRV_ARG(m->identifier.ident->text));
         }
 
         if (current_param_index < param_count) /* No parameter should be left. */
         {
-            ac_report_warning_loc(loc, "Missing arguments in function-like macro invocation '"STRV_FMT"'.", STRV_ARG(m->identifier.ident->text));
+            ac_report_warning_loc(loc, "missing arguments in function-like macro invocation '"STRV_FMT"'", STRV_ARG(m->identifier.ident->text));
 
             /* Where macro is missing argument we replace them with empty arguments. */
             for (int i = current_param_index; i < param_count; i += 1)
@@ -1393,7 +1393,7 @@ static int64_t eval_primary(ac_pp* pp)
     }
     /* Binary operator used as unary operator*/
     default: {
-        ac_report_error_loc(location(pp), "Not a valid preprocessor expression:" STRV_FMT "", STRV_ARG(ac_token_type_to_strv(type)));
+        ac_report_error_loc(location(pp), "not a valid preprocessor expression:" STRV_FMT "", STRV_ARG(ac_token_type_to_strv(type)));
         result = 0;
         break;
     }
@@ -1460,7 +1460,7 @@ static bool eval_expr(ac_pp* pp)
 {
     if (token(pp).type == ac_token_type_EOF)
     {
-        ac_report_error("Unexpected end-of-file for #if");
+        ac_report_error("unexpected end-of-file for #if");
         return 0;
     }
 

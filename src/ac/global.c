@@ -14,6 +14,7 @@ enum message_type
     message_type_NONE,
     message_type_WARNING,
     message_type_ERROR,
+    message_type_INTERNAL_ERROR
 };
 
 static void display_message_v(FILE* file, enum message_type type, ac_location location, int surrounding_lines, const char* fmt, va_list args);
@@ -22,48 +23,54 @@ static const char* get_message_prefix(enum message_type type);
 static bool location_has_row_and_column(ac_location l);
 static void print_underline_cursor(FILE* file, strv line, size_t pos);
 
-void ac_report_error(const char* fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-
-    ac_location empty_location = ac_location_empty();
-    int no_surrounding_lines = 0;
-    display_message_v(stderr, message_type_ERROR, empty_location, no_surrounding_lines, fmt, args);
-
-    va_end(args);
-}
+#define REPORT_ERROR(message_type) \
+    do { \
+        va_list args; \
+        va_start(args, fmt); \
+        ac_location empty_location = ac_location_empty(); \
+        int no_surrounding_lines = 0; \
+        display_message_v(stderr, message_type, empty_location, no_surrounding_lines, fmt, args); \
+        va_end(args); \
+    } while (0)
+    
+#define REPORT_ERROR_LOC(message_type) \
+    do { \
+        va_list args; \
+        va_start(args, fmt); \
+        display_message_v(stderr, message_type, loc, global_options.display_surrounding_lines, fmt, args); \
+        va_end(args); \
+    } while (0)
 
 void ac_report_warning(const char* fmt, ...)
 {
-    va_list args;
-    va_start(args, fmt);
-
-    ac_location empty_location = ac_location_empty();
-    int no_surrounding_lines = 0;
-    display_message_v(stderr, message_type_WARNING, empty_location, no_surrounding_lines, fmt, args);
-
-    va_end(args);
+    REPORT_ERROR(message_type_WARNING);
 }
 
-void ac_report_error_loc(ac_location loc, const char* fmt, ...)
+void ac_report_error(const char* fmt, ...)
 {
-    va_list args;
-    va_start(args, fmt);
+    REPORT_ERROR(message_type_ERROR);
+}
 
-    display_message_v(stderr, message_type_ERROR, loc, global_options.display_surrounding_lines, fmt, args);
-
-    va_end(args);
+void ac_report_internal_error(const char* fmt, ...)
+{
+    REPORT_ERROR(message_type_INTERNAL_ERROR);
+    exit(1);
 }
 
 void ac_report_warning_loc(ac_location loc, const char* fmt, ...)
 {
-    va_list args;
-    va_start(args, fmt);
+    REPORT_ERROR_LOC(message_type_WARNING);
+}
 
-    display_message_v(stderr, message_type_WARNING, loc, global_options.display_surrounding_lines, fmt, args);
+void ac_report_error_loc(ac_location loc, const char* fmt, ...)
+{
+    REPORT_ERROR_LOC(message_type_ERROR);
+}
 
-    va_end(args);
+void ac_report_internal_error_loc(ac_location loc, const char* fmt, ...)
+{
+    REPORT_ERROR_LOC(message_type_INTERNAL_ERROR);
+    exit(1);
 }
 
 void ac_report_error_expr(ac_ast_expr* expr, const char* fmt, ...)
@@ -166,9 +173,13 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
 
 static const char* get_message_prefix(enum message_type type)
 {
-    if (type == message_type_ERROR) return "error:";
-    if (type == message_type_WARNING) return "warning:";
-
+    switch (type)
+    {
+    case message_type_WARNING: return "warning:";
+    case message_type_ERROR: return "error:";
+    case message_type_INTERNAL_ERROR: return "internal_ error:";
+    default: return "";
+    }
     return "";
 }
 

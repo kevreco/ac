@@ -302,7 +302,7 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
             break;
         }
         case ac_token_type_GENERIC: {
-            ac_report_error_loc(location(p), "_Generic has not been implemented yet.");
+            ac_report_internal_error_loc(location(p), "_Generic has not been implemented yet");
             return NULL;
             break;
         }
@@ -320,7 +320,7 @@ static ac_ast_expr* parse_primary(ac_parser_c* p)
             break;
         }
         default: {
-            ac_report_error_loc(location(p), "parse_primary, case not handled %d\n", token_type(p));
+            ac_report_internal_error_loc(location(p), "parse_primary, case not handled %d\n", token_type(p));
             return 0;
         }
         } /* switch (token_type(p)) */
@@ -423,7 +423,7 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
     switch (type) {
     case ac_token_type_BRACE_L: { /* parse nested block statement */
 
-        ac_report_error_loc(location(p), "internal error: nested block not handled yet, case not handled %d\n", type);
+        ac_report_internal_error_loc(location(p), "nested block not handled yet, case not handled %d", type);
         return 0;
     }
     case ac_token_type_RETURN: {
@@ -473,7 +473,7 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
         }
         else
         {
-            ac_report_error_loc(location(p), "Internal error token type not handled: '%s'", ac_token_type_to_str(token_type(p)));
+            ac_report_internal_error_loc(location(p), "token type not handled: '%s'", ac_token_type_to_str(token_type(p)));
         }
     }
     }
@@ -672,7 +672,7 @@ static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_typ
 
     if (!expect_and_consume(p, expected_opening_token))
     {
-        ac_report_error_loc(location(p), "parameters should start with '%.*s'.\n", ac_token_type_to_strv(expected_opening_token));
+        ac_report_error_loc(location(p), "parameters should start with '%.*s'", ac_token_type_to_strv(expected_opening_token));
         return 0;
     }
 
@@ -699,7 +699,7 @@ static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_typ
 
     if (!expect_and_consume(p, expected_closing_token))
     {
-        ac_report_error_loc(location(p), "parameters should end with parenthesis or square brackets.\n");
+        ac_report_error_loc(location(p), "parameters should end with parenthesis or square brackets");
         return 0;
     }
 
@@ -714,13 +714,13 @@ static ac_ast_parameter* parse_parameter(ac_parser_c* p)
 
     if (token_is(p, ac_token_type_TRIPLE_DOT))
     {
-        ac_report_error_loc(location(p), "internal error: var args are not supported yet.");
+        ac_report_internal_error_loc(location(p), "var args are not supported yet");
         return param;
     }
 
     if (!is_basic_type_or_identifier(token(p).type))
     {
-        ac_report_error_loc(location(p), "Parameter must start with a basic type or an identifier.");
+        ac_report_error_loc(location(p), "parameter must start with a basic type or an identifier");
         return 0;
     }
     
@@ -919,7 +919,7 @@ static bool expect_and_consume(ac_parser_c* p, enum ac_token_type type)
             {
                 strv current_string = ac_token_to_strv(previous);
 
-                ac_report_error_loc(loc, "Syntax error: unexpected end-of-file after: '%.*s'\n"
+                ac_report_error_loc(loc, "syntax error: unexpected end-of-file after: '%.*s'"
                     , current_string.size, current_string.data
                 );
 

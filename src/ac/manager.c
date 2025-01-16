@@ -99,13 +99,13 @@ ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath)
 {
     if (m->source_file.content.data != 0)
     {
-        ac_report_error("Internal error: @TEMP we can only load a single file per manager instance.");
+        ac_report_internal_error("@TEMP we can only load a single file per manager instance");
         return 0;
     }
 
     if (!re_file_exists_str(filepath))
     {
-        ac_report_error("File '%s' does not exist.", filepath);
+        ac_report_error("file '%s' does not exist", filepath);
         return 0;
     }
 
@@ -121,7 +121,7 @@ ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath)
     }
     else
     {
-        ac_report_error("Could not load file into memory.");
+        ac_report_error("could not load file '%s' into memory", filepath);
         return 0;
     }
 }
@@ -194,18 +194,18 @@ strv ac_create_or_reuse_literal_h(ac_manager* m, strv literal_text, size_t hash)
 static bool try_get_file_content(const char* filepath, dstr* content)
 {
     if (!re_file_exists_str(filepath)) {
-        ac_report_error("File does not exist '%s'.\n", filepath);
+        ac_report_error("file does not exist '%s'", filepath);
         return false;
     }
 
     if (!re_file_open_and_read(content, filepath))
     {
-        ac_report_error("Could not open '%s'\n", filepath);
+        ac_report_error("could not open '%s'", filepath);
         return false;
     }
    
     if (content->size == 0) {
-        ac_report_warning("Empty file '%s'.\n", filepath);
+        ac_report_warning("empty file '%s'", filepath);
         return true;
     }
 

@@ -436,7 +436,7 @@ parse_identifier:
             else if (strv_equals(ident, utf32)) return token_char(l, utf32);
             else if (strv_equals(ident, wide)) return token_char(l, wide);
             else {
-                ac_report_error_loc(l->leading_location, "Invalid char literal prefix '%.*s'", ident.size, ident.data);
+                ac_report_error_loc(l->leading_location, "invalid char literal prefix '%.*s'", ident.size, ident.data);
                 return token_eof(l);
             }
         }
@@ -448,7 +448,7 @@ parse_identifier:
             else if (strv_equals(ident, utf32)) return parse_string_literal(l, utf32);
             else if (strv_equals(ident, wide)) return parse_string_literal(l, wide);
             else {
-                ac_report_error_loc(l->leading_location, "Invalid string literal prefix '%.*s'", ident.size, ident.data);
+                ac_report_error_loc(l->leading_location, "invalid string literal prefix '%.*s'", ident.size, ident.data);
                 return token_eof(l);
             }
         }
@@ -465,7 +465,7 @@ parse_identifier:
         {
             goto parse_identifier;
         }
-        ac_report_error("Internal error: Unhandled character: %c", l->cur[0]);
+        ac_report_internal_error("unhandled character: %c", l->cur[0]);
         return token_error(l);
         
     } /* end default case */
@@ -491,7 +491,7 @@ bool ac_lex_expect(ac_lex* l, enum ac_token_type type) {
         strv expected = ac_token_type_to_strv(type);
         strv actual = ac_token_to_strv(current);
 
-        ac_report_error_loc(current_location, "Syntax error: expected '%.*s', actual '%.*s'\n"
+        ac_report_error_loc(current_location, "syntax error: expected '%.*s', actual '%.*s'\n"
             , expected.size, expected.data
             , actual.size, actual.data
         );
@@ -537,7 +537,7 @@ bool ac_skip_preprocessor_block(ac_lex* l)
         c = *l->cur;
         switch (c) {
         case '\0': /* We should not encounter EOF in a preprocessor block. */
-            ac_report_error("Expect #endif, #else of #elif, #elifdef or #elifndef.");
+            ac_report_error("expect #endif, #else of #elif, #elifdef or #elifndef");
             return false;
         case '\r':
         case '\n':
@@ -699,7 +699,7 @@ static bool skip_comment(ac_lex* l)
     int count = 2;
     while (count) {
         if (is_eof(l)) {
-            ac_report_error_loc(location, "Cannot find closing comment tag '*/'.\n");
+            ac_report_error_loc(location, "cannot find closing comment tag '*/'\n");
             return false;
         }
         consume_one(l); /* Skip '*' then '/' */
@@ -836,7 +836,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
         {
             U++;
             if (U > 1) {
-                ac_report_error_loc(l->location, "Invalid integer suffix. Too many 'u' or 'U'");
+                ac_report_error_loc(l->location, "invalid integer suffix. Too many 'u' or 'U'");
                 return false;
             }
             num->is_unsigned = true;
@@ -848,7 +848,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
         {
             L++;
             if (L > 2) {
-                ac_report_error_loc(l->location, "Invalid integer suffix. Too many 'l' or 'L'");
+                ac_report_error_loc(l->location, "invalid integer suffix, too many 'l' or 'L'");
                 return false;
             }
             else {
@@ -865,7 +865,7 @@ static bool parse_integer_suffix(ac_lex* l, ac_token_number* num)
         || (c >= 'a' && c <= 'z')
         || (c >= 'A' && c <= 'Z'))
     {
-        ac_report_error_loc(l->location, "Invalid integer suffix: '%c'", c);
+        ac_report_error_loc(l->location, "invalid integer suffix: '%c'", c);
         return false;
     }
     return true;
@@ -889,7 +889,7 @@ static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
         {
             F++;
             if (F > 1) {
-                ac_report_error_loc(l->location, "Invalid float suffix. Too many 'f' or 'F'");
+                ac_report_error_loc(l->location, "invalid float suffix, too many 'f' or 'F'");
                 return false;
             }
             num->is_float = true;
@@ -901,7 +901,7 @@ static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
         {
             L++;
             if (L > 1) {
-                ac_report_error_loc(l->location, "Invalid float suffix. Too many 'l' or 'L'");
+                ac_report_error_loc(l->location, "invalid float suffix, too many 'l' or 'L'");
                 return false;
             }
             else {
@@ -917,7 +917,7 @@ static bool parse_float_suffix(ac_lex* l, ac_token_number* num) {
         || (c >= 'a' && c <= 'z')
         || (c >= 'A' && c <= 'Z'))
     {
-        ac_report_error_loc(l->location, "Invalid float suffix: '%c'", c);
+        ac_report_error_loc(l->location, "invalid float suffix: '%c'", c);
         return false;
     }
     return true;
@@ -1023,7 +1023,7 @@ static ac_token* parse_float_literal_core(ac_lex* l, ac_token_number num, enum b
         }
         else
         {
-            ac_report_error_loc(l->location, "Invalid exponent in hex float.");
+            ac_report_error_loc(l->location, "invalid exponent in hex float");
             return 0;
         }
     }
@@ -1107,7 +1107,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
             }
             if (buffer_size == l->tok_buf.size) /* Nothing after 0x was parsed */
             {
-                ac_report_error_loc(l->leading_location, "Invalid hexadecimal value.");
+                ac_report_error_loc(l->leading_location, "invalid hexadecimal value.");
                 return token_eof(l);
             }
             /* Not float so we return an integer. */
@@ -1126,7 +1126,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
             }
             if (buffer_size == l->tok_buf.size) /* Nothing after 0b was parsed */
             {
-                ac_report_error_loc(l->leading_location, "Invalid binary value.");
+                ac_report_error_loc(l->leading_location, "invalid binary value");
                 return token_eof(l);
             }
             num.u.int_value = n;
@@ -1165,7 +1165,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
 
     if (is_eof(l) && !l->mgr->options.preprocess) /* Do not display error if we only preprocess. */
     {
-        ac_report_error_loc(l->leading_location, "Unexpected end of file after number literal.");
+        ac_report_error_loc(l->leading_location, "unexpected end of file after number literal");
         return token_eof(l);
     }
 
@@ -1337,7 +1337,7 @@ exit_loop:
     }
 
     if (c != quote) {
-        ac_report_error_loc(l->leading_location, "Missing terminating char '%c' for literal.\n", quote);
+        ac_report_error_loc(l->leading_location, "missing terminating char '%c' for literal", quote);
         return strv_error;
     }
 

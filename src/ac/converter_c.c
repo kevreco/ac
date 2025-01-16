@@ -136,7 +136,8 @@ static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
     }
     else
     {
-        AC_ASSERT(0 && "Internal error: Unhandled ast expression, cannot print it.");
+        ac_report_internal_error("unhandled ast expression, cannot print it");
+        AC_ASSERT(0);
     }
 }
 
@@ -240,7 +241,8 @@ static void print_declaration(ac_converter_c* c, ac_ast_declaration* declaration
     }
     else
     {
-        assert(0 && "internal error: unsupported declaration type");
+        ac_report_internal_error("unsupported declaration type %d", declaration->type);
+        AC_ASSERT(0);
     }
 }
 
@@ -289,7 +291,9 @@ static void print_unary_op(ac_converter_c* c, enum ac_token_type type)
     case ac_token_type_TILDE:
         break;
     default:
-        AC_ASSERT(0 && "Internal error: Unsupported unary operator.");
+        ac_report_internal_error("unsupported unary operator %d", type);
+        AC_ASSERT(0);
+        return;
     }
     print_strv(c, ac_token_type_to_strv(type));
 }
@@ -323,7 +327,9 @@ static void print_binary_op(ac_converter_c* c, enum ac_token_type type)
     case ac_token_type_STAR_EQUAL:
         break;
     default:
-        AC_ASSERT(0 && "Internal error: Unsupported unary operator.");
+        ac_report_internal_error("unsupported unary operator %d", type);
+        AC_ASSERT(0);
+        return;
     }
     print_strv(c, ac_token_type_to_strv(type));
 }
