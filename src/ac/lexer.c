@@ -1457,7 +1457,7 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_DEFAULT, IDENT("default") },
     { false, ac_token_type_DO, IDENT("do") },
     { true,  ac_token_type_DOUBLE, IDENT("double") },
-    { false, ac_token_type_ELSE, IDENT("else") },
+    { true, ac_token_type_ELSE, IDENT("else") },
     { false, ac_token_type_ENUM, IDENT("enum") },
     { false, ac_token_type_EXTERN, IDENT("extern") },
     { false, ac_token_type_FALSE, IDENT("false") },
@@ -1498,7 +1498,7 @@ static ac_token_info token_infos[] = {
     /* Preprocessor conditionals */
 
     { true,  ac_token_type_DEFINE, IDENT("define") },
-    { false, ac_token_type_ELIF, IDENT("elif") },
+    { true, ac_token_type_ELIF, IDENT("elif") },
     { false, ac_token_type_ELIFDEF, IDENT("elifdef") },
     { false, ac_token_type_ELIFNDEF, IDENT("elifndef") },
     { true,  ac_token_type_ENDIF, IDENT("endif") },

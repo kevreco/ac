@@ -17,6 +17,10 @@ enum ac_token_cmd_type {
 	ac_token_cmd_type_MACRO_POP,    /* To make a macro expandable again. */
 };
 
+enum {
+	ac_pp_branch_MAX_DEPTH = 32 /* Max depth of #if#else branches. */
+};
+
 typedef struct ac_token_cmd ac_token_cmd;
 struct ac_token_cmd {
 	enum ac_token_cmd_type type;
@@ -56,6 +60,15 @@ struct ac_pp {
 	int macro_depth;            /* Macro depth is not currently needed, it's mostly for inspectiong purpose. */
 	darr_token buffer_for_peek; /* Sometimes we need to peek some tokens and send them on the stack. */
 	int counter_value;
+
+	/* @OPT: We could use an octect for this branch_flags struct instead of two int. */
+	struct branch_flags {
+		enum ac_token_type type;  /* none/if/else/elif/ifndef/elifdef/elifndef */
+		bool was_enabled;         /* Once this value is non-zero this mean we can skip all else/elif/elifdef/elifndef. */
+	};
+	/* Only allow MAX_DEPTH of nested #if/#else */
+	struct branch_flags if_else_stack[ac_pp_branch_MAX_DEPTH];
+	int if_else_index;
 };
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath);
