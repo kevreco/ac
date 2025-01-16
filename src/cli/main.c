@@ -103,7 +103,7 @@ int
 main(int argc, char** argv)
 {
 #ifdef _WIN32
-    /* Avoid \n char to be translated into \n\r */
+    /* Avoid \n char to be translated into \r\n */
     if (_setmode(fileno(stdout), _O_BINARY) == -1) perror("Cannot set mode to stdout.");
     if (_setmode(fileno(stderr), _O_BINARY) == -1) perror("Cannot set mode to stderr.");
 
