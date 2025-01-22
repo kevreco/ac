@@ -2417,10 +2417,16 @@ cb_fork_process(char* args[], cb_process_handle* handle, int stdout_pfd[2], int 
 		if (handle->stdout_to_string)
 		{
 			dup2(stdout_pfd[1], STDOUT_FILENO);
+			/* Close both sides of the pipe in the child */
+			close(stdout_pfd[0]);
+			close(stdout_pfd[1]);
 		}
 		if (handle->stderr_to_string)
 		{
 			dup2(stderr_pfd[1], STDERR_FILENO);
+			/* Close both sides of the pipe in the child */
+			close(stderr_pfd[0]);
+			close(stderr_pfd[1]);
 		}
 
 		/* Change directory in the fork */
@@ -2515,19 +2521,22 @@ cb_process_core(cb_process_handle* handle)
 			cb_set_and_goto(exit_status, -1, cleanup);
 		}
 
+		/* Process exited regularly. */
 		if (WIFEXITED(wstatus)) {
 			exit_status = WEXITSTATUS(wstatus);
+			
 			if (exit_status != 0) {
-				cb_log_error("Command exited with exit code '%d'", exit_status);
-				cb_set_and_goto(exit_status, -1, cleanup);
+				cb_log_debug("Command exited with exit code '%d'", exit_status);
 			}
 
-			break; /* Get out of the loop since the process exited. */
+			break; /* Exit loop. */
 		}
 
 		if (WIFSIGNALED(wstatus)) {
-			cb_log_error("Command process was terminated by '%s'", strsignal(WTERMSIG(wstatus)));
-			cb_set_and_goto(exit_status, -1, cleanup);
+			exit_status = -1; /* @TODO check which exit status must be set in case of process terminated by another process. */
+			cb_log_debug("Command process was terminated by '%s'", strsignal(WTERMSIG(wstatus)));
+
+			break; /* Exit loop. */
 		}
 	}
 
@@ -2550,16 +2559,13 @@ cb_process_core(cb_process_handle* handle)
 		/* Close the write pipe since the child program has been exited. */
 		close(stderr_pfd[1]);
 
-		if (handle->stderr_to_string)
+		/* Read output of the child process from the read file description of the pipe. */
+		while ((bytes_read = read(stderr_pfd[0], buffer, sizeof(buffer))) > 0)
 		{
-			/* Read output of the child process from the read file description of the pipe. */
-			while ((bytes_read = read(stderr_pfd[0], buffer, sizeof(buffer))) > 0)
-			{
-				cb_dstr_append_f(&handle->stderr_string, "%.*s", (int)bytes_read, buffer);
-			}
-			/* Close the read pipe since we read all the information from it. */
-			close(stderr_pfd[0]);
+			cb_dstr_append_f(&handle->stderr_string, "%.*s", (int)bytes_read, buffer);
 		}
+		/* Close the read pipe since we read all the information from it. */
+		close(stderr_pfd[0]);
 	}
 
 cleanup:
