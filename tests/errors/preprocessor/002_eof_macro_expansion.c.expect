@@ -1,0 +1,4 @@
+./tests/errors/preprocessor/002_eof_macro_expansion.c:2:4: error: unexpected end of file in macro expansion 'foo'
+1 | #define foo(x) x
+2 | foo(
+       ^

@@ -1,0 +1,3 @@
+./tests/errors/preprocessor/001_unknown_identifier.c:1:4: error: unknown directive 'foo'
+1 | #foo
+       ^

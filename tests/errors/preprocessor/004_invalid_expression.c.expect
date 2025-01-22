@@ -1,0 +1,8 @@
+./tests/errors/preprocessor/004_invalid_expression.c:1:6: error: operator '+' has no right operand
+1 | #if 0+
+         ^
+2 | #endif
+./tests/errors/preprocessor/004_invalid_expression.c:1:5: error: invalid preprocessor expression
+1 | #if 0+
+        ^
+2 | #endif

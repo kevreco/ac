@@ -526,9 +526,8 @@ void ac_lex_swap(ac_lex* left, ac_lex* right)
 
         #endif
 */
-bool ac_skip_preprocessor_block(ac_lex* l)
+bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
 {
-    bool was_end_of_line = false;
     int c;
     int nesting_level = 0;
 

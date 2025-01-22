@@ -5,6 +5,7 @@
 
 /* STRV_IMPLEMENTATION is defined at the bottom of this file. */
 #include "src/external/re.lib/c/re/strv.h"
+#include "src/external/re.lib/c/re/strv_extensions.h"
 
 /* DSTR_IMPLEMENTATION is defined at the bottom of this file. */
 #include "src/external/re.lib/c/re/dstr.h"
@@ -42,6 +43,7 @@ int main()
 	test_preprocessor(ac_exe, "./tests/preprocessor_literals/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_macro/");
     test_preprocessor(ac_exe, "./tests/preprocessor_conditional/");
+	test_error(ac_exe, "./tests/errors/preprocessor/");
 	test_error(ac_exe, "./tests/errors/parsing/");
 
 	cb_destroy();
@@ -230,34 +232,6 @@ cb_bool next_non_generated_c_file(cb_file_it* it)
 	return cb_false;
 }
 
-/* Compare two string views as if all new lines (\r, \n, and \r\n) were the same
-   NOTE: string views are assumed to be null terminated. */
-bool compare_strv_newline_insensitive(strv left_str, strv right_str)
-{
-	char* left = (char*)left_str.data;
-	char* right = (char*)right_str.data;
-	char* left_end = (char*)left_str.data + left_str.size;
-	char* right_end = (char*)right_str.data + right_str.size;
-
-	while (left < left_end && right < right_end)
-	{
-		if (left[0] == '\r') ++left;
-		if (left < left_end && left[0] == '\n') ++left;
-
-		if (right[0] == '\r') ++right;
-		if (right < right_end && right[0] == '\n') ++right;
-
-		if (*left != *right) {
-			return false;
-		}
-
-		++left;
-		++right;
-	}
-
-	return true;
-}
-
 enum output_type {
 	output_type_STDOUT,
 	output_type_STDERR
@@ -323,7 +297,7 @@ void test_output(const char* exe, const char* directory, enum output_type type, 
 			}
 
 			bool is_same = new_line_insensitive
-				? compare_strv_newline_insensitive(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content))
+				? strv_equals_newline_insensitive(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content))
 				: strv_equals(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content));
 
 			if (!is_same)
@@ -427,6 +401,7 @@ void build_generated_exe_and_run(const char* file)
 
 #define STRV_IMPLEMENTATION
 #include "src/external/re.lib/c/re/strv.h"
+#include "src/external/re.lib/c/re/strv_extensions.h"
 
 #define DSTR_IMPLEMENTATION
 #include "src/external/re.lib/c/re/dstr.h"

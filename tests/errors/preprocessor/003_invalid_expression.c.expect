@@ -1,0 +1,4 @@
+./tests/errors/preprocessor/003_invalid_expression.c:1:5: error: invalid preprocessor expression
+1 | #if 0)
+        ^
+2 | #endif

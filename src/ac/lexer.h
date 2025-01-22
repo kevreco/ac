@@ -276,7 +276,7 @@ bool ac_lex_expect(ac_lex* l, enum ac_token_type type);
 void ac_lex_swap(ac_lex* left, ac_lex* right);
 
 /* Skip block of text between #if and #endif. */
-bool ac_skip_preprocessor_block(ac_lex* l);
+bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line);
 
 ac_token* ac_token_eof();
 

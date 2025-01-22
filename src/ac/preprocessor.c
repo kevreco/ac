@@ -112,12 +112,20 @@ static ac_macro* find_macro(ac_pp* pp, ac_token* identifer);
 /*-----------------------------------------------------------------------*/
 
 static int LOWEST_PRIORITY_PRECEDENCE = 999;
+
+typedef struct eval_t eval_t;
+struct eval_t {
+    int64_t value;
+    bool succes;
+};
+
 static ac_token* goto_next_for_eval(ac_pp* pp);
 
 static int get_precedence_if_binary_op(enum ac_token_type type);
 
+static eval_t eval_primary(ac_pp* pp);
 static int64_t eval_binary(ac_pp* pp, enum ac_token_type binary_op, int64_t left, int64_t right);
-static int64_t eval_expr2(ac_pp* pp, int previous_precedence);
+static eval_t eval_expr2(ac_pp* pp, int previous_precedence);
 static bool eval_expr(ac_pp* pp);
 
 static void pop_branch(ac_pp* pp);
@@ -386,7 +394,8 @@ branch_case:
             /* If expression is non-zero we skip the preprocessor block. */
             if (need_to_skip_block) /* Eval expression */
             {
-                if (!ac_skip_preprocessor_block(&pp->lex))
+                bool was_end_of_line = token(pp).type == ac_token_type_NEW_LINE;
+                if (!ac_skip_preprocessor_block(&pp->lex, was_end_of_line))
                 {
                     return false;
                 }
@@ -456,6 +465,7 @@ branch_case:
         return false;
     case ac_token_type_IDENTIFIER:
         ac_report_error_loc(location(pp), "unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
+        goto_next_raw_token(pp); /* Skip directive name. */
         return false;
     case ac_token_type_NEW_LINE:
     case ac_token_type_EOF:
@@ -1022,8 +1032,8 @@ static bool expand_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
                 if (token(pp).type == ac_token_type_EOF
                     && nesting_level != 0)
                 {
-                    ac_report_error_loc(loc, "unexpected end of file in macro expansion "STRV_FMT, STRV_ARG(identifier->ident->text));
-                    break;
+                    ac_report_error_loc(loc, "unexpected end of file in macro expansion '"STRV_FMT"'", STRV_ARG(identifier->ident->text));
+                    goto cleanup;
                 }
 
                 if (token(pp).type == ac_token_type_COMMA)
@@ -1055,6 +1065,7 @@ static bool expand_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
         }
 
         if (nesting_level != 0) {
+            /* @TODO try to display this error. */
             ac_report_error_loc(loc, "function-like macro invocation '"STRV_FMT"' does not end with ')'", STRV_ARG(m->identifier.ident->text));
             goto cleanup;
         }
@@ -1327,57 +1338,65 @@ static int get_precedence_if_binary_op(enum ac_token_type type)
     }
 }
 
-static int64_t eval_primary(ac_pp* pp)
+static eval_t eval_primary(ac_pp* pp)
 {
-    int64_t result = 0;
+    eval_t result = {0, true};
     enum ac_token_type type = token(pp).type;
     switch (type) {
     case ac_token_type_EOF: { /* Error must have been reported by "goto_next_token" or "expect_and_consume" */
-        result = 0;
+        result.succes = false;
         break;
     }
     case ac_token_type_PAREN_L: {
         goto_next_for_eval(pp); /* Skip '(' */
         result = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
-        if (!result)
-            return 0;
 
         if (!expect(pp, ac_token_type_PAREN_R))
-            return 0;
+        {
+            result.succes = false;
+            return result;
+        }
 
         goto_next_for_eval(pp); /* Skip ')' */
         break;
     }
     case ac_token_type_FALSE: {
-        result = 0;
+        result.value = 0;
         goto_next_for_eval(pp);
         break;
     }
     /* Macros are already expanded, hence an identifier here means an non-existing macro.
        They are replaced with 0. */
     case ac_token_type_IDENTIFIER: {
-        result = 0;
+        result.value = 0;
         goto_next_for_eval(pp);
         break;
     }
     case ac_token_type_LITERAL_CHAR: {
-        result = ac_token_type_to_strv(type).data[0];
+        result.value = ac_token_type_to_strv(type).data[0];
         goto_next_for_eval(pp);
         break;
     }
     case ac_token_type_LITERAL_INTEGER: {
-        result = token(pp).u.number.u.int_value;
+        result.value = token(pp).u.number.u.int_value;
         goto_next_for_eval(pp);
         break;
     }
     case ac_token_type_TRUE: {
-        result = 1;
+        result.value = 1;
         goto_next_for_eval(pp);
         break;
     }
     case ac_token_type_EXCLAM: {
         goto_next_for_eval(pp); /* Skip '!' */
-        result = !eval_primary(pp);
+
+        eval_t right = eval_primary(pp);
+        if (!right.succes)
+        {
+            result.succes = false;
+            break;
+        }
+        result.value = !right.value;
         break;
     }
 
@@ -1386,15 +1405,20 @@ static int64_t eval_primary(ac_pp* pp)
     case ac_token_type_TILDE: /* '~' Bitwise NOT */
     {
         goto_next_for_eval(pp); /* Skip operator */
-        int64_t right = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+        eval_t right = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+        if (!right.succes)
+        {
+            result.succes = false;
+            break;
+        }
         /* Evaluation unary operation as binary operation with zero value on the left.*/
-        result = eval_binary(pp, type, 0, right);
+        result.value = eval_binary(pp, type, 0, right.value);
         break;
     }
-    /* Binary operator used as unary operator*/
+    /* Binary operator used as unary operator */
     default: {
-        ac_report_error_loc(location(pp), "not a valid preprocessor expression:" STRV_FMT "", STRV_ARG(ac_token_type_to_strv(type)));
-        result = 0;
+        result.value = 0;
+        result.succes = false;
         break;
     }
     }
@@ -1430,9 +1454,13 @@ static int64_t eval_binary(ac_pp* pp, enum ac_token_type binary_op, int64_t left
     return 0;
 }
 
-static int64_t eval_expr2(ac_pp* pp, int previous_precedence)
+static eval_t eval_expr2(ac_pp* pp, int previous_precedence)
 {
-    int64_t left = eval_primary(pp);
+    eval_t left = eval_primary(pp);
+    if (!left.succes)
+    {
+        return left;
+    }
 
     while (true) /* Left can be NULL if */
     {
@@ -1443,11 +1471,16 @@ static int64_t eval_expr2(ac_pp* pp, int previous_precedence)
            We need to combine the left expression with a following one. */
         if (new_precedence < previous_precedence)
         {
+            ac_location loc = location(pp); /* Save binary operator location for error. */
             goto_next_for_eval(pp); /* Skip binary op. */
 
-            int64_t right = eval_expr2(pp, new_precedence);
-
-            left = eval_binary(pp, new_token_type, left, right);
+            eval_t right = eval_expr2(pp, new_precedence);
+            if (!right.succes)
+            {
+                ac_report_error_loc(loc, "operator '"STRV_FMT"' has no right operand", STRV_ARG(ac_token_type_to_strv(new_token_type)));
+                return (eval_t){ left.value, false };
+            }
+            left.value = eval_binary(pp, new_token_type, left.value, right.value);
         }
         else
         {
@@ -1458,13 +1491,32 @@ static int64_t eval_expr2(ac_pp* pp, int previous_precedence)
 
 static bool eval_expr(ac_pp* pp)
 {
+    ac_location expression_location = location(pp);
+
+    eval_t eval = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+    
     if (token(pp).type == ac_token_type_EOF)
     {
-        ac_report_error("unexpected end-of-file for #if");
-        return 0;
+        ac_report_error_loc(expression_location, "unexpected end-of-file in preprocessor expression");
+        return false;
     }
 
-    return eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);;
+    /* All directives must end with a new line or a EOF. */
+    if (token(pp).type != ac_token_type_NEW_LINE
+        || !eval.succes)
+    {
+        ac_report_error_loc(expression_location, "invalid preprocessor expression");
+        if (!eval.succes) {
+            /* In case of expression failure, skip all tokens until the next new line. */
+            while (token(pp).type != ac_token_type_NEW_LINE)
+            {
+                goto_next_for_eval(pp);
+            }
+        }
+        return false;
+    }
+
+    return eval.value;
 }
 
 static void pop_branch(ac_pp* pp)
