@@ -9,8 +9,18 @@
 #include <string.h>
 #include <stdarg.h> /* va_start, va_end */
 
+/* Suppress some MSVC warnings. */
+#ifdef _MSC_VER
+/* byte padding */
+#pragma warning(disable:4820)
+/* Spectre mitigation */
+#pragma warning(disable:5045)
+/* Missing explicit list of arguments to a function */
+#pragma warning(disable:4255)
+#endif
+
 #if _WIN32
-	#if !defined _CRT_SECURE_NO_WARNINGS
+	#ifndef _CRT_SECURE_NO_WARNINGS
 		#define _CRT_SECURE_NO_WARNINGS
 	#endif
 	#define WIN32_LEAN_AND_MEAN
@@ -27,14 +37,6 @@
 	#include <dirent.h>       /* opendir */
 
 	#define CB_THREAD __thread
-#endif
-
-/* Suppress some MSVC warnings. */
-#ifdef _MSC_VER
-/* byte padding */
-#pragma warning(disable:4820)
-/* Spectre mitigation */
-#pragma warning(disable:5045)
 #endif
 
 /* in c89 va_copy does not exist */
