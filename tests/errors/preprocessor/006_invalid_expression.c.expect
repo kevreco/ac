@@ -1,0 +1,8 @@
+./tests/errors/preprocessor/006_invalid_expression.c:1:11: error: operator 'defined' requires an identifier
+1 | #if defined 0
+              ^
+2 | #endif
+./tests/errors/preprocessor/006_invalid_expression.c:1:11: error: invalid preprocessor expression
+1 | #if defined 0
+              ^
+2 | #endif

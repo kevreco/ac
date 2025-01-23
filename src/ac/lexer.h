@@ -79,6 +79,7 @@ enum ac_token_type {
     /* Preprocessor keywords */
    
     ac_token_type_DEFINE,
+    ac_token_type_DEFINED,
     ac_token_type_ELIF,
     ac_token_type_ELIFDEF,  /* C23 */
     ac_token_type_ELIFNDEF, /* C23 */

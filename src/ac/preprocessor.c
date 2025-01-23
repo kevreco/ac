@@ -1343,6 +1343,34 @@ static eval_t eval_primary(ac_pp* pp)
     eval_t result = {0, true};
     enum ac_token_type type = token(pp).type;
     switch (type) {
+    case ac_token_type_DEFINED: {
+        ac_location loc = location(pp); /* Save location for error. */
+        
+        goto_next_token_from_directive(pp); /* Skip 'defined' but do not expand macro, and skip horizontal whitespace. */
+        
+        bool expect_closing_parenthesis = false;
+        if (token(pp).type == ac_token_type_PAREN_L)
+        {
+            expect_closing_parenthesis = true;
+            goto_next_token_from_directive(pp); /* Skip '(' */
+        }
+        
+        if (!ac_token_is_keyword_or_identifier(token(pp).type))
+        {
+            result.succes = false;
+            ac_report_error_loc(loc, "operator 'defined' requires an identifier");
+            break;
+        }
+
+        result.value = find_macro(pp, token_ptr(pp)) != NULL;
+        goto_next_for_eval(pp); /* Skip identifier. */
+
+        if (expect_closing_parenthesis && expect(pp, ac_token_type_PAREN_R))
+        {
+            goto_next_token_from_directive(pp); /* Skip ')' */
+        }
+        break;
+    }
     case ac_token_type_EOF: { /* Error must have been reported by "goto_next_token" or "expect_and_consume" */
         result.succes = false;
         break;

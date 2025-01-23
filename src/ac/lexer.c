@@ -1497,7 +1497,8 @@ static ac_token_info token_infos[] = {
     /* Preprocessor conditionals */
 
     { true,  ac_token_type_DEFINE, IDENT("define") },
-    { true, ac_token_type_ELIF, IDENT("elif") },
+    { true,  ac_token_type_DEFINED, IDENT("defined") },
+    { true,  ac_token_type_ELIF, IDENT("elif") },
     { false, ac_token_type_ELIFDEF, IDENT("elifdef") },
     { false, ac_token_type_ELIFNDEF, IDENT("elifndef") },
     { true,  ac_token_type_ENDIF, IDENT("endif") },
