@@ -15,12 +15,11 @@
 ### 1.0
 
     - [./] Object-like macro.
-    - [./] Strays '\' between tokens.
-    - [./] Strays '\' for identifiers.
-    - [./] Strays '\' for other multiple-char token.
-    - [./] Strays '\' in other literal (numbers, boolean, etc.).
-    - [./] Strays '\' in string and character literals.
-    - [./] Function-like macro.
+    - [./] Support splice between tokens.
+    - [./] Support splice within identifiers.
+    - [./] Support splice for other multiple-char token.
+    - [./] Support splice in other literal (numbers, boolean, etc.).
+    - [./] Support function-like macro.
     - [./] Support concatenation operator "##".
     - [./] Macro should not be visible from the expanded tokens.
     - [./] Support stringification operator "#".
