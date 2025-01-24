@@ -575,6 +575,8 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
 
                 bool is_ending_token = t->type == ac_token_type_ELSE
                     || t->type == ac_token_type_ELIF
+                    || t->type == ac_token_type_ELIFDEF
+                    || t->type == ac_token_type_ELIFNDEF
                     || t->type == ac_token_type_ENDIF;
 
                 if (nesting_level == 0 && is_ending_token)
@@ -1499,13 +1501,13 @@ static ac_token_info token_infos[] = {
     { true,  ac_token_type_DEFINE, IDENT("define") },
     { true,  ac_token_type_DEFINED, IDENT("defined") },
     { true,  ac_token_type_ELIF, IDENT("elif") },
-    { false, ac_token_type_ELIFDEF, IDENT("elifdef") },
-    { false, ac_token_type_ELIFNDEF, IDENT("elifndef") },
+    { true,  ac_token_type_ELIFDEF, IDENT("elifdef") },
+    { true,  ac_token_type_ELIFNDEF, IDENT("elifndef") },
     { true,  ac_token_type_ENDIF, IDENT("endif") },
     { false, ac_token_type_ERROR, IDENT("error") },
     { false, ac_token_type_EMBED, IDENT("embed") },
-    { false, ac_token_type_IFDEF, IDENT("ifdef") },
-    { false, ac_token_type_IFNDEF, IDENT("ifndef") },
+    { true,  ac_token_type_IFDEF, IDENT("ifdef") },
+    { true,  ac_token_type_IFNDEF, IDENT("ifndef") },
     { false, ac_token_type_INCLUDE, IDENT("include") },
     { false, ac_token_type_PRAGMA, IDENT("pragma") },
     { false, ac_token_type_LINE, IDENT("line") },

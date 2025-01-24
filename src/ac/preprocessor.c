@@ -119,6 +119,9 @@ struct eval_t {
     bool succes;
 };
 
+/* @TODO use this value where it's relevan in eval_expr2(). */
+static eval_t eval_false = { 0, false};
+
 static ac_token* goto_next_for_eval(ac_pp* pp);
 
 static int get_precedence_if_binary_op(enum ac_token_type type);
@@ -126,12 +129,13 @@ static int get_precedence_if_binary_op(enum ac_token_type type);
 static eval_t eval_primary(ac_pp* pp);
 static int64_t eval_binary(ac_pp* pp, enum ac_token_type binary_op, int64_t left, int64_t right);
 static eval_t eval_expr2(ac_pp* pp, int previous_precedence);
-static bool eval_expr(ac_pp* pp);
+/* For "#if X" X must be a preprocessor expression while "#ifdef Y" Y must be an identifier. */
+static bool eval_expr(ac_pp* pp, bool expect_identifier_expression);
 
 static void pop_branch(ac_pp* pp);
 static void push_branch(ac_pp* pp, enum ac_token_type type);
 static void set_branch_type(ac_pp* pp, enum ac_token_type type);
-static void set_branch_value(ac_pp* pp, enum ac_token_type type, bool value);
+static void set_branch_value(ac_pp* pp, bool value);
 static bool branch_is(ac_pp* pp, enum ac_token_type type);
 static bool branch_is_empty(ac_pp* pp);
 static bool branch_was_enabled(ac_pp* pp);
@@ -353,6 +357,7 @@ static bool parse_directive(ac_pp* pp)
     }
     case ac_token_type_IF:
     case ac_token_type_IFDEF:
+    case ac_token_type_IFNDEF:
     case ac_token_type_ELIFDEF:
     case ac_token_type_ELIFNDEF:
     {
@@ -368,7 +373,16 @@ branch_case:
                 /* If one of the previous branch was enabled we need to skip this one. */
                 need_to_skip_block = branch_was_enabled(pp);
             } else {
-                goto_next_for_eval(pp); /* Skip if/ifdef/elifdef/elifndef and get the next expanded token. */
+                if (t == ac_token_type_IF
+                    || t == ac_token_type_ELIF
+                    || t == ac_token_type_ELSE)
+                {
+                    goto_next_for_eval(pp); /* Skip if/elif/else and get the next expanded token. */
+                }
+                else 
+                {
+                    goto_next_token_from_directive(pp); /* Skip ifdef/ifndef/elifdef/elifndef and get next non-expanded_token. */
+                }
 
                 /* Push new if/else chain if when necessary. */
                 if (t == ac_token_type_IF
@@ -385,8 +399,18 @@ branch_case:
                 /* Otherwise we evaluate the expression and check if we need to skip the block or not.*/
                 else
                 {
-                    bool branch_value = eval_expr(pp);
-                    set_branch_value(pp, t, branch_value);
+                    bool require_identifier_expression = t == ac_token_type_IFDEF
+                        || t == ac_token_type_IFNDEF
+                        || t == ac_token_type_ELIFDEF
+                        || t == ac_token_type_ELIFNDEF;
+                    bool branch_value = eval_expr(pp, require_identifier_expression);
+                    /* Flip value for negative if */
+                    if (t == ac_token_type_IFNDEF || t == ac_token_type_ELIFNDEF)
+                    {
+                        branch_value = !branch_value;
+                    }
+
+                    set_branch_value(pp, branch_value);
                     need_to_skip_block = !branch_value;
                 }
             }
@@ -1517,11 +1541,28 @@ static eval_t eval_expr2(ac_pp* pp, int previous_precedence)
     }
 }
 
-static bool eval_expr(ac_pp* pp)
+static bool eval_expr(ac_pp* pp, bool expect_identifier_expression)
 {
+    eval_t eval = { 0, true };
     ac_location expression_location = location(pp);
 
-    eval_t eval = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+    if (expect_identifier_expression)
+    {
+        if (!ac_token_is_keyword_or_identifier(token(pp).type))
+        {
+            ac_report_error_loc(expression_location, "identifier expected after #ifdef, #ifndef, #elifdef or #elifndef.");
+            eval = eval_false;
+        }
+        else
+        {
+            eval.value = find_macro(pp, token_ptr(pp)) != NULL;
+            goto_next_for_eval(pp); /* Skip identifier. */
+        }
+    }
+    else
+    {
+        eval = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
+    }
     
     if (token(pp).type == ac_token_type_EOF)
     {
@@ -1559,10 +1600,8 @@ static void set_branch_type(ac_pp* pp, enum ac_token_type type)
     pp->if_else_stack[pp->if_else_index].type = type;
 }
 
-static void set_branch_value(ac_pp* pp, enum ac_token_type type, bool value)
+static void set_branch_value(ac_pp* pp, bool value)
 {
-    /* @TODO: flip 'value' for ifndef and elifndef. */
-    (void)type;
     pp->if_else_stack[pp->if_else_index].was_enabled = value;
 }
 
