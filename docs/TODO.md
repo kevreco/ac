@@ -49,10 +49,11 @@
     
 ### 1.4
 
-    - [] Support basic #if/#endif
-    - [] Support #elif
-    - [] Support evaluation if #if
-    - [] Support defined(XXX) expression in #if/#elif
+    - [./] Support basic #if/#endif
+    - [./] Support #elif
+    - [./] Support evaluation in #if
+    - [./] Support defined(XXX) expression in #if/#elif
+    - [./] Support #ifdef/#ifndef/#elifdef/#elifndef
     
 # Stage 2 - C Parser and C converter
 
