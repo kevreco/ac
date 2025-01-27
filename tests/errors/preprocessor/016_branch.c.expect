@@ -1,0 +1,3 @@
+./tests/errors/preprocessor/016_branch.c:1:6: error: #endif without #if
+1 | #endif
+         ^

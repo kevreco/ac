@@ -1,0 +1,6 @@
+./tests/errors/preprocessor/015_branch.c:1:9: error: identifier expected after #ifdef, #ifndef, #elifdef or #elifndef.
+1 | #elifndef
+            ^
+./tests/errors/preprocessor/015_branch.c:1:9: error: unexpected end-of-file in preprocessor expression
+1 | #elifndef
+            ^

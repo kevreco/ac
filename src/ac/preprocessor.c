@@ -119,7 +119,6 @@ struct eval_t {
     bool succes;
 };
 
-/* @TODO use this value where it's relevan in eval_expr2(). */
 static eval_t eval_false = { 0, false};
 
 static ac_token* goto_next_for_eval(ac_pp* pp);
@@ -130,7 +129,7 @@ static eval_t eval_primary(ac_pp* pp);
 static int64_t eval_binary(ac_pp* pp, enum ac_token_type binary_op, int64_t left, int64_t right);
 static eval_t eval_expr2(ac_pp* pp, int previous_precedence);
 /* For "#if X" X must be a preprocessor expression while "#ifdef Y" Y must be an identifier. */
-static bool eval_expr(ac_pp* pp, bool expect_identifier_expression);
+static eval_t eval_expr(ac_pp* pp, bool expect_identifier_expression);
 
 static void pop_branch(ac_pp* pp);
 static void push_branch(ac_pp* pp, enum ac_token_type type);
@@ -305,13 +304,8 @@ static bool parse_directive(ac_pp* pp)
     {
         if (branch_is_empty(pp))
         {
-            ac_report_error("#endif without #if");
-            return false;
-        }
-
-        if (branch_is(pp, ac_token_type_ENDIF))
-        {
-            ac_report_error("#endif after #endif");
+            ac_report_error_loc(location(pp), "#endif without #if");
+            goto_next_token_from_directive(pp); /* Skip 'endif'. */
             return false;
         }
 
@@ -334,7 +328,8 @@ static bool parse_directive(ac_pp* pp)
     {
         if (branch_is_empty(pp))
         {
-            ac_report_error("#elif without #if");
+            ac_report_error_loc(location(pp), "#elif without #if");
+            goto_next_token_from_directive(pp); /* Skip 'elif'. */
             return false;
         }
 
@@ -344,15 +339,11 @@ static bool parse_directive(ac_pp* pp)
     {
         if (branch_is_empty(pp))
         {
-            ac_report_error("#else without #if");
+            ac_report_error_loc(location(pp), "#else without #if");
+            goto_next_token_from_directive(pp); /* Skip 'else'. */
             return false;
         }
         
-        if (branch_is(pp, ac_token_type_ELSE))
-        {
-            ac_report_error("#else after #else");
-            return false;
-        }
         goto branch_case;
     }
     case ac_token_type_IF:
@@ -403,7 +394,12 @@ branch_case:
                         || t == ac_token_type_IFNDEF
                         || t == ac_token_type_ELIFDEF
                         || t == ac_token_type_ELIFNDEF;
-                    bool branch_value = eval_expr(pp, require_identifier_expression);
+                    eval_t eval = eval_expr(pp, require_identifier_expression);
+                    if (!eval.succes)
+                    {
+                        return false;
+                    }
+                    bool branch_value = eval.value;
                     /* Flip value for negative if */
                     if (t == ac_token_type_IFNDEF || t == ac_token_type_ELIFNDEF)
                     {
@@ -1381,7 +1377,7 @@ static eval_t eval_primary(ac_pp* pp)
         
         if (!ac_token_is_keyword_or_identifier(token(pp).type))
         {
-            result.succes = false;
+            result = eval_false;
             ac_report_error_loc(loc, "operator 'defined' requires an identifier");
             break;
         }
@@ -1396,7 +1392,7 @@ static eval_t eval_primary(ac_pp* pp)
         break;
     }
     case ac_token_type_EOF: { /* Error must have been reported by "goto_next_token" or "expect_and_consume" */
-        result.succes = false;
+        result = eval_false;
         break;
     }
     case ac_token_type_PAREN_L: {
@@ -1405,7 +1401,7 @@ static eval_t eval_primary(ac_pp* pp)
 
         if (!expect(pp, ac_token_type_PAREN_R))
         {
-            result.succes = false;
+            result = eval_false;
             return result;
         }
 
@@ -1445,7 +1441,7 @@ static eval_t eval_primary(ac_pp* pp)
         eval_t right = eval_primary(pp);
         if (!right.succes)
         {
-            result.succes = false;
+            result = eval_false;
             break;
         }
         result.value = !right.value;
@@ -1460,7 +1456,7 @@ static eval_t eval_primary(ac_pp* pp)
         eval_t right = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
         if (!right.succes)
         {
-            result.succes = false;
+            result = eval_false;
             break;
         }
         /* Evaluation unary operation as binary operation with zero value on the left.*/
@@ -1469,8 +1465,7 @@ static eval_t eval_primary(ac_pp* pp)
     }
     /* Binary operator used as unary operator */
     default: {
-        result.value = 0;
-        result.succes = false;
+        result = eval_false;
         break;
     }
     }
@@ -1511,7 +1506,7 @@ static eval_t eval_expr2(ac_pp* pp, int previous_precedence)
     eval_t left = eval_primary(pp);
     if (!left.succes)
     {
-        return left;
+        return eval_false;
     }
 
     while (true) /* Left can be NULL if */
@@ -1530,7 +1525,7 @@ static eval_t eval_expr2(ac_pp* pp, int previous_precedence)
             if (!right.succes)
             {
                 ac_report_error_loc(loc, "operator '"STRV_FMT"' has no right operand", STRV_ARG(ac_token_type_to_strv(new_token_type)));
-                return (eval_t){ left.value, false };
+                return eval_false;
             }
             left.value = eval_binary(pp, new_token_type, left.value, right.value);
         }
@@ -1541,7 +1536,7 @@ static eval_t eval_expr2(ac_pp* pp, int previous_precedence)
     }
 }
 
-static bool eval_expr(ac_pp* pp, bool expect_identifier_expression)
+static eval_t eval_expr(ac_pp* pp, bool expect_identifier_expression)
 {
     eval_t eval = { 0, true };
     ac_location expression_location = location(pp);
@@ -1567,25 +1562,24 @@ static bool eval_expr(ac_pp* pp, bool expect_identifier_expression)
     if (token(pp).type == ac_token_type_EOF)
     {
         ac_report_error_loc(expression_location, "unexpected end-of-file in preprocessor expression");
-        return false;
+        return eval_false;
     }
 
     /* All directives must end with a new line or a EOF. */
     if (token(pp).type != ac_token_type_NEW_LINE
         || !eval.succes)
     {
-        ac_report_error_loc(expression_location, "invalid preprocessor expression");
-        if (!eval.succes) {
-            /* In case of expression failure, skip all tokens until the next new line. */
-            while (token(pp).type != ac_token_type_NEW_LINE)
-            {
-                goto_next_for_eval(pp);
-            }
+        /* In case of expression failure, skip all tokens until the next new line. */
+        while (token(pp).type != ac_token_type_NEW_LINE)
+        {
+            goto_next_for_eval(pp);
         }
-        return false;
+        ac_report_error_loc(expression_location, "invalid preprocessor expression");
+
+        return eval_false;
     }
 
-    return eval.value;
+    return eval;
 }
 
 static void pop_branch(ac_pp* pp)
