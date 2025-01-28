@@ -49,6 +49,7 @@ struct ac_options {
     */
     bool debug_parser;                   /* Will print some debugging values in the output. */ 
     bool preprocess;                     /* Print preprocess result in the standard output. */
+    bool preserve_comment;               /* Also print comments while preprocessing. */
     bool reject_hex_float;               /* Prevent hex float parsing. */
 };
 

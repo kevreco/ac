@@ -16,6 +16,7 @@ static const struct options {
     strv output_extension;
     strv parse_only;
     strv preprocess;
+    strv preserve_comment;
     strv reject_hex_float;
 } cli_options = {
     .colored_output = STRV("--colored-output"),
@@ -24,6 +25,7 @@ static const struct options {
     .output_extension = STRV("--output-extension"),
     .parse_only = STRV("--parse-only"),
     .preprocess = STRV("--preprocess"),
+    .preserve_comment = STRV("--preserve-comment"),
     .reject_hex_float = STRV("--reject-hex-float"),
 };
 /*
@@ -54,7 +56,7 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
 {
     do {
         const char* arg = pop_args(argc, argv);
-        
+
         if (arg_equals(arg, cli_options.colored_output))
         {
             o->global.colored_output = true;
@@ -80,6 +82,10 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         else if (arg_equals(arg, cli_options.preprocess))
         {
             o->preprocess = true;
+        }
+        else if (arg_equals(arg, cli_options.preserve_comment))
+        {
+            o->preserve_comment = true;
         }
         else if (arg_equals(arg, cli_options.reject_hex_float))
         {
