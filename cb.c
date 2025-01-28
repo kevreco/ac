@@ -45,6 +45,13 @@ int main()
     test_preprocessor(ac_exe, "./tests/preprocessor_conditional/");
 	test_error(ac_exe, "./tests/errors/preprocessor/");
 	test_error(ac_exe, "./tests/errors/parsing/");
+	
+	/* Test CLI options. */
+	
+	test_preprocessor(ac_exe, "./tests/options/preprocess/");
+	test_preprocessor(ac_exe, "./tests/options/preprocess_preserve_comment/");
+	test_preprocessor(ac_exe, "./tests/options/gcc_e/");
+	test_preprocessor(ac_exe, "./tests/options/gcc_multiple_short/");
 
 	cb_destroy();
 

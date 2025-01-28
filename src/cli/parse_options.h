@@ -91,7 +91,6 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         {
             o->reject_hex_float = true;
         }
-        
         /* Ignore --option-file since it has been handled at this point */
         else if (arg_equals(arg, option_file))
         {
@@ -104,7 +103,28 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
             ac_report_error("Unknown flag: %s", arg);
             return false;
         }
-        /* Non-option args are assume to be files. */
+        /* Alternative options to use the compiler like GCC */
+        else if (arg[0] == '-'
+            && arg[1] >= 'A'
+            && arg[1] <= 'Z')
+        {
+            arg += 1; /* Skip first '-' */
+            while (arg[0] >= 'A' && arg[0] <= 'Z')
+            {
+                switch (arg[0]) {
+                case 'E': {
+                    o->preprocess = true;
+                    break;
+                }
+                case 'C': {
+                    o->preserve_comment = true;
+                    break;
+                }
+                }
+                arg += 1;
+            }
+        }
+        /* Non-option args are assumed to be files. */
         else
         {
             if (!re_file_exists_str(arg))
