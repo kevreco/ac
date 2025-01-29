@@ -50,6 +50,7 @@ static ac_token* goto_next_token_from_directive(ac_pp* pp);
 static ac_token* goto_next_token_from_macro_agrument(ac_pp* pp);
 /* Get next raw token ignoring whitespaces. */
 static ac_token* goto_next_token_from_macro_body(ac_pp* pp);
+static ac_token* goto_next_macro_expanded(ac_pp* pp);
 
 static bool parse_directive(ac_pp* pp);
 static bool parse_macro_definition(ac_pp* pp);
@@ -132,7 +133,7 @@ static eval_t eval_expr2(ac_pp* pp, int previous_precedence);
 static eval_t eval_expr(ac_pp* pp, bool expect_identifier_expression);
 
 static void pop_branch(ac_pp* pp);
-static void push_branch(ac_pp* pp, enum ac_token_type type);
+static void push_branch(ac_pp* pp, enum ac_token_type type, ac_location loc);
 static void set_branch_type(ac_pp* pp, enum ac_token_type type);
 static void set_branch_value(ac_pp* pp, bool value);
 static bool branch_is(ac_pp* pp, enum ac_token_type type);
@@ -200,14 +201,14 @@ void ac_pp_destroy(ac_pp* pp)
 
 ac_token* ac_pp_goto_next(ac_pp* pp)
 {
-    goto_next_normal_token(pp);
-
-    /* Every time the token is expanded we need to try to expand again. */
-    while (try_expand(pp, token_ptr(pp))) {
-        goto_next_raw_token(pp);
+    ac_token* t = goto_next_macro_expanded(pp);
+    if (t->type == ac_token_type_EOF
+        && pp->if_else_index >= 0)
+    {
+        struct branch_flags b = pp->if_else_stack[pp->if_else_index];
+        ac_report_error_loc(b.loc, "unterminated #%s", ac_token_type_to_str(b.type));
     }
-
-    return token_ptr(pp);
+    return t;
 }
 
 static ac_token* goto_next_raw_token(ac_pp* pp)
@@ -227,8 +228,11 @@ static ac_token* goto_next_normal_token(ac_pp* pp)
 {
     goto_next_raw_token(pp);
 
-    /* macro_depth is used because we don't want to parse directives for tokens '#' coming from macros. */
-    while (token_ptr(pp)->type == ac_token_type_HASH && pp->macro_depth == 0)
+    /* Directives must begin with a '#' and the '#' should be at the beginning of the line.
+       macro_depth is used because we don't want to parse directives for tokens '#' coming from macros. */
+    while (token_ptr(pp)->beginning_of_line
+        && token_ptr(pp)->type == ac_token_type_HASH
+        && pp->macro_depth == 0)
     {
         if (!parse_directive(pp)
             || token_ptr(pp)->type == ac_token_type_EOF)
@@ -290,6 +294,18 @@ static ac_token* goto_next_token_from_macro_body(ac_pp* pp)
     }
 
     return token;
+}
+
+static ac_token* goto_next_macro_expanded(ac_pp* pp)
+{
+    goto_next_normal_token(pp);
+
+    /* Every time the token is expanded we need to try to expand again. */
+    while (try_expand(pp, token_ptr(pp))) {
+        goto_next_raw_token(pp);
+    }
+
+    return token_ptr(pp);
 }
 
 static bool parse_directive(ac_pp* pp)
@@ -357,7 +373,7 @@ branch_case:
         for(;;)
         {
             enum ac_token_type t = token_ptr(pp)->type;
-
+            ac_location loc = location(pp);
             bool need_to_skip_block;
             if (t == ac_token_type_ELSE) {
                 goto_next_token_from_directive(pp);
@@ -380,7 +396,7 @@ branch_case:
                     || t == ac_token_type_IFDEF
                     || t == ac_token_type_IFNDEF)
                 {
-                    push_branch(pp, t);
+                    push_branch(pp, t, loc);
                 }
                 /* If one of the previous branch was enabled we need to skip the current one. */
                 if (branch_was_enabled(pp))
@@ -1312,11 +1328,11 @@ static ac_macro* find_macro(ac_pp* pp, ac_token* identifer)
 
 static ac_token* goto_next_for_eval(ac_pp* pp)
 {
-    ac_token* token = ac_pp_goto_next(pp);
+    ac_token* token = goto_next_macro_expanded(pp);
     while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
        || token->type == ac_token_type_COMMENT)
     {
-        token = ac_pp_goto_next(pp);
+        token = goto_next_macro_expanded(pp);
     }
 
     return token;
@@ -1541,6 +1557,12 @@ static eval_t eval_expr(ac_pp* pp, bool expect_identifier_expression)
     eval_t eval = { 0, true };
     ac_location expression_location = location(pp);
 
+    if (token(pp).type == ac_token_type_EOF)
+    {
+        ac_report_error_loc(expression_location, "unexpected end-of-file in preprocessor expression");
+        return eval_false;
+    }
+
     if (expect_identifier_expression)
     {
         if (!ac_token_is_keyword_or_identifier(token(pp).type))
@@ -1558,23 +1580,20 @@ static eval_t eval_expr(ac_pp* pp, bool expect_identifier_expression)
     {
         eval = eval_expr2(pp, LOWEST_PRIORITY_PRECEDENCE);
     }
-    
-    if (token(pp).type == ac_token_type_EOF)
-    {
-        ac_report_error_loc(expression_location, "unexpected end-of-file in preprocessor expression");
-        return eval_false;
+
+    if ((token(pp).type != ac_token_type_NEW_LINE && token(pp).type != ac_token_type_EOF) || !eval.succes) {
+        ac_report_error_loc(expression_location, "invalid preprocessor expression");
     }
 
     /* All directives must end with a new line or a EOF. */
-    if (token(pp).type != ac_token_type_NEW_LINE
+    if ((token(pp).type != ac_token_type_NEW_LINE && token(pp).type != ac_token_type_EOF)
         || !eval.succes)
     {
         /* In case of expression failure, skip all tokens until the next new line. */
-        while (token(pp).type != ac_token_type_NEW_LINE)
+        while (token(pp).type != ac_token_type_NEW_LINE && token(pp).type != ac_token_type_EOF)
         {
             goto_next_for_eval(pp);
         }
-        ac_report_error_loc(expression_location, "invalid preprocessor expression");
 
         return eval_false;
     }
@@ -1587,6 +1606,18 @@ static void pop_branch(ac_pp* pp)
     pp->if_else_stack[pp->if_else_index].type = ac_token_type_NONE;
     pp->if_else_stack[pp->if_else_index].was_enabled = false;
     pp->if_else_index -= 1;
+}
+
+static void push_branch(ac_pp* pp, enum ac_token_type type, ac_location loc)
+{
+    pp->if_else_index += 1;
+    if (pp->if_else_index >= ac_pp_branch_MAX_DEPTH)
+    {
+        ac_report_error("too many nested #if/#else (more than %d)", ac_pp_branch_MAX_DEPTH);
+        return;
+    }
+    pp->if_else_stack[pp->if_else_index].type = type;
+    pp->if_else_stack[pp->if_else_index].loc = loc;
 }
 
 static void set_branch_type(ac_pp* pp, enum ac_token_type type)
@@ -1609,17 +1640,6 @@ static bool branch_is_empty(ac_pp* pp)
 {
     return pp->if_else_index < 0
         || pp->if_else_stack[pp->if_else_index].type == ac_token_type_NONE;
-}
-
-static void push_branch(ac_pp* pp, enum ac_token_type type)
-{
-    pp->if_else_index += 1;
-    if (pp->if_else_index >= ac_pp_branch_MAX_DEPTH)
-    {
-        ac_report_error("too many nested #if/#else (more than %d)", ac_pp_branch_MAX_DEPTH);
-        return;
-    }
-    pp->if_else_stack[pp->if_else_index].type = type;
 }
 
 static bool branch_was_enabled(ac_pp* pp)

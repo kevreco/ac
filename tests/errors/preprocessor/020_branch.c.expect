@@ -1,0 +1,8 @@
+./tests/errors/preprocessor/020_branch.c:1:6: error: unexpected end of file, expected #endif, #else, #elif, #elifdef or #elifndef
+1 | #if 0
+         ^
+2 | int a = 0; #endif
+./tests/errors/preprocessor/020_branch.c:1:3: error: unterminated #if
+1 | #if 0
+      ^
+2 | int a = 0; #endif

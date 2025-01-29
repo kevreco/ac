@@ -96,6 +96,8 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr)
 
     dstr_init(&l->tok_buf);
     dstr_init(&l->str_buf);
+
+    l->beginning_of_line = true;
 }
 
 void ac_lex_destroy(ac_lex* l)
@@ -198,7 +200,10 @@ ac_token* ac_lex_goto_next(ac_lex* l)
                 c = next_char_no_splice(l); /* Skip '#' */
                 return token_from_type(l, ac_token_type_DOUBLE_HASH);
             }
-            return token_from_type(l, ac_token_type_HASH);
+            bool bol = l->beginning_of_line;
+            ac_token* t = token_from_type(l, ac_token_type_HASH);
+            t->beginning_of_line = bol;
+            return t;
         }
         case '=': {
             c = next_char_no_splice(l); /* Skip '=' */
@@ -798,6 +803,21 @@ static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) 
     l->token.type = type;
     l->token.text = text;
 
+    switch (type)
+    {
+    case ac_token_type_NEW_LINE: {
+        l->beginning_of_line = true;
+        break;
+    }
+    case ac_token_type_HORIZONTAL_WHITESPACE:
+    case ac_token_type_COMMENT: {
+        /* Do nothing, preious_was_end_of_line should not be changed if there are horizontal whitespaces. */
+        break;
+    }
+    default:
+        l->beginning_of_line = false;
+    }
+    
     return &l->token;
 }
 

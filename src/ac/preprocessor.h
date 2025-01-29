@@ -64,6 +64,7 @@ struct ac_pp {
 	/* @OPT: We could use an octect for this branch_flags struct instead of two int. */
 	struct branch_flags {
 		enum ac_token_type type;  /* none/if/else/elif/ifndef/elifdef/elifndef */
+		ac_location loc;
 		bool was_enabled;         /* Once this value is non-zero this mean we can skip all else/elif/elifdef/elifndef. */
 	};
 	/* Only allow MAX_DEPTH of nested #if/#else */

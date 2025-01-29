@@ -221,6 +221,8 @@ struct ac_token {
     } u;
 
     bool previous_was_space; /* @TODO @OPT place this in a flag. */
+    /* Only matters for directives beginning with '#'. */
+    bool beginning_of_line;  /* @TODO @OPT place this in a flag. */
     /* Macro identifiers must be marked as "non expandable" to avoid recursive expansion. */
     bool cannot_expand;      /* @TODO @OPT place this in a flag. */
 };
@@ -260,7 +262,8 @@ struct ac_lex {
        it's assumes to be part of the current line
        hence we need to adjust the current line number on
        the following character. */
-    int end_of_line_adjustment_counter; 
+    int end_of_line_adjustment_counter;
+    bool beginning_of_line;
 };
 
 void ac_lex_init(ac_lex* l, ac_manager* mgr);

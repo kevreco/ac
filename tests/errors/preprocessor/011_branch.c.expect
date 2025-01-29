@@ -1,6 +1,6 @@
-./tests/errors/preprocessor/011_branch.c:1:6: error: identifier expected after #ifdef, #ifndef, #elifdef or #elifndef.
+./tests/errors/preprocessor/011_branch.c:1:6: error: unexpected end-of-file in preprocessor expression
 1 | #ifdef
          ^
-./tests/errors/preprocessor/011_branch.c:1:6: error: unexpected end-of-file in preprocessor expression
+./tests/errors/preprocessor/011_branch.c:1:6: error: unterminated #ifdef
 1 | #ifdef
          ^
