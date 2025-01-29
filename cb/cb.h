@@ -2253,7 +2253,7 @@ cb_process_core(cb_process_handle* handle)
 		&pi)                  /* Pointer to PROCESS_INFORMATION structure */
 		)
 	{
-		cb_log_error("CreateProcessW failed: %d", GetLastError());
+		cb_log_debug("CreateProcessW failed: %d", GetLastError());
 		/* No need to close handles since the process creation failed */
 		return handle;
 	}
@@ -2280,7 +2280,7 @@ cb_process_core(cb_process_handle* handle)
 		{
 			if (exit_code != 0)
 			{
-				cb_log_error("Command exited with exit code %lu", exit_code);
+				cb_log_debug("Command exited with exit code %lu", exit_code);
 			}
 		}
 		else
