@@ -497,7 +497,7 @@ branch_case:
     if (token_ptr(pp)->type != ac_token_type_NEW_LINE
         && token_ptr(pp)->type != ac_token_type_EOF)
     {
-        ac_report_internal_error("directive did not end with a new line");
+        ac_report_internal_error_loc(location(pp), "directive did not end with a new line");
         return false;
     }
     goto_next_raw_token(pp); /* Skip new line or EOF. */
