@@ -134,6 +134,12 @@ ac_token* ac_lex_goto_next(ac_lex* l)
     */
     for (;;)
     {
+        /* Adjust location from end of lines. */
+        while (l->end_of_line_adjustment_counter) {
+            location_increment_row(&l->location, 0);
+            l->end_of_line_adjustment_counter -= 1;
+        }
+
         if (is_eof(l)) {
             return token_eof(l);
         }
@@ -543,13 +549,14 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
 {
     int c;
     int nesting_level = 0;
+    ac_location loc = l->location;
 
     for (;;)
     {
         c = *l->cur;
         switch (c) {
         case '\0': /* We should not encounter EOF in a preprocessor block. */
-            ac_report_error("expect #endif, #else of #elif, #elifdef or #elifndef");
+            ac_report_error_loc(loc, "unexpected end of file, expected #endif, #else, #elif, #elifdef or #elifndef");
             return false;
         case '\r':
         case '\n':
@@ -563,6 +570,11 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
             }
             else if (c == '/') {
                 skip_inline_comment(l);
+            }
+            else
+            {
+                was_end_of_line = false;
+                break;
             }
             /* Fallthrough */
         case ' ':
@@ -683,8 +695,9 @@ static void skip_newlines(ac_lex* l) {
     {
     case '\n':
     {
-        l->cur++;
-        location_increment_row(&l->location, 1);
+        l->cur += 1;
+        location_increment_column(&l->location, 1);
+        l->end_of_line_adjustment_counter += 1;
         break;
     }
 
@@ -692,7 +705,8 @@ static void skip_newlines(ac_lex* l) {
     {
         int count = l->cur[1] == '\n' ? 2 : 1;
         l->cur += count;
-        location_increment_row(&l->location, count);
+        location_increment_column(&l->location, count);
+        l->end_of_line_adjustment_counter += 1;
         break;
     }
     default:

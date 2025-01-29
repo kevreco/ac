@@ -256,6 +256,11 @@ struct ac_lex {
     ac_location location; /* Current location */
     dstr tok_buf;         /* Token buffer in case we can't just use a string view to the memory. */
     dstr str_buf;         /* Buffer for string conversion. */
+    /* If the current character is an end of line,
+       it's assumes to be part of the current line
+       hence we need to adjust the current line number on
+       the following character. */
+    int end_of_line_adjustment_counter; 
 };
 
 void ac_lex_init(ac_lex* l, ac_manager* mgr);

@@ -1422,17 +1422,17 @@ static eval_t eval_primary(ac_pp* pp)
     }
     case ac_token_type_LITERAL_CHAR: {
         result.value = ac_token_type_to_strv(type).data[0];
-        goto_next_for_eval(pp);
+        goto_next_for_eval(pp); /* Skip literal. */
         break;
     }
     case ac_token_type_LITERAL_INTEGER: {
         result.value = token(pp).u.number.u.int_value;
-        goto_next_for_eval(pp);
+        goto_next_for_eval(pp); /* Skip literal. */
         break;
     }
     case ac_token_type_TRUE: {
         result.value = 1;
-        goto_next_for_eval(pp);
+        goto_next_for_eval(pp); /* Skip 'true'. */
         break;
     }
     case ac_token_type_EXCLAM: {
