@@ -1,5 +1,10 @@
 #include "manager.h"
 
+#ifndef _WIN32
+#include <sys/stat.h> /* stat */
+#include <sys/mman.h> /* mmap, unmap */
+#endif
+
 #include "stdbool.h"
 
 #include "re/file.h"
@@ -8,7 +13,28 @@
 #include "global.h"
 #include "lexer.h"
 
-static bool try_get_file_content(const char* filepath, dstr* content);
+typedef struct source_file source_file;
+struct source_file {
+#if _WIN32
+    HANDLE handle;
+    FILE_ID_INFO info;
+#else
+    int fd;
+    struct stat st;
+#endif
+    strv content;   /* Assumed to be null terminated. */
+};
+
+static bool load_source_file(ac_manager* m, char* filepath, source_file* result);
+
+/* mmap the file or get the already mmapped file.
+   'filepath' is only used to report more meaningful errors. */
+static bool mmap_or_get_source_file(ac_manager* m, source_file* source_file, const char* filepath);
+/* Close file handle and unmap the file. */
+static bool unmap_source_file(source_file* source_file);
+
+/* Comparer for darr_map. */
+static darr_bool source_file_less_predicate(source_file* left, source_file* right);
 
 static ht_hash_t identifier_hash(ac_ident_holder* i);                               /* For hash table. */
 static ht_bool identifiers_are_same(ac_ident_holder* left, ac_ident_holder* right); /* For hash table. */
@@ -79,6 +105,12 @@ void ac_manager_init(ac_manager* m, ac_options* o)
             ac_register_known_identifier(m, &info->ident, info->type);
         }
     }
+
+    darr_map_init(&m->opened_files, sizeof(source_file), (darr_predicate_t)source_file_less_predicate);
+
+#if _WIN32
+    darrT_init(&m->wchars);
+#endif
 }
 
 void ac_manager_destroy(ac_manager* m)
@@ -89,41 +121,50 @@ void ac_manager_destroy(ac_manager* m)
     ac_allocator_arena_destroy(&m->identifiers_arena);
     ac_allocator_arena_destroy(&m->ast_arena);
 
-    if (!dstr_empty(&m->source_file.content))
+    /* Release all opened files. */
+    for (int i = 0; i < darr_map_size(&m->opened_files); i += 1)
     {
-        dstr_destroy(&m->source_file.content);
+        source_file* src_file = darr_ptr(&m->opened_files.arr,i);
+        bool unmmapped = unmap_source_file(src_file);
+        AC_ASSERT(unmmapped);
     }
+
+    darr_map_destroy(&m->opened_files);
+#if _WIN32
+    darrT_destroy(&m->wchars);
+#endif
 }
 
-ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath)
+bool ac_manager_load_content(ac_manager* m, char* filepath, ac_source_file* result)
 {
     if (m->source_file.content.data != 0)
     {
         ac_report_internal_error("@TEMP we can only load a single file per manager instance");
-        return 0;
+        return false;
     }
 
     if (!re_file_exists_str(filepath))
     {
         ac_report_error("file '%s' does not exist", filepath);
-        return 0;
+        return false;
     }
 
-    dstr content;
-    dstr_init(&content);
-
-    if (try_get_file_content(filepath, &content))
-    {
-        m->source_file.filepath = filepath;
-        m->source_file.content = content;
-
-        return &m->source_file;
-    }
-    else
+    source_file src_file;
+    if (!load_source_file(m, filepath, &src_file))
     {
         ac_report_error("could not load file '%s' into memory", filepath);
-        return 0;
+        return false;
     }
+
+    if (src_file.content.size == 0)
+    {
+        ac_report_warning("empty file '%s'", filepath);
+    }
+
+    result->filepath = filepath;
+    result->content = src_file.content;
+
+    return true;
 }
 
 ac_ident_holder ac_create_or_reuse_identifier(ac_manager* m, strv ident)
@@ -191,25 +232,178 @@ strv ac_create_or_reuse_literal_h(ac_manager* m, strv literal_text, size_t hash)
     }
 }
 
-static bool try_get_file_content(const char* filepath, dstr* content)
+static bool load_source_file(ac_manager* m, char* filepath, source_file* result)
 {
-    if (!re_file_exists_str(filepath)) {
+    if (!re_file_exists_str(filepath))
+    {
         ac_report_error("file does not exist '%s'", filepath);
         return false;
     }
 
-    if (!re_file_open_and_read(content, filepath))
+    /* mmap the file content from the id. */
+    if (!mmap_or_get_source_file(m, result, filepath))
     {
-        ac_report_error("could not open '%s'", filepath);
+        ac_report_error("could not open or read '%s'", filepath);
         return false;
     }
-   
-    if (content->size == 0) {
-        ac_report_warning("empty file '%s'", filepath);
+    
+    darr_map_set(&m->opened_files, result);
+
+    return true;
+}
+
+#ifdef _WIN32
+static int convert_utf8_to_wchar(ac_manager* m, const char* chars)
+{
+    /* Get length of converted string. */
+    size_t len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, chars, -1, NULL, 0);
+    int result = 0;
+
+    /* Ensure the buffer is big enough. */
+    darrT_resize(&m->wchars, len + 1);
+
+    if (len != 0) {
+        result = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, chars, -1, m->wchars.arr.data, len); /* Do conversion */
+    }
+    /* Ensure that the buffer ends with a null terminated wchar. */
+    darrT_set(&m->wchars, len, L'0');
+
+    return result;
+}
+
+static HANDLE handle_from_filepath(wchar_t* filepath) {
+
+    return CreateFileW(filepath,
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,
+        NULL);
+}
+#endif
+
+static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const char* filepath)
+{
+#ifdef _WIN32
+
+    if (!convert_utf8_to_wchar(m, filepath))
+    {
+        ac_report_error("could not convert path to wchar_t string: %s", filepath);
+        return false;
+    }
+
+    FILE_ID_INFO info = { 0 };
+    HANDLE handle = handle_from_filepath(m->wchars.arr.data);
+    if (handle == INVALID_HANDLE_VALUE
+        || !GetFileInformationByHandleEx(handle, FileIdInfo, &info, sizeof(info)))
+    {
+        ac_report_internal_error("GetFileInformationByHandleEx failed for file: %s", filepath);
+        return false;
+    }
+
+    source_file lookup = {
+        .handle = handle,
+        .info = info
+    };
+
+    /* Retrieve the content if it's already opened. */
+    if (darr_map_get(&m->opened_files, &lookup, src_file))
+    {
         return true;
     }
 
+    src_file->handle = handle;
+    src_file->info = info;
+
+    /* Get file size */
+    LARGE_INTEGER file_size;
+    if (!GetFileSizeEx(src_file->handle, &file_size))
+    {
+        ac_report_internal_error("GetFileSizeEx failed for file: %s", filepath);
+        return false;
+    }
+
+    HANDLE mapping_handle = CreateFileMappingW(src_file->handle, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (!mapping_handle)
+    {
+        ac_report_internal_error("CreateFileMapping failed for file: %s", filepath);
+        return false;
+    }
+
+    char* memory_ptr = (char*)MapViewOfFile(mapping_handle, FILE_MAP_READ, 0, 0, 0);
+    CloseHandle(mapping_handle);
+
+    src_file->content.data = memory_ptr;
+    src_file->content.size = (size_t)file_size.QuadPart;
     return true;
+
+#else
+
+    int fd = open(filepath, O_RDONLY | O_NDELAY, 0644);
+
+    if (fd < 0)
+    {
+        ac_report_internal_error("open failed for file: %s", filepath);
+        return false;
+    }
+
+    struct stat st;
+    if (fstat(fd, &st) != 0)
+    {
+        ac_report_internal_error("fstat failed for file: %s", filepath);
+        return false;
+    }
+
+    source_file lookup = {
+        .fd = fd,
+        .st = st
+    };
+
+    /* Retrieve the content if it's already opened. */
+    if (darr_map_get(&m->opened_files, &lookup, src_file))
+    {
+        return true;
+    }
+
+    /* mmap */
+    char* memory_ptr = (char*)mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+
+    if (memory_ptr == MAP_FAILED)
+    {
+        ac_report_internal_error("mmap failed for file: %s", filepath);
+        return false;
+    }
+
+    src_file->fd = fd;
+    src_file->content.data = memory_ptr;
+    src_file->content.size = (size_t)st.st_size;
+
+    return true;
+#endif
+}
+
+static bool unmap_source_file(source_file* source_file)
+{
+#if _WIN32
+    CloseHandle(source_file->handle);
+    return UnmapViewOfFile(source_file->content.data);
+#else
+    close(source_file->fd);
+    return munmap((void*)source_file->content.data, source_file->content.size) == 0;
+#endif
+}
+
+static darr_bool source_file_less_predicate(source_file* left, source_file* right)
+{
+#if _WIN32
+    return memcmp(&left->info, &right->info, sizeof(left->info)) < 0;
+#else
+    return left->st.st_dev < right->st.st_dev
+        && left->st.st_ino < right->st.st_ino
+        && left->st.st_size < right->st.st_size
+        && left->st.st_mtime < right->st.st_mtime;
+#endif
 }
 
 static ht_hash_t identifier_hash(ac_ident_holder* i)

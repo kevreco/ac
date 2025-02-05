@@ -11,6 +11,9 @@
 #include <re/darr.h>
 #include <re/darrT.h>
 
+#define RE_DARR_MAP_IMPLEMENTATION
+#include <re/darr_map.h>
+
 #define RE_FILE_IMPLEMENTATION
 #include <re/file.h>
 

@@ -1,12 +1,10 @@
 /*
-    darr.h - See end of file for license information.
-*/
-
-/*
 
 SUMMARY:
 
-    Dynamic (Strechy) Array - a C partially equivalent of std::vector
+    Dynamic Array - a C partially equivalent of std::vector
+    
+    See end of file for license information.
     
     Do this
         #define DARR_IMPLEMENTATION
@@ -14,7 +12,27 @@ SUMMARY:
 
 NOTES:
 
-    - Allocators are not implemented.
+    Allocators are not implemented.
+    
+EXAMPLE:
+
+    #define DARR_IMPLEMENTATION
+    #include "darr.h"
+    
+    int main() {
+
+        darr arr;
+        darr_init(&arr);
+        
+        int v = 1;
+        darr_push_back(&arr, &v);
+        v = 2;
+        darr_push_back(&arr, &v);
+        v = 3;
+        darr_push_back(&arr, &v);
+        
+        darr_destroy(&arr);
+    }
 */
 
 #ifndef RE_DARR_H
@@ -128,7 +146,7 @@ struct arr_view {
 #define arr_viewT(type_) union { arr_view base; struct { darr_size_t size; type_ *data; } arr_view; }
 
 #define EACH_ARR_VIEW(i, arr) \
-	(i) = &((arr).data[0]); (i) < &((arr).data[(arr).size]); ++(i)
+    (i) = &((arr).data[0]); (i) < &((arr).data[(arr).size]); ++(i)
 
 /* Create an arr_view and initialize all values to zero */
 DARR_API arr_view  arr_view_make();
@@ -258,13 +276,13 @@ DARR_API void darr_clear(darr* arr);
 /* Resizes the array to contain count values. This does not free allocated buffer. */
 DARR_API void darr_resize(darr* arr, darr_size_t size);
 
-DARR_API void darr_insert_one_sorted(darr* arr, const void* value, darr_predicate_t comp);
-DARR_API darr_size_t darr_binary_find_predicate(const darr* arr, const void* value, darr_predicate_t comp);
+DARR_API void darr_insert_one_sorted(darr* arr, const void* value, darr_predicate_t less);
+DARR_API darr_size_t darr_binary_find_predicate(const darr* arr, const void* value, darr_predicate_t less);
 DARR_API darr_size_t darr_binary_find_comp(const darr* arr, const void* value, darr_comp_t comp);
 
-/* Returns index of lower*/
+/* Returns index of lower. */
+DARR_API darr_size_t darr_lower_bound_predicate(const void* void_ptr, darr_size_t left, darr_size_t right, const void* value, darr_size_t value_size, darr_predicate_t less);
 DARR_API darr_size_t darr_lower_bound_comp(const void* void_ptr, darr_size_t left, darr_size_t right, const void* value, darr_size_t value_size, darr_comp_t comp);
-DARR_API darr_size_t darr_lower_bound_predicate(const void* void_ptr, darr_size_t left, darr_size_t right, const void* value, darr_size_t value_size, darr_predicate_t comp);
 
 #define darr_push_back(a, value) \
     do { \
@@ -838,20 +856,19 @@ darr_end(const darr* array)
 /*-----------------------------------------------------------------------*/
 
 DARR_API void
-darr_insert_one_sorted(darr* arr, const void* value, darr_predicate_t comp)
+darr_insert_one_sorted(darr* arr, const void* value, darr_predicate_t less)
 {
-    darr_size_t index = darr_lower_bound_predicate(arr->data, 0, arr->size, value, arr->sizeof_value, comp);
+    darr_size_t index = darr_lower_bound_predicate(arr->data, 0, arr->size, value, arr->sizeof_value, less);
 
     darr_insert_one(arr, index, value);
-
 }
 
 DARR_API darr_size_t
-darr_binary_find_predicate(const darr* arr, const void* value, darr_predicate_t comp)
+darr_binary_find_predicate(const darr* arr, const void* value, darr_predicate_t less)
 {
-    darr_size_t index = darr_lower_bound_predicate(arr->data, 0, arr->size, value, arr->sizeof_value, comp);
+    darr_size_t index = darr_lower_bound_predicate(arr->data, 0, arr->size, value, arr->sizeof_value, less);
 
-    if (index == arr->size || comp(value, darr_ptr(arr, index)))
+    if (index == arr->size || less(value, darr_ptr(arr, index)))
     {
         index = arr->size;
     }
@@ -873,7 +890,7 @@ darr_binary_find_comp(const darr* arr, const void* value, darr_comp_t comp)
 }
 
 DARR_API darr_size_t
-darr_lower_bound_comp(const void* void_ptr, darr_size_t left, darr_size_t right, const void* value, darr_size_t sizeof_value, darr_comp_t comp)
+darr_lower_bound_predicate(const void* void_ptr, darr_size_t left, darr_size_t right, const void* value, darr_size_t sizeof_value, darr_predicate_t less)
 {
     const char* ptr = (const char*)void_ptr;
     darr_size_t count = right - left;
@@ -884,8 +901,8 @@ darr_lower_bound_comp(const void* void_ptr, darr_size_t left, darr_size_t right,
         step = count >> 1; /* count divide by two using bit shift */
 
         mid = left + step;
-       
-        if (comp(ptr + (mid * sizeof_value), value) < 0) {
+
+        if (less(ptr + (mid * sizeof_value), value) != 0) {
             left = mid + 1;
             count -= step + 1;
         }
@@ -897,7 +914,7 @@ darr_lower_bound_comp(const void* void_ptr, darr_size_t left, darr_size_t right,
 }
 
 DARR_API darr_size_t
-darr_lower_bound_predicate(const void* void_ptr, darr_size_t left, darr_size_t right, const void* value, darr_size_t sizeof_value, darr_predicate_t comp)
+darr_lower_bound_comp(const void* void_ptr, darr_size_t left, darr_size_t right, const void* value, darr_size_t sizeof_value, darr_comp_t comp)
 {
     const char* ptr = (const char*)void_ptr;
     darr_size_t count = right - left;
@@ -909,7 +926,7 @@ darr_lower_bound_predicate(const void* void_ptr, darr_size_t left, darr_size_t r
 
         mid = left + step;
 
-        if (comp(ptr + (mid * sizeof_value), value) != 0) {
+        if (comp(ptr + (mid * sizeof_value), value) < 0) {
             left = mid + 1;
             count -= step + 1;
         }

@@ -27,21 +27,27 @@ bool ac_compiler_compile(ac_compiler* c)
     AC_ASSERT(darrT_size(&(options(c)->files)));
     AC_ASSERT(darrT_size(&(options(c)->files)) == 1 && "Not supported yet. Cannot compile multiple files.");
     
-    /* Load file into memory. */
-    const char* source_file = darrT_at(&options(c)->files, 0);
-
-    ac_source_file* source = ac_manager_load_content(&c->mgr, source_file);
-
-    if (!source)
+    if (darrT_size(&(options(c)->files)) > 1)
     {
-        return 0;
+        ac_report_internal_error("cannot compile multiple files: not yet supported");
+        return false;
+    }
+
+    /* @FIXME we only get the first file since compiling multiple files is not yet supported. */
+    char* source_filepath = (char*)darrT_at(&options(c)->files, 0);
+
+    /* Load file into memory. */
+    ac_source_file src_file;
+    if (!ac_manager_load_content(&c->mgr, source_filepath, &src_file))
+    {
+        return false;
     }
 
     /*** Preprocess only ***/
     if (options(c)->preprocess)
     {
         ac_pp pp;
-        ac_pp_init(&pp, &c->mgr, dstr_to_strv(&source->content), source->filepath);
+        ac_pp_init(&pp, &c->mgr, src_file.content,src_file.filepath);
 
         /* Print preprocessed tokens in the standard output. */
         const ac_token* token = NULL;
@@ -58,7 +64,7 @@ bool ac_compiler_compile(ac_compiler* c)
     /*** Parsing ***/
 
     ac_parser_c parser;
-    ac_parser_c_init(&parser, &c->mgr, dstr_to_strv(&source->content), source->filepath);
+    ac_parser_c_init(&parser, &c->mgr, src_file.content, src_file.filepath);
 
     if (!ac_parser_c_parse(&parser))
     {
@@ -87,7 +93,7 @@ bool ac_compiler_compile(ac_compiler* c)
 
     dstr output_file;
     dstr_init(&output_file);
-    dstr_assign_str(&output_file, source_file);
+    dstr_assign_str(&output_file, source_filepath);
     re_path_replace_extension(&output_file, options(c)->output_extension);
 
     ac_converter_c_convert(&conv, output_file.data);

@@ -12,6 +12,7 @@
 #include <re/darr.h>
 #include <re/darrT.h>
 
+#include <re/darr_map.h>
 #include <re/file.h>
 
 #include <re/path.h>

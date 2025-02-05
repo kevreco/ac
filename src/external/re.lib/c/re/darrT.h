@@ -67,13 +67,16 @@ extern "C" {
     ((a)->arr.data[index])
 
 #define darrT_set(a, index, value) \
-    (a)->darr.data[index] = (value)
+    ((a)->arr.data[index] = (value))
 
 #define darrT_ptr(a, index) \
     (&(a)->arr.data[index])
 
 #define darrT_size(a) \
     darr_size(&((a)->base))
+
+#define darrT_resize(a, size) \
+    darr_resize(&((a)->base), size)
 
 #ifdef __cplusplus
 } /* extern "C" */

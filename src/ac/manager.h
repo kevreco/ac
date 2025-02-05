@@ -15,10 +15,9 @@ typedef struct ac_ident ac_ident;
 typedef struct ac_ast_top_level ac_ast_top_level;
 
 typedef struct ac_source_file ac_source_file;
-struct ac_source_file
-{
-    const char* filepath; /* using dstr instead of strv fopen requires a c string at the end */
-    dstr content;
+struct ac_source_file {
+    const char* filepath; /* The filename is used only for informational purpose, mostly to report errors. */
+    strv content;
 };
 
 /* options */
@@ -73,12 +72,19 @@ struct ac_manager {
     /* keep reference to destroy it. */
     ac_source_file source_file;
     ac_ast_top_level* top_level;
+
+    /* Map (lookup) of all opened (mmapped) files. */
+    darr_map opened_files;
+
+#ifdef _WIN32
+    darrT(wchar_t) wchars;
+#endif
 };
 
 void ac_manager_init(ac_manager* m, ac_options* o);
 void ac_manager_destroy(ac_manager* m);
 
-ac_source_file* ac_manager_load_content(ac_manager* m, const char* filepath);
+bool ac_manager_load_content(ac_manager* m, char* filepath, ac_source_file* src_file);
 
 typedef struct ac_ident_holder ac_ident_holder;
 struct ac_ident_holder
