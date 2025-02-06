@@ -140,7 +140,7 @@ static bool branch_is(ac_pp* pp, enum ac_token_type type);
 static bool branch_is_empty(ac_pp* pp);
 static bool branch_was_enabled(ac_pp* pp);
 
-void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath)
+void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath)
 {
     memset(pp, 0, sizeof(ac_pp));
     pp->mgr = mgr;
@@ -730,7 +730,7 @@ static void handle_some_special_macros(ac_pp* pp, ac_token* tok)
     if (tok->type == ac_token_type__FILE__)
     {
         tok->type = ac_token_type_LITERAL_STRING;
-        tok->text = ac_create_or_reuse_literal(pp->mgr, strv_make_from_str(pp->lex.filepath));
+        tok->text = pp->lex.filepath;
     }
     else if (tok->type == ac_token_type__LINE__
         || tok->type == ac_token_type__COUNTER__)
@@ -855,6 +855,8 @@ static size_t find_parameter_index(ac_token* token, ac_macro* m)
     return (size_t)(-1);
 }
 
+static const strv todo = STRV("@TODO");
+
 static void concat(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token left, ac_token right)
 {
     /* Special case: when two empty tokens are concatenated a single empty token is created. */
@@ -886,7 +888,7 @@ static void concat(ac_pp* pp, darr_token* arr, ac_macro* m, ac_token left, ac_to
 
     strv new_content = dstr_to_strv(&pp->concat_buffer);
     /* @TODO: figure out what should be the identifier/name of the "file" being processed. */
-    ac_lex_set_content(&pp->lex, new_content, "@TODO");
+    ac_lex_set_content(&pp->lex, new_content, todo);
 
     ac_token* tok = ac_lex_goto_next(&pp->lex);
 

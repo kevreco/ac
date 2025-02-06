@@ -22,10 +22,12 @@ struct source_file {
     int fd;
     struct stat st;
 #endif
-    strv content;   /* Assumed to be null terminated. */
+    strv filepath;  /* NOTE: View to a null terminated string. */
+    strv content;   /* NOTE: View to a null terminated string. */
 };
 
 static bool load_source_file(ac_manager* m, char* filepath, source_file* result);
+static strv allocate_filepath(ac_manager* m, const char* filepath);
 
 /* mmap the file or get the already mmapped file.
    'filepath' is only used to report more meaningful errors. */
@@ -137,12 +139,6 @@ void ac_manager_destroy(ac_manager* m)
 
 bool ac_manager_load_content(ac_manager* m, char* filepath, ac_source_file* result)
 {
-    if (m->source_file.content.data != 0)
-    {
-        ac_report_internal_error("@TEMP we can only load a single file per manager instance");
-        return false;
-    }
-
     if (!re_file_exists_str(filepath))
     {
         ac_report_error("file '%s' does not exist", filepath);
@@ -161,7 +157,7 @@ bool ac_manager_load_content(ac_manager* m, char* filepath, ac_source_file* resu
         ac_report_warning("empty file '%s'", filepath);
     }
 
-    result->filepath = filepath;
+    result->filepath = src_file.filepath;
     result->content = src_file.content;
 
     return true;
@@ -252,6 +248,14 @@ static bool load_source_file(ac_manager* m, char* filepath, source_file* result)
     return true;
 }
 
+static strv allocate_filepath(ac_manager* m, const char* filepath)
+{
+    size_t filepath_size = strlen(filepath);
+    void* filepath_memory = ac_allocator_allocate(&m->identifiers_arena.allocator, filepath_size + 1); /* +1 for null-termating char. */
+    strncpy(filepath_memory, filepath, filepath_size);
+    return strv_make_from(filepath_memory, filepath_size);
+}
+
 #ifdef _WIN32
 static int convert_utf8_to_wchar(ac_manager* m, const char* chars)
 {
@@ -312,6 +316,8 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
     {
         return true;
     }
+
+    src_file->filepath = allocate_filepath(m, filepath);
 
     src_file->handle = handle;
     src_file->info = info;
@@ -376,6 +382,8 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
     {
         return true;
     }
+
+    src_file->filepath = allocate_filepath(m, filepath);
 
     /* Handle zero size file as it would make mmap to fail. */
     if (st.st_size == 0)

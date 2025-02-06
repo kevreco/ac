@@ -107,7 +107,7 @@ void ac_lex_destroy(ac_lex* l)
     memset(l, 0, sizeof(ac_lex));
 }
 
-void ac_lex_set_content(ac_lex* l, strv content, const char* filepath)
+void ac_lex_set_content(ac_lex* l, strv content, strv filepath)
 {
     AC_ASSERT(content.data);
     AC_ASSERT(content.size);

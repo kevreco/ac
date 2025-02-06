@@ -246,7 +246,7 @@ struct ac_lex {
     ac_manager* mgr;
     ac_lex_options options;
 
-    const char* filepath;
+    strv filepath;
     const char* src;
     const char* end;
     const char* cur;
@@ -269,7 +269,7 @@ struct ac_lex {
 void ac_lex_init(ac_lex* l, ac_manager* mgr);
 void ac_lex_destroy(ac_lex* l);
 
-void ac_lex_set_content(ac_lex* l, strv content, const char* filepath);
+void ac_lex_set_content(ac_lex* l, strv content, strv filepath);
 /* Got to signficant next token. */
 ac_token* ac_lex_goto_next(ac_lex* l);
 

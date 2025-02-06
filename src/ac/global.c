@@ -102,9 +102,9 @@ static void display_message_v(FILE* file, enum message_type type, ac_location lo
     dstr256 message;
     dstr256_init(&message);
 
-    if (location.filepath)
+    if (location.filepath.size)
     {
-        dstr256_append_f(&message, "%s:", location.filepath);
+        dstr256_append_f(&message, STRV_FMT ":", STRV_ARG(location.filepath));
     }
     if (location_has_row_and_column(location))
     {
