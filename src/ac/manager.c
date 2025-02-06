@@ -298,7 +298,7 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
     if (handle == INVALID_HANDLE_VALUE
         || !GetFileInformationByHandleEx(handle, FileIdInfo, &info, sizeof(info)))
     {
-        ac_report_internal_error("GetFileInformationByHandleEx failed for file: %s", filepath);
+        ac_report_error("GetFileInformationByHandleEx failed for file: %s", filepath);
         return false;
     }
 
@@ -320,14 +320,21 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
     LARGE_INTEGER file_size;
     if (!GetFileSizeEx(src_file->handle, &file_size))
     {
-        ac_report_internal_error("GetFileSizeEx failed for file: %s", filepath);
+        ac_report_error("GetFileSizeEx failed for file: %s", filepath);
         return false;
+    }
+
+    /* Handle zero size file as it would make CreateFileMapping to fail. */
+    if (file_size.QuadPart == 0)
+    {
+        src_file->content = strv_make_from_str("");
+        return true;
     }
 
     HANDLE mapping_handle = CreateFileMappingW(src_file->handle, NULL, PAGE_READONLY, 0, 0, NULL);
     if (!mapping_handle)
     {
-        ac_report_internal_error("CreateFileMapping failed for file: %s", filepath);
+        ac_report_error("CreateFileMapping failed for file: %s", filepath);
         return false;
     }
 
@@ -348,12 +355,16 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
         return false;
     }
 
+    src_file->fd = fd;
+
     struct stat st;
     if (fstat(fd, &st) != 0)
     {
         ac_report_internal_error("fstat failed for file: %s", filepath);
         return false;
     }
+
+    src_file->st = st;
 
     source_file lookup = {
         .fd = fd,
@@ -366,6 +377,13 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
         return true;
     }
 
+    /* Handle zero size file as it would make mmap to fail. */
+    if (st.st_size == 0)
+    {
+        src_file->content = strv_make_from_str("");
+        return true;
+    }
+
     /* mmap */
     char* memory_ptr = (char*)mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
 
@@ -375,7 +393,6 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
         return false;
     }
 
-    src_file->fd = fd;
     src_file->content.data = memory_ptr;
     src_file->content.size = (size_t)st.st_size;
 
@@ -387,10 +404,19 @@ static bool unmap_source_file(source_file* source_file)
 {
 #if _WIN32
     CloseHandle(source_file->handle);
-    return UnmapViewOfFile(source_file->content.data);
+
+    if (source_file->content.size != 0)
+    {
+        return UnmapViewOfFile(source_file->content.data);
+    }
+    return true;
 #else
     close(source_file->fd);
-    return munmap((void*)source_file->content.data, source_file->content.size) == 0;
+    if (source_file->content.size != 0)
+    {
+        return munmap((void*)source_file->content.data, source_file->content.size) == 0;
+    }
+    return true;
 #endif
 }
 
