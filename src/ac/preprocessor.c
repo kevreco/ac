@@ -140,7 +140,6 @@ static bool branch_is(ac_pp* pp, enum ac_token_type type);
 static bool branch_is_empty(ac_pp* pp);
 static bool branch_was_enabled(ac_pp* pp);
 
-void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath)
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath)
 {
     memset(pp, 0, sizeof(ac_pp));
