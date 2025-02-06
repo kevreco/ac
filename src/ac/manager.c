@@ -378,7 +378,7 @@ static bool mmap_or_get_source_file(ac_manager* m, source_file* src_file, const 
     }
 
     /* Handle zero size file as it would make mmap to fail. */
-    if (st.size == 0)
+    if (st.st_size == 0)
     {
         src_file->content = strv_make_from_str("");
         return true;
