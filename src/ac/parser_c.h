@@ -19,7 +19,7 @@ struct ac_parser_c {
     ac_ast_block* current_block;
 };
 
-void ac_parser_c_init(ac_parser_c* p, ac_manager* mgr, strv content, const char* filepath);
+void ac_parser_c_init(ac_parser_c* p, ac_manager* mgr, strv content, strv filepath);
 void ac_parser_c_destroy(ac_parser_c* p);
 
 bool ac_parser_c_parse(ac_parser_c* p);

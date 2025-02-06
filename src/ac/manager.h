@@ -16,8 +16,8 @@ typedef struct ac_ast_top_level ac_ast_top_level;
 
 typedef struct ac_source_file ac_source_file;
 struct ac_source_file {
-    const char* filepath; /* The filename is used only for informational purpose, mostly to report errors. */
-    strv content;
+    strv filepath; /* NOTE: View to a null terminated string. */
+    strv content;  /* NOTE: View to a null terminated string. */
 };
 
 /* options */
@@ -61,16 +61,16 @@ typedef struct ac_manager ac_manager;
 struct ac_manager {
     ac_options options;
 
-    /*
-       Arena allocator to create new ast-related objects.
-       We dont't free them until this manager is destroyed.
-    */
+    /* Arena allocator to create new ast-related objects.
+       They are freed when the managed is destroyed. */
     ac_allocator_arena ast_arena;
+
+    /* Arena allocator to create identifier and unique string.
+       They are freed when the managed is destroyed. */
     ac_allocator_arena identifiers_arena;
+
     ht identifiers; /* Hash table with all identifiers to compare them faster with a hash. */
     ht literals;    /* Hash table with all literals to compare them faster with a hash. */
-    /* keep reference to destroy it. */
-    ac_source_file source_file;
     ac_ast_top_level* top_level;
 
     /* Map (lookup) of all opened (mmapped) files. */

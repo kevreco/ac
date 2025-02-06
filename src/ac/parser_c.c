@@ -76,7 +76,7 @@ static void add_to_current_block(ac_parser_c* p, ac_ast_expr* expr);
 static bool only_declaration(ac_ast_expr* expr) { return ac_ast_is_declaration(expr); }
 static bool any_expr(ac_ast_expr* expr) { (void)expr; return true; }
 
-void ac_parser_c_init(ac_parser_c* p, ac_manager* mgr, strv content, const char* filepath)
+void ac_parser_c_init(ac_parser_c* p, ac_manager* mgr, strv content, strv filepath)
 {
     memset(p, 0, sizeof(ac_parser_c));
 

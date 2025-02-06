@@ -10,9 +10,8 @@ extern "C" {
 #endif
 
 typedef struct ac_location ac_location;
-struct ac_location
-{
-    const char* filepath;
+struct ac_location {
+    strv filepath;
     int row; /* 1-based index. */
     int col; /* 1-based index. */
     int pos; /* 0-based index. */
@@ -20,8 +19,7 @@ struct ac_location
 };
 
 static ac_location ac_location_empty() {
-    ac_location l;
-    l.filepath = 0;
+    ac_location l = {0};
     l.row = -1;
     l.col = -1;
     l.pos = -1;
@@ -29,7 +27,7 @@ static ac_location ac_location_empty() {
     return l;
 }
 
-static void ac_location_init_with_file(ac_location* l, const char* filepath, strv content) {
+static void ac_location_init_with_file(ac_location* l, strv filepath, strv content) {
     l->filepath = filepath;
     l->row = 1;
     l->col = 0;
