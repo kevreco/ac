@@ -72,7 +72,7 @@ struct ac_pp {
 	int if_else_index;
 };
 
-void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, const char* filepath);
+void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath);
 void ac_pp_destroy(ac_pp* pp);
 
 ac_token* ac_pp_goto_next(ac_pp* pp);
