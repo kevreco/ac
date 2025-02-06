@@ -47,7 +47,7 @@ bool ac_compiler_compile(ac_compiler* c)
     if (options(c)->preprocess)
     {
         ac_pp pp;
-        ac_pp_init(&pp, &c->mgr, src_file.content,src_file.filepath);
+        ac_pp_init(&pp, &c->mgr, src_file.content, src_file.filepath);
 
         /* Print preprocessed tokens in the standard output. */
         const ac_token* token = NULL;
