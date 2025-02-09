@@ -1,0 +1,2 @@
+#define open <
+#include open

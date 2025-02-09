@@ -43,6 +43,8 @@ int main()
 	test_preprocessor(ac_exe, "./tests/preprocessor_literals/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_macro/");
     test_preprocessor(ac_exe, "./tests/preprocessor_conditional/");
+	test_preprocessor(ac_exe, "./tests/preprocessor_include/");
+
 	test_error(ac_exe, "./tests/errors/preprocessor/");
 	test_error(ac_exe, "./tests/errors/parsing/");
 	

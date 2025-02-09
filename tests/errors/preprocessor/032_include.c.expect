@@ -1,0 +1,6 @@
+./tests/errors/preprocessor/032_include.c:1:9: error: missing terminating char '"' for literal
+1 | #include "
+            ^
+./tests/errors/preprocessor/032_include.c:1:10: error: #include directive expects "filepath" or <filepath>
+1 | #include "
+             ^

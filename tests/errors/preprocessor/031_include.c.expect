@@ -1,0 +1,3 @@
+./tests/errors/preprocessor/031_include.c:1:9: error: #include directive expects "filepath" or <filepath>
+1 | #include 
+            ^

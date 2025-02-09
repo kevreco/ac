@@ -18,7 +18,9 @@ enum ac_token_cmd_type {
 };
 
 enum {
-	ac_pp_branch_MAX_DEPTH = 32 /* Max depth of #if#else branches. */
+	ac_pp_branch_MAX_DEPTH = 32,  /* Max depth of #if#else branches. */
+	ac_pp_MAX_INCLUDE_DEPTH = 32, /* Max depth of #include. */
+	ac_pp_MAX_FILEPATH = 1024     /* Max size of path. */
 };
 
 typedef struct ac_token_cmd ac_token_cmd;
@@ -70,6 +72,13 @@ struct ac_pp {
 	/* Only allow MAX_DEPTH of nested #if/#else */
 	struct branch_flags if_else_stack[ac_pp_branch_MAX_DEPTH];
 	int if_else_index;
+
+	/* Buffer to combine include paths from #include directives. */
+	char path_buffer[ac_pp_MAX_FILEPATH];
+
+	/* Stack of lexer state to handle #include directives. */
+	struct ac_lex_state lex_stack[ac_pp_MAX_INCLUDE_DEPTH];
+	int lex_stack_depth;
 };
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath);

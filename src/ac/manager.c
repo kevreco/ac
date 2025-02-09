@@ -434,9 +434,9 @@ static darr_bool source_file_less_predicate(source_file* left, source_file* righ
     return memcmp(&left->info, &right->info, sizeof(left->info)) < 0;
 #else
     return left->st.st_dev < right->st.st_dev
-        && left->st.st_ino < right->st.st_ino
-        && left->st.st_size < right->st.st_size
-        && left->st.st_mtime < right->st.st_mtime;
+        || left->st.st_ino < right->st.st_ino
+        || left->st.st_size < right->st.st_size
+        || left->st.st_mtime < right->st.st_mtime;
 #endif
 }
 

@@ -11,7 +11,6 @@ typedef enum ac_token_type ac_token_type;
 enum ac_token_type {
     ac_token_type_NONE,
     ac_token_type_EMPTY, /* Special token which mean "no token". */
-    ac_token_type_INTERNAL_ERROR,
 
     /* Keywords */
 
@@ -130,7 +129,7 @@ enum ac_token_type {
     ac_token_type_DOUBLE_PIPE,     /* || */
     ac_token_type_DOUBLE_PLUS,     /* ++ */
     ac_token_type_DOUBLE_QUOTE,    /* "  */
-    ac_token_type_EOF,
+    ac_token_type_EOF,             /* End of file. */
     ac_token_type_EQUAL,           /* =  */
     ac_token_type_EXCLAM,          /* !  */
     ac_token_type_GREATER,         /* >  */
@@ -225,6 +224,8 @@ struct ac_token {
     bool beginning_of_line;  /* @TODO @OPT place this in a flag. */
     /* Macro identifiers must be marked as "non expandable" to avoid recursive expansion. */
     bool cannot_expand;      /* @TODO @OPT place this in a flag. */
+    /* EOF token is also used on error, premature_eof is true when there was indeed an error. */
+    bool is_premature_eof;   /* @TODO @OPT place this in a flag. */
 };
 
 
@@ -284,8 +285,32 @@ bool ac_lex_expect(ac_lex* l, enum ac_token_type type);
 
 void ac_lex_swap(ac_lex* left, ac_lex* right);
 
+/* We need to save and restore state (ac_lex_state) of the lexer to handle stack of include files.
+   The reason we don't use stack of ac_lex directly is because we don't need to allocated new temporary buffers.
+   @TODO maybe buffers can be part of the ac_manager, it would actually make sense. */
+typedef struct ac_lex_state ac_lex_state;
+struct ac_lex_state {
+    strv filepath;
+    const char* src;
+    const char* end;
+    const char* cur;
+
+    int len;
+
+    ac_token token;
+    ac_location leading_location;
+    ac_location location;
+    bool beginning_of_line;
+};
+
+ac_lex_state ac_lex_save(ac_lex* l);
+void ac_lex_restore(ac_lex* l, ac_lex_state* s);
+
 /* Skip block of text between #if and #endif. */
 bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line);
+
+/* Parse every characters until the first '>' */
+ac_token* ac_parse_include_path(ac_lex* l);
 
 ac_token* ac_token_eof();
 

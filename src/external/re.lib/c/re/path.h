@@ -38,8 +38,11 @@ RE_PATH_API strv  re_path_basename(strv path);
 RE_PATH_API strv  re_path_get_last_segment(strv path);
 RE_PATH_API strv  re_path_filename(strv path);
 RE_PATH_API re_path_bool re_path_is_root(strv path);
-RE_PATH_API strv  re_path_remove_last_segment(strv path);
-RE_PATH_API strv  re_path_parent_directory(strv path);
+/* Removee last segment, preserving trailing slash. */
+RE_PATH_API strv re_path_remove_last_segment(strv path);
+/* Get directory path, preserving trailing slash. */
+RE_PATH_API strv re_path_parent_directory(strv path);
+RE_PATH_API strv re_path_remove_trailing_slash(strv path);
 RE_PATH_API re_path_bool re_path_is_absolute_str(const dstr_char_t* path);
 RE_PATH_API re_path_bool re_path_is_absolute(strv path);
 RE_PATH_API dstr_char_t  re_path_system_slash();
@@ -259,12 +262,6 @@ re_path_remove_last_segment(strv path)
 	size_t new_size = last_separator_start_pos + 1; /* new_size = index + 1 */
 	result.size = new_size;
 
-	/* we also remove the slash from the result if there is any */
-	if (details__is_slash(strv_back(result)))
-	{
-		result.size--; /* remove last slash */
-	}
-
 	return result;
 }
 
@@ -272,6 +269,16 @@ RE_PATH_API strv
 re_path_parent_directory(strv path)
 {
 	return re_path_remove_last_segment(path);
+}
+
+RE_PATH_API strv
+re_path_remove_trailing_slash(strv path)
+{
+	if (path.size && details__is_slash(strv_back(path)))
+	{
+		path.size -= 1; /* Remove trailing slash */
+	}
+	return path;
 }
 
 RE_PATH_API re_path_bool

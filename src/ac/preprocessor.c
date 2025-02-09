@@ -51,11 +51,15 @@ static ac_token* goto_next_token_from_macro_agrument(ac_pp* pp);
 /* Get next raw token ignoring whitespaces. */
 static ac_token* goto_next_token_from_macro_body(ac_pp* pp);
 static ac_token* goto_next_macro_expanded(ac_pp* pp);
+/* @FIXME: all those "goto_next" are becoming messy. Make it clearer. */
+static ac_token* goto_next_macro_expanded_no_space(ac_pp* pp);
 
 static bool parse_directive(ac_pp* pp);
 static bool parse_macro_definition(ac_pp* pp);
 static bool parse_macro_parameters(ac_pp* pp, ac_macro* m);
 static bool parse_macro_body(ac_pp* pp, ac_macro* m);
+static bool parse_include_directive(ac_pp* pp);
+static bool parse_include_path(ac_pp* pp, strv* path, bool* is_system_path);
 
 static void macro_push(ac_pp* pp, ac_macro* m);
 
@@ -96,7 +100,6 @@ static bool expect(ac_pp* pp, enum ac_token_type type);
 static ac_token_cmd make_cmd_token_list(ac_token* ptr, size_t count);
 static ac_token_cmd make_cmd_macro_pop(ac_macro* m, darr_token tokens);
 static ac_token_cmd to_cmd_token_list(darr_token* arr);
-
 
 /*-----------------------------------------------------------------------*/
 /* macro hash table */
@@ -139,6 +142,17 @@ static void set_branch_value(ac_pp* pp, bool value);
 static bool branch_is(ac_pp* pp, enum ac_token_type type);
 static bool branch_is_empty(ac_pp* pp);
 static bool branch_was_enabled(ac_pp* pp);
+
+/*-----------------------------------------------------------------------*/
+/* #include related code */
+/*-----------------------------------------------------------------------*/
+
+static void push_include_stack(ac_pp* pp, strv content, strv filepath);
+static void pop_include_stack(ac_pp* pp);
+
+/*-----------------------------------------------------------------------*/
+/* API */
+/*-----------------------------------------------------------------------*/
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath)
 {
@@ -201,13 +215,30 @@ void ac_pp_destroy(ac_pp* pp)
 
 ac_token* ac_pp_goto_next(ac_pp* pp)
 {
+    /* Get next token. */
     ac_token* t = goto_next_macro_expanded(pp);
+
+    /* Handle error on EOF if a preprocessor conditional branch is not ended. */
     if (t->type == ac_token_type_EOF
         && pp->if_else_index >= 0)
     {
         struct branch_flags b = pp->if_else_stack[pp->if_else_index];
         ac_report_error_loc(b.loc, "unterminated #%s", ac_token_type_to_str(b.type));
     }
+
+    /* Once the end of file is reached the include stack needs to be popped if we are not already in the top level file.
+       'while' loop is used instead of 'if' because we might need to pop from multiple files
+       in case the '#include' directive is at the end of the file consecutively. */
+    while (t->type == ac_token_type_EOF
+        && t->is_premature_eof == false
+        && pp->lex_stack_depth > 0)
+    {
+        pop_include_stack(pp);
+
+        /* The previous lexer must have me left on a NEW_LINE or EOF token, right after the #include "file.h" */
+        AC_ASSERT(token(pp).type == ac_token_type_NEW_LINE || token(pp).type == ac_token_type_EOF);
+    }
+        
     return t;
 }
 
@@ -306,6 +337,20 @@ static ac_token* goto_next_macro_expanded(ac_pp* pp)
     }
 
     return token_ptr(pp);
+}
+
+static ac_token* goto_next_macro_expanded_no_space(ac_pp* pp)
+{
+    ac_token* token = goto_next_macro_expanded(pp);
+
+    while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
+        || token->type == ac_token_type_COMMENT
+        || token->type == ac_token_type_NEW_LINE)
+    {
+        token = goto_next_macro_expanded(pp);
+    }
+
+    return token;
 }
 
 static bool parse_directive(ac_pp* pp)
@@ -460,6 +505,12 @@ branch_case:
         }
         break;
     }
+    case ac_token_type_INCLUDE: {
+        if (!parse_include_directive(pp)) {
+            return false;
+        }
+        break;
+    }
     case ac_token_type_UNDEF:
     {
         goto_next_token_from_directive(pp); /* Skip 'undef' */
@@ -493,7 +544,6 @@ branch_case:
 
     case ac_token_type_ERROR:
     case ac_token_type_EMBED:
-    case ac_token_type_INCLUDE:
     case ac_token_type_PRAGMA:
     case ac_token_type_LINE:
     case ac_token_type_WARNING:
@@ -652,6 +702,168 @@ static bool parse_macro_body(ac_pp* pp, ac_macro* m)
     return true;
 }
 
+static bool parse_include_directive(ac_pp* pp)
+{
+    ac_location loc = location(pp);
+    goto_next_token_from_directive(pp); /* Skip 'include' */
+
+    if (pp->lex_stack_depth == ac_pp_MAX_INCLUDE_DEPTH)
+    {
+        ac_report_error_loc(loc, "maximum number of #include file reached (%d)", ac_pp_MAX_INCLUDE_DEPTH);
+        return false;
+    }
+
+    strv path;
+    bool is_system_path;
+    if (!parse_include_path(pp, &path, &is_system_path))
+    {
+        return false;
+    }
+
+    char* dst = pp->path_buffer;
+
+    /* Build path into the relevant buffer. */
+    {
+        if (!re_path_is_absolute(path))
+        {
+            strv directory_path = re_path_remove_last_segment(pp->lex.filepath);
+
+            memcpy(dst, directory_path.data, directory_path.size);
+            dst += directory_path.size;
+        }
+
+        size_t buffer_size = dst - pp->path_buffer;
+        if (buffer_size + path.size > ac_pp_MAX_FILEPATH)
+        {
+            ac_report_error_loc(loc, "path longer than %d characters are not yet supported.", ac_pp_MAX_FILEPATH);
+            return false;
+        }
+
+        dst = memcpy(dst, path.data, path.size);
+        dst += path.size;
+        dst[0] = '\0';
+    }
+
+    if (!re_file_exists_str(pp->path_buffer))
+    {
+        ac_report_error_loc(loc, "include file not found: '" STRV_FMT "'", STRV_ARG(path));
+        return false;
+    }
+
+    ac_source_file src_file;
+    if (!ac_manager_load_content(pp->mgr, pp->path_buffer, &src_file))
+    {
+        return false;
+    }
+
+    if (src_file.content.size)
+    {
+        push_include_stack(pp, src_file.content, src_file.filepath);
+    }
+
+    return true;
+}
+
+static bool parse_include_path(ac_pp* pp, strv* path, bool* is_system_path)
+{
+    *is_system_path = false;
+    /*
+       (1) #include "path.h"
+       (2) #include <abc>
+       (3) #include a b c
+
+       If (1), the next token would be a string literal.
+       If (2), the next token would be a < and we would need to parse all token until the next >
+       if (3), a b c must represent the equivalent of (1) or (2)
+    */
+    switch (token(pp).type) {
+    literal_string_case:
+    case ac_token_type_LITERAL_STRING: { /* "text" */
+        *path = token(pp).text;
+        goto_next_token_from_directive(pp); /* Skip string literal. */
+        break;
+    }
+    case ac_token_type_LESS: { /* '<' */
+        ac_token* t = ac_parse_include_path(&pp->lex);
+
+        *is_system_path = true;
+        *path = t->text;
+
+        /* Problem during ac_parse_include_path, and error message was already displayed. */
+        if (t->type != ac_token_type_LITERAL_STRING)
+        {
+            return false;
+        }
+        goto_next_token_from_directive(pp); /* Skip path (string literal). */
+
+        break;
+    }
+
+    case ac_token_type_IDENTIFIER: {
+
+        /* Expand token until we can't. */
+        while (try_expand(pp, token_ptr(pp))) {
+            goto_next_raw_token(pp);
+        }
+
+        if (token_ptr(pp)->type == ac_token_type_LITERAL_STRING)
+        {
+            goto literal_string_case;
+        }
+
+        if (token_ptr(pp)->type != ac_token_type_LESS)
+        {
+            ac_report_error_loc(location(pp), "#include directive expects \"filepath\" or <filepath>");
+            return false;
+        }
+
+        *is_system_path = true;
+
+        /* Get next token expended above.*/
+        ac_token* t = goto_next_macro_expanded_no_space(pp); /* Skip '<' */
+
+        /* Concatenate all tokens between the '<' '>' into a string. */
+        dstr_clear(&pp->concat_buffer);
+        do {
+
+            dstr_append_f(&pp->concat_buffer, STRV_FMT, STRV_ARG(ac_token_to_strv(*t)));
+            t = goto_next_macro_expanded_no_space(pp);
+        } while (t->type != ac_token_type_GREATER
+            && t->type != ac_token_type_EOF
+            && t->type != ac_token_type_NEW_LINE);
+
+        if (t->type != ac_token_type_GREATER)
+        {
+            ac_report_error_loc(location(pp), "expect a closing '>'");
+            return false;
+        }
+
+        goto_next_token_from_directive(pp); /* Skip '>', no need to expand macro anymore. */
+
+        *path = ac_create_or_reuse_literal(pp->mgr, dstr_to_strv(&pp->concat_buffer));
+        break;
+    }
+    default:
+        ac_report_error_loc(location(pp), "#include directive expects \"filepath\" or <filepath>");
+        return false;
+    }
+
+    if (token(pp).type != ac_token_type_EOF
+        && token(pp).type != ac_token_type_NEW_LINE)
+    {
+        ac_report_warning_loc(location(pp), "extra tokens found in #include directives");
+
+        /* @TODO create a "skip_until_new_line" function, since it was used for other directives. */
+        while (token(pp).type != ac_token_type_EOF
+            && token(pp).type != ac_token_type_NEW_LINE)
+        {
+            goto_next_raw_token(pp);
+        }
+    }
+
+    return true;
+}
+
 static void macro_push(ac_pp* pp, ac_macro* m)
 {
     m->identifier.ident->cannot_expand = true;
@@ -694,6 +906,7 @@ static ac_token* process_cmd(ac_pp* pp, ac_token_cmd* cmd)
 
     return NULL;
 }
+
 static ac_token* stack_pop(ac_pp* pp)
 {
     if (!darrT_size(&pp->cmd_stack))
@@ -1647,4 +1860,20 @@ static bool branch_is_empty(ac_pp* pp)
 static bool branch_was_enabled(ac_pp* pp)
 {
     return pp->if_else_stack[pp->if_else_index].was_enabled;
+}
+
+static void push_include_stack(ac_pp* pp, strv content, strv filepath)
+{
+    pp->lex_stack[pp->lex_stack_depth] = ac_lex_save(&pp->lex);
+
+    pp->lex_stack_depth += 1;
+
+    ac_lex_set_content(&pp->lex, content, filepath);
+}
+
+static void pop_include_stack(ac_pp* pp)
+{
+    pp->lex_stack_depth -= 1;
+
+    ac_lex_restore(&pp->lex, &pp->lex_stack[pp->lex_stack_depth]);
 }

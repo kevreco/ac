@@ -1,0 +1,4 @@
+./tests/errors/preprocessor/034_include.c:2:13: error: expect a closing '>'
+1 | #define open <
+2 | #include open
+                ^

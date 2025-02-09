@@ -96,8 +96,6 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr)
 
     dstr_init(&l->tok_buf);
     dstr_init(&l->str_buf);
-
-    l->beginning_of_line = true;
 }
 
 void ac_lex_destroy(ac_lex* l)
@@ -122,6 +120,8 @@ void ac_lex_set_content(ac_lex* l, strv content, strv filepath)
         l->cur = content.data;
         l->len = content.size;
     }
+
+    l->beginning_of_line = true;
 }
 
 ac_token* ac_lex_goto_next(ac_lex* l)
@@ -140,10 +140,6 @@ ac_token* ac_lex_goto_next(ac_lex* l)
         while (l->end_of_line_adjustment_counter) {
             location_increment_row(&l->location, 0);
             l->end_of_line_adjustment_counter -= 1;
-        }
-
-        if (is_eof(l)) {
-            return token_eof(l);
         }
 
         int c;
@@ -334,7 +330,7 @@ ac_token* ac_lex_goto_next(ac_lex* l)
                 const char* start = l->cur - 1;
 
                 if (!skip_comment(l)) {
-                    return token_eof(l);
+                    return token_error(l);
                 }
 
                 if (l->mgr->options.preserve_comment) {
@@ -461,7 +457,7 @@ ac_token* ac_lex_goto_next(ac_lex* l)
                 else if (strv_equals(ident, wide)) return token_char(l, wide);
                 else {
                     ac_report_error_loc(l->leading_location, "invalid char literal prefix '%.*s'", ident.size, ident.data);
-                    return token_eof(l);
+                    return token_error(l);
                 }
             }
 
@@ -473,7 +469,7 @@ ac_token* ac_lex_goto_next(ac_lex* l)
                 else if (strv_equals(ident, wide)) return parse_string_literal(l, wide);
                 else {
                     ac_report_error_loc(l->leading_location, "invalid string literal prefix '%.*s'", ident.size, ident.data);
-                    return token_eof(l);
+                    return token_error(l);
                 }
             }
 
@@ -530,6 +526,40 @@ void ac_lex_swap(ac_lex* left, ac_lex* right)
     ac_lex tmp = *left;
     *left = *right;
     *right = tmp;
+}
+
+ac_lex_state ac_lex_save(ac_lex* l)
+{
+    ac_lex_state s;
+
+    s.filepath = l->filepath;
+    s.src = l->src;
+    s.end = l->end;
+    s.cur = l->cur;
+
+    s.len = l->len;
+
+    s.token = l->token;
+    s.leading_location = l->leading_location;
+    s.location = l->location;
+    s.beginning_of_line = l->beginning_of_line;
+
+    return s;
+}
+
+void ac_lex_restore(ac_lex* l, ac_lex_state* s)
+{
+    l->filepath = s->filepath;
+    l->src = s->src;
+    l->end = s->end;
+    l->cur = s->cur;
+
+    l->len = s->len;
+
+    l->token = s->token;
+    l->leading_location = s->leading_location;
+    l->location = s->location;
+    l->beginning_of_line = s->beginning_of_line;
 }
 
 /*
@@ -593,6 +623,7 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
         case '\'':
         case '"':
         {
+            consume_one(l); /* Skip '"' or '''. */
             /* Consume the string or char literal but do not create any token. */
             string_or_char_literal_to_buffer(l, c, NULL);
             continue;
@@ -631,6 +662,22 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
         }
     }
     return true;
+}
+
+ac_token* ac_parse_include_path(ac_lex* l)
+{
+    /* Current token is '<' and current char is the one following it. */
+    AC_ASSERT(l->token.type == ac_token_type_LESS);
+
+    l->leading_location = l->location;
+
+    strv literal = string_or_char_literal_to_buffer(l, '>', &l->tok_buf);
+    if (literal.data == strv_error.data)
+    {
+        return token_error(l);
+    }
+
+    return token_string(l, literal, no_prefix);
 }
 
 static ac_token eof = {ac_token_type_EOF};
@@ -822,7 +869,8 @@ static ac_token* token_from_text(ac_lex* l, enum ac_token_type type, strv text) 
 }
 
 static ac_token* token_error(ac_lex* l) {
-    l->token.type = ac_token_type_INTERNAL_ERROR;
+    l->token.type = ac_token_type_EOF;
+    l->token.is_premature_eof = true;
     return &l->token;
 }
 
@@ -978,7 +1026,7 @@ static ac_token* token_integer_literal(ac_lex* l, ac_token_number num)
 
     if (!parse_integer_suffix(l, &l->token.u.number))
     {
-        return token_eof(l);
+        return token_error(l);
     }
 
     strv text = dstr_to_strv(&l->tok_buf);
@@ -994,7 +1042,7 @@ static ac_token* token_float_literal(ac_lex* l, ac_token_number num)
 
     if (!parse_float_suffix(l, &l->token.u.number))
     {
-        return token_eof(l);
+        return token_error(l);
     }
 
     if (l->token.u.number.is_float && l->token.u.number.u.float_value > FLT_MAX)
@@ -1156,7 +1204,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
             if (buffer_size == l->tok_buf.size) /* Nothing after 0x was parsed */
             {
                 ac_report_error_loc(l->leading_location, "invalid hexadecimal value.");
-                return token_eof(l);
+                return token_error(l);
             }
             /* Not float so we return an integer. */
             num.u.int_value = hex_string_to_int(l->tok_buf.data, l->tok_buf.size);
@@ -1175,7 +1223,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
             if (buffer_size == l->tok_buf.size) /* Nothing after 0b was parsed */
             {
                 ac_report_error_loc(l->leading_location, "invalid binary value");
-                return token_eof(l);
+                return token_error(l);
             }
             num.u.int_value = n;
             return token_integer_literal(l, num);
@@ -1214,7 +1262,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
     if (is_eof(l) && !l->mgr->options.preprocess) /* Do not display error if we only preprocess. */
     {
         ac_report_error_loc(l->leading_location, "unexpected end of file after number literal");
-        return token_eof(l);
+        return token_error(l);
     }
 
     /* Return the parsed integer. */
@@ -1260,10 +1308,9 @@ static void* utf8_decode(void* p, int32_t* pc)
    The string is skipped and buf can be null in case we just want to skip a preprocessor block.
    The function is quite ugly because we consider an optimistic path and a pessimistic one.
    The pessimistic one is when a splice is encountered. */
-static strv string_or_char_literal_to_buffer(ac_lex* l, char quote, dstr* buf)
+static strv string_or_char_literal_to_buffer(ac_lex* l, char ending_char, dstr* buf)
 {
     strv inner_content = empty;
-    AC_ASSERT(is_char(l, quote));
 
     if (buf) {
         dstr_clear(buf);
@@ -1275,7 +1322,6 @@ static strv string_or_char_literal_to_buffer(ac_lex* l, char quote, dstr* buf)
     int n = 0; /* Number of character from the optimistic path. */
     int splice_found = false;
 
-    c = consume_one(l); /* Skip '"'. */
     const char* start = l->cur;
 
     /* Optimistic path: we assume the string is without any splice, in which case there is no need to add the characters into a buffer. */
@@ -1291,7 +1337,7 @@ static strv string_or_char_literal_to_buffer(ac_lex* l, char quote, dstr* buf)
             }
             default:
             {
-                if (c == quote)
+                if (c == ending_char)
                 {
                     goto exit_loop; /* Proper end of literal */
                 }
@@ -1352,7 +1398,7 @@ exit_loop:
             {
                 break;
             }
-            else if (c == quote && previous_for_splice != '\\')
+            else if (c == ending_char && previous_for_splice != '\\')
             {
                 break; /* End of literal */
             }
@@ -1384,12 +1430,12 @@ exit_loop:
         inner_content = strv_make_from(start, l->cur - start);
     }
 
-    if (c != quote) {
-        ac_report_error_loc(l->leading_location, "missing terminating char '%c' for literal", quote);
+    if (c != ending_char) {
+        ac_report_error_loc(l->leading_location, "missing terminating char '%c' for literal", ending_char);
         return strv_error;
     }
 
-    c = next_char_no_splice(l); /* consume quote or double quote */
+    c = next_char_no_splice(l); /* consume ending_char */
 
     return inner_content;
 }
@@ -1401,9 +1447,10 @@ static ac_token* parse_string_literal(ac_lex* l, strv prefix) {
         || prefix.data == utf16.data
         || prefix.data == utf32.data);
 
+    consume_one(l); /* Skip '"'. */
     strv literal = string_or_char_literal_to_buffer(l, '"', &l->tok_buf);
     if (literal.data == strv_error.data)
-        return token_eof(l);
+        return token_error(l);
 
     return token_string(l, literal, prefix);
 }
@@ -1432,9 +1479,10 @@ static ac_token* token_char(ac_lex* l, strv prefix)
 
     dstr_assign(&l->tok_buf, prefix);
 
+    consume_one(l); /* Skip '''. */
     strv literal = string_or_char_literal_to_buffer(l, '\'', &l->tok_buf);
     if (literal.data == strv_error.data)
-        return token_eof(l);
+        return token_error(l);
 
     l->token.type = ac_token_type_LITERAL_CHAR;
 
@@ -1478,7 +1526,6 @@ static ac_token_info token_infos[] = {
 
     { false, ac_token_type_NONE, IDENT("<none>") },
     { false, ac_token_type_EMPTY, IDENT("") },
-    { false, ac_token_type_INTERNAL_ERROR, IDENT("<internal-error>") },
 
     /* Keywords */
 
@@ -1555,7 +1602,7 @@ static ac_token_info token_infos[] = {
     { false, ac_token_type_EMBED, IDENT("embed") },
     { true,  ac_token_type_IFDEF, IDENT("ifdef") },
     { true,  ac_token_type_IFNDEF, IDENT("ifndef") },
-    { false, ac_token_type_INCLUDE, IDENT("include") },
+    { true, ac_token_type_INCLUDE, IDENT("include") },
     { false, ac_token_type_PRAGMA, IDENT("pragma") },
     { false, ac_token_type_LINE, IDENT("line") },
     { true,  ac_token_type_UNDEF, IDENT("undef") },

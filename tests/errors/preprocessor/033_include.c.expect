@@ -1,0 +1,3 @@
+./tests/errors/preprocessor/033_include.c:1:10: error: missing terminating char '>' for literal
+1 | #include <file.h
+             ^

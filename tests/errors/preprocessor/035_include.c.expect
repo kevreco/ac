@@ -1,0 +1,3 @@
+./tests/errors/preprocessor/035_include.c:1:8: error: include file not found: ' file.h '
+1 | #include < file.h >
+           ^
