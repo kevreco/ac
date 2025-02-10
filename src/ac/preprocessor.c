@@ -60,6 +60,11 @@ static bool parse_macro_parameters(ac_pp* pp, ac_macro* m);
 static bool parse_macro_body(ac_pp* pp, ac_macro* m);
 static bool parse_include_directive(ac_pp* pp);
 static bool parse_include_path(ac_pp* pp, strv* path, bool* is_system_path);
+/* Look if a specific file exists in any directories from the array.
+   If there is a match pp->path_buffer contains the existing path. */
+static bool look_for_filepath(ac_pp* pp, path_array* directories, strv filepath);
+/* Combine directory path and a filepath. The result is stored in pp->path_buffer. */
+static bool combine_filepath(ac_pp* pp, strv folder, strv filepath);
 
 static void macro_push(ac_pp* pp, ac_macro* m);
 
@@ -721,33 +726,37 @@ static bool parse_include_directive(ac_pp* pp)
     }
 
     char* dst = pp->path_buffer;
-
-    /* Build path into the relevant buffer. */
+    bool file_found = false;
+    /* Search the file to include and build path into the relevant buffer. */
     {
-        if (!re_path_is_absolute(path))
-        {
-            strv directory_path = re_path_remove_last_segment(pp->lex.filepath);
+        strv dir = re_path_is_absolute(path)
+            ? (strv)STRV("")
+            : re_path_remove_last_segment(pp->lex.filepath);
 
-            memcpy(dst, directory_path.data, directory_path.size);
-            dst += directory_path.size;
-        }
-
-        size_t buffer_size = dst - pp->path_buffer;
-        if (buffer_size + path.size > ac_pp_MAX_FILEPATH)
+        if (!combine_filepath(pp, dir, path))
         {
-            ac_report_error_loc(loc, "path longer than %d characters are not yet supported.", ac_pp_MAX_FILEPATH);
             return false;
         }
 
-        dst = memcpy(dst, path.data, path.size);
-        dst += path.size;
-        dst[0] = '\0';
-    }
+        file_found = re_file_exists_str(pp->path_buffer);
 
-    if (!re_file_exists_str(pp->path_buffer))
-    {
-        ac_report_error_loc(loc, "include file not found: '" STRV_FMT "'", STRV_ARG(path));
-        return false;
+        /* Try to look into the user include directory. */
+        if (!file_found)
+        {
+            file_found = look_for_filepath(pp, &pp->mgr->options.user_includes, path);
+        }
+
+        /* Try to look into the system include directory. */
+        if (!file_found)
+        {
+            file_found = look_for_filepath(pp, &pp->mgr->options.system_includes, path);
+        }
+
+        if (!file_found)
+        {
+            ac_report_error_loc(loc, "include file not found: '" STRV_FMT "'", STRV_ARG(path));
+            return false;
+        }
     }
 
     ac_source_file src_file;
@@ -860,6 +869,61 @@ static bool parse_include_path(ac_pp* pp, strv* path, bool* is_system_path)
             goto_next_raw_token(pp);
         }
     }
+
+    return true;
+}
+
+static bool look_for_filepath(ac_pp* pp, path_array* arr, strv filepath)
+{
+    char* dst = 0;
+   
+    for (int i = 0; i < darrT_size(arr); i += 1)
+    {
+        strv dir = darrT_at(arr, i);
+
+        if (!combine_filepath(pp, dir, filepath)) {
+            return false;
+        }
+
+        if (re_file_exists_str(pp->path_buffer)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool combine_filepath(ac_pp* pp, strv folder, strv filepath)
+{
+    if ((folder.size + filepath.size) > ac_pp_MAX_FILEPATH)
+    {
+        ac_report_error_loc(location(pp), "path longer than %d characters are not yet supported.", ac_pp_MAX_FILEPATH);
+        return false;
+    }
+
+    char* dst = pp->path_buffer;
+
+    /* Add folder. */
+    memcpy(dst, folder.data, folder.size);
+    dst += folder.size;
+
+    /* Add directory separator if needed. */
+    if (dst[0] != '\\' && dst[0] != '/')
+    {
+        if ((folder.size + filepath.size + 1) > ac_pp_MAX_FILEPATH)
+        {
+            ac_report_error_loc(location(pp), "path longer than %d characters are not yet supported.", ac_pp_MAX_FILEPATH);
+            return false;
+        }
+
+        dst[0] = '/';
+        dst += 1;
+    }
+
+    /* Add leaf. */
+    memcpy(dst, filepath.data, filepath.size);
+    dst += filepath.size;
+
+    dst[0] = '\0';
 
     return true;
 }

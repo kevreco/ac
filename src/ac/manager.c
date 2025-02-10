@@ -60,6 +60,9 @@ void ac_options_init_default(ac_options* o)
     o->global.display_surrounding_lines = true;
 
     o->debug_parser = false;
+
+    darrT_init(&o->user_includes);
+    darrT_init(&o->system_includes);
 }
 
 void ac_options_destroy(ac_options* o)
@@ -70,6 +73,9 @@ void ac_options_destroy(ac_options* o)
 
     dstr_destroy(&o->config_file_memory);
     darrT_destroy(&o->config_file_args);
+
+    darrT_destroy(&o->user_includes);
+    darrT_destroy(&o->system_includes);
 }
 
 void ac_manager_init(ac_manager* m, ac_options* o)

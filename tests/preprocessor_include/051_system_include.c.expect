@@ -1,0 +1,1 @@
+int string_from_system = 0;

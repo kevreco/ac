@@ -1,1 +1,5 @@
 --preprocess
+--user-include
+./tests/preprocessor_include/user/
+--system-include
+./tests/preprocessor_include/system/

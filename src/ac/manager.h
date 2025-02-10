@@ -31,6 +31,8 @@ enum ac_compilation_step {
     ac_compilation_step_ALL = ~0,
 };
 
+typedef darrT(strv) path_array;
+
 typedef struct ac_options ac_options;
 struct ac_options {
 
@@ -50,6 +52,9 @@ struct ac_options {
     bool preprocess;                     /* Print preprocess result in the standard output. */
     bool preserve_comment;               /* Also print comments while preprocessing. */
     bool reject_hex_float;               /* Prevent hex float parsing. */
+  
+    path_array user_includes;            /* User include directories. Equivalent of GCC -I. */
+    path_array system_includes;          /* System include directories. Equivalent of GCC -isystem. */
 };
 
 void ac_options_init_default(ac_options* o);

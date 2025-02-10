@@ -9,6 +9,8 @@
 extern "C" {
 #endif
 
+#define LITERAL_STRNCOMP(str_ptr, str_literal) strncmp(str_ptr, str_literal, (sizeof(str_literal) - 1))
+
 static const struct options {
     strv colored_output;
     strv debug_parser;
@@ -18,6 +20,8 @@ static const struct options {
     strv preprocess;
     strv preserve_comment;
     strv reject_hex_float;
+    strv system_include;
+    strv user_include;
 } cli_options = {
     .colored_output = STRV("--colored-output"),
     .debug_parser     = STRV("--debug-parser"),
@@ -27,6 +31,8 @@ static const struct options {
     .preprocess = STRV("--preprocess"),
     .preserve_comment = STRV("--preserve-comment"),
     .reject_hex_float = STRV("--reject-hex-float"),
+    .system_include = STRV("--system-include"),
+    .user_include = STRV("--user-include"),
 };
 /*
     We don't treat the --option-file option the same way.
@@ -45,7 +51,7 @@ pop_args(int* argc, char*** argv)
     return current_arg;
 }
 
-bool
+static bool
 arg_equals(const char* arg, strv sv)
 {
     return strv_equals_str(sv, arg);
@@ -55,7 +61,7 @@ bool
 parse_from_arguments(ac_options* o, int* argc, char*** argv)
 {
     do {
-        const char* arg = pop_args(argc, argv);
+        char* arg = pop_args(argc, argv);
 
         if (arg_equals(arg, cli_options.colored_output))
         {
@@ -91,6 +97,20 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         {
             o->reject_hex_float = true;
         }
+        else if (arg_equals(arg, cli_options.system_include))
+        {
+            arg = pop_args(argc, argv);
+            if (arg) {
+                darrT_push_back(&o->system_includes, strv_make_from_str(arg));
+            }
+        }
+        else if (arg_equals(arg, cli_options.user_include))
+        {
+            arg = pop_args(argc, argv);
+            if (arg) {
+                darrT_push_back(&o->user_includes, strv_make_from_str(arg));
+            }
+        }
         /* Ignore --option-file since it has been handled at this point */
         else if (arg_equals(arg, option_file))
         {
@@ -105,23 +125,46 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         }
         /* Alternative options to use the compiler like GCC */
         else if (arg[0] == '-'
-            && arg[1] >= 'A'
-            && arg[1] <= 'Z')
+            && (arg[1] >= 'A' && arg[1] <= 'Z' || arg[1] >= 'a' && arg[1] <= 'z'))
         {
             arg += 1; /* Skip first '-' */
             while (arg[0] >= 'A' && arg[0] <= 'Z')
             {
                 switch (arg[0]) {
-                case 'E': {
+                case 'E': { /* Equivalent of --preprocess */
                     o->preprocess = true;
+                    arg += 1; /* Skip 'E'. */
                     break;
                 }
-                case 'C': {
+                case 'C': { /* Equivalent of --preserve-comment */
                     o->preserve_comment = true;
+                    arg += 1; /* Skip 'C'. */
+                    break;
+                }
+                case 'i': {
+                    if (LITERAL_STRNCOMP(arg, "isystem")) /* Equivalent of --system-include */
+                    {
+                        arg = pop_args(argc, argv);
+                        if (arg) {
+                            darrT_push_back(&o->system_includes, strv_make_from_str(arg));
+                        }
+                    }
+                    else
+                    {
+                        arg += 1; /* Skip 'i'. */
+                    }
+                    break;
+                }
+                case 'I': { /* Equivalent of --user-include */
+
+                    arg = pop_args(argc, argv);
+                    if (arg) {
+                        darrT_push_back(&o->user_includes, strv_make_from_str(arg));
+                    }
+
                     break;
                 }
                 }
-                arg += 1;
             }
         }
         /* Non-option args are assumed to be files. */
@@ -129,7 +172,7 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         {
             if (!re_file_exists_str(arg))
             {
-                ac_report_error("File does not exists : %s", arg);
+                ac_report_error("file does not exists : %s", arg);
                 return false;
             }
 

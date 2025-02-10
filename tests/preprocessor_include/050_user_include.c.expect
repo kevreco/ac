@@ -1,0 +1,1 @@
+int stdio_from_user = 0;
