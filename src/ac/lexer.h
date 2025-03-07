@@ -228,7 +228,6 @@ struct ac_token {
     bool is_premature_eof;   /* @TODO @OPT place this in a flag. */
 };
 
-
 typedef struct ac_token_info ac_token_info;
 struct ac_token_info {
     bool is_supported;

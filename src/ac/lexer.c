@@ -24,7 +24,6 @@ static const strv wide = STRV("L");
 
 static ac_token_info token_infos[ac_token_type_COUNT];
 
-static bool is_end_line(const ac_lex* l);          /* current char is alphanumeric */
 static bool is_horizontal_whitespace(char c);      /* char is alphanumeric */
 static bool is_identifier(char c);                 /* char is allowed in identifier */
 static bool is_eof(const ac_lex* l);               /* current char is end of line */
@@ -687,14 +686,6 @@ ac_token* ac_token_eof()
     return &eof;
 }
 
-static inline bool _is_end_line(char c) {
-    return (c == '\n' || c == '\r');
-}
-
-static inline bool is_end_line(const ac_lex* l) {
-    return _is_end_line(l->cur[0]);
-}
-
 static inline bool is_horizontal_whitespace(char c) {
     return (c == ' ' || c == '\t' || c == '\f' || c == '\v');
 }
@@ -766,33 +757,90 @@ static void skip_newlines(ac_lex* l) {
     }
 }
 
+/* Skip comments and make sure the column number and row number are updated.
+   This method is ugly due to efficieny reason.
+   We don't want to skip comment being slow.
+   The content of a comment can be quite large and the number of comments can also be quite a lot. */
 static bool skip_comment(ac_lex* l)
 {
-    consume_one(l); /* Skip '*' */
-
     ac_location location = l->location;
-    /* Skip until closing comment tag. */
-    while (!is_eof(l) && !(is_char(l, '*') && next_is(l, '/'))) {
-        consume_one(l);
+    int line = 0;
+    int column = location.col;
+    const char* anchor = l->cur;
+
+    /* Skip '*' */
+    l->cur += 1;
+    column += 1;
+
+    bool result = true;
+    for(;;)
+    {
+        /* Skip uninteresting chars. We only care about new lines, EOF and the closing comment tag. */
+        while (l->cur[0] != '\0' && l->cur[0] != '\r' && l->cur[0] != '\n' && l->cur[0] != '*')
+        {
+            l->cur += 1;
+            column += 1;
+        }
+
+        switch (l->cur[0])
+        {
+        case '\0':
+        {
+            ac_report_error_loc(location, "unterminated comment starting with '/*'");
+
+            result = false;
+            goto exit;
+        }
+        case '\r':
+        {
+            
+            if (l->cur[1] == '\n')
+            {
+                // Advance of the extra \n here, the \r will be handled in the FALLTRHOUGH
+                l->cur += 1;
+            }
+            /* FALLTHROUGH */
+        }
+        case '\n':
+        {
+            l->cur += 1;
+            /* reset column and increase row. */
+            line += 1;
+            column = 0;
+            break;
+        }
+        case '*':
+        {
+            l->cur += 1;
+            column += 1;
+            if (l->cur[0] == '/')
+            {
+                l->cur += 1;
+                column += 1;
+                /* Found end on comment */
+                result = true;
+                goto exit;
+            }
+            break;
+        }
+        }
     }
 
-    int count = 2;
-    while (count) {
-        if (is_eof(l)) {
-            ac_report_error_loc(location, "cannot find closing comment tag '*/'\n");
-            return false;
-        }
-        consume_one(l); /* Skip '*' then '/' */
-        count -= 1;
-    }
-    return true;
+exit:
+    location.row += line;
+    location.col = column;
+    location.pos += l->cur - anchor;
+
+    return result;
 }
 
 static void skip_inline_comment(ac_lex* l)
 {
     consume_one(l); /* Skip '/' */
 
-    while (!is_eof(l) && !is_end_line(l)) {
+    /* Advance until EOF or end of line */
+    while (l->cur[0] != '\0' && l->cur[0] != '\n' && l->cur[0] != '\r')
+    {
         consume_one(l);
     }
 }

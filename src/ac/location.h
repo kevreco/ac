@@ -14,6 +14,7 @@ struct ac_location {
     strv filepath;
     int row; /* 1-based index. */
     int col; /* 1-based index. */
+    /* @TODO call this byte_offset. */
     int pos; /* 0-based index. */
     strv content; /* view to the whole content of the file for convenience */
 };
