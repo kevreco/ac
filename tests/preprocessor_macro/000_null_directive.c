@@ -7,7 +7,7 @@
 # /* Hello World */
 
 /* null directive 3: surrounded by comments. */
- 
+
 /* Hello */#/* World */
 
 /* null directive 4: surrounded by spaces. */

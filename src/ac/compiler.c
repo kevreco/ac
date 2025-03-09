@@ -51,10 +51,22 @@ bool ac_compiler_compile(ac_compiler* c)
 
         /* Print preprocessed tokens in the standard output. */
         const ac_token* token = NULL;
+
+        ac_token previous_token = { 0 };
+        previous_token.type = ac_token_type_NEW_LINE;
+
         while ((token = ac_pp_goto_next(&pp)) != NULL
             && token->type != ac_token_type_EOF)
         {
+            /* Avoid printing multiple new lines in a row. */
+            if (previous_token.type == ac_token_type_NEW_LINE && token->type == ac_token_type_NEW_LINE)
+            {
+                continue;
+            }
+
             ac_token_fprint(stdout, *token);
+          
+            previous_token = *token;
         }
 
         ac_pp_destroy(&pp);
