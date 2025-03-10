@@ -594,9 +594,11 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
             c = consume_one(l);
             if (c == '*') {
                 skip_comment(l);
+                break;
             }
             else if (c == '/') {
                 skip_inline_comment(l);
+                break;
             }
             else
             {
