@@ -827,9 +827,9 @@ static bool skip_comment(ac_lex* l)
     }
 
 exit:
-    location.row += line;
-    location.col = column;
-    location.pos += l->cur - anchor;
+    l->location.row += line;
+    l->location.col = column;
+    l->location.pos += l->cur - anchor;
 
     return result;
 }
