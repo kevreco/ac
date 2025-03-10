@@ -135,12 +135,6 @@ ac_token* ac_lex_goto_next(ac_lex* l)
     */
     for (;;)
     {
-        /* Adjust location from end of lines. */
-        while (l->end_of_line_adjustment_counter) {
-            location_increment_row(&l->location, 0);
-            l->end_of_line_adjustment_counter -= 1;
-        }
-
         int c;
         c = l->cur[0];
         switch (c) {
@@ -590,7 +584,6 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
         c = *l->cur;
         switch (c) {
         case '\0': /* We should not encounter EOF in a preprocessor block. */
-            ac_report_error_loc(loc, "unexpected end of file, expected #endif, #else, #elif, #elifdef or #elifndef");
             return false;
         case '\r':
         case '\n':
@@ -739,8 +732,7 @@ static void skip_newlines(ac_lex* l) {
     case '\n':
     {
         l->cur += 1;
-        location_increment_column(&l->location, 1);
-        l->end_of_line_adjustment_counter += 1;
+        location_increment_row(&l->location, 1);
         break;
     }
 
@@ -748,8 +740,7 @@ static void skip_newlines(ac_lex* l) {
     {
         int count = l->cur[1] == '\n' ? 2 : 1;
         l->cur += count;
-        location_increment_column(&l->location, count);
-        l->end_of_line_adjustment_counter += 1;
+        location_increment_row(&l->location, count);
         break;
     }
     default:

@@ -1,8 +1,3 @@
-./tests/errors/preprocessor/017_branch.c:3:6: error: unexpected end of file, expected #endif, #else, #elif, #elifdef or #elifndef
-2 | int main() {
-3 | #if 0
-         ^
-4 |     a = 1;
 ./tests/errors/preprocessor/017_branch.c:3:3: error: unterminated #if
 2 | int main() {
 3 | #if 0
