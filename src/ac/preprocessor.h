@@ -71,14 +71,18 @@ struct ac_pp {
 	};
 	/* Only allow MAX_DEPTH of nested #if/#else */
 	struct branch_flags if_else_stack[ac_pp_branch_MAX_DEPTH];
-	int if_else_index;
-
+	int if_else_level;
+	
 	/* Buffer to combine include paths from #include directives. */
 	char path_buffer[ac_pp_MAX_FILEPATH];
 
 	/* Stack of lexer state to handle #include directives. */
-	struct ac_lex_state lex_stack[ac_pp_MAX_INCLUDE_DEPTH];
-	int lex_stack_depth;
+	struct include_stack {
+		struct ac_lex_state lex_state;
+		int starting_if_else_level;
+	} include_stack[ac_pp_MAX_INCLUDE_DEPTH];
+
+	int include_stack_depth;
 };
 
 void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath);
