@@ -448,10 +448,6 @@ ac_token* ac_lex_goto_next(ac_lex* l)
                 else if (strv_equals(ident, utf16)) return token_char(l, utf16);
                 else if (strv_equals(ident, utf32)) return token_char(l, utf32);
                 else if (strv_equals(ident, wide)) return token_char(l, wide);
-                else {
-                    ac_report_error_loc(l->leading_location, "invalid char literal prefix '%.*s'", ident.size, ident.data);
-                    return token_error(l);
-                }
             }
 
             if (l->cur[0] == '"') /* Handle string literal. */
@@ -460,10 +456,6 @@ ac_token* ac_lex_goto_next(ac_lex* l)
                 else if (strv_equals(ident, utf16)) return parse_string_literal(l, utf16);
                 else if (strv_equals(ident, utf32)) return parse_string_literal(l, utf32);
                 else if (strv_equals(ident, wide)) return parse_string_literal(l, wide);
-                else {
-                    ac_report_error_loc(l->leading_location, "invalid string literal prefix '%.*s'", ident.size, ident.data);
-                    return token_error(l);
-                }
             }
 
             ac_ident_holder id = ac_create_or_reuse_identifier_h(l->mgr, ident, hash);
