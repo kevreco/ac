@@ -1,0 +1,4 @@
+./tests/errors/preprocessor/038_nonexisting_files.c:1:8: error: include file not found: 'nonexisting.h'
+1 | #include "nonexisting.h"
+           ^
+2 | #include "nonexisting2.h"

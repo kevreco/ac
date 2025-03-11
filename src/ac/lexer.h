@@ -306,7 +306,11 @@ ac_token* ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line);
 /* Parse every characters until the first '>' */
 ac_token* ac_parse_include_path(ac_lex* l);
 
+/* Returns a "stand-alone" EOF token */
 ac_token* ac_token_eof();
+
+/* Mark the current token as EOF and as premature EOF, then returns it. */
+ac_token* ac_set_token_error(ac_lex* l);
 
 const char* ac_token_type_to_str(enum ac_token_type type); /* this should be used only for printf */
 strv ac_token_type_to_strv(enum ac_token_type type);

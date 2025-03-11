@@ -681,6 +681,11 @@ ac_token* ac_token_eof()
     return &eof;
 }
 
+ac_token* ac_set_token_error(ac_lex* l)
+{
+    return token_error(l);
+}
+
 static inline bool is_horizontal_whitespace(char c) {
     return (c == ' ' || c == '\t' || c == '\f' || c == '\v');
 }

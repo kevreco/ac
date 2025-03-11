@@ -756,6 +756,7 @@ static bool parse_include_directive(ac_pp* pp)
         if (!file_found)
         {
             ac_report_error_loc(loc, "include file not found: '" STRV_FMT "'", STRV_ARG(path));
+            ac_set_token_error(&pp->lex);
             return false;
         }
     }
@@ -763,6 +764,7 @@ static bool parse_include_directive(ac_pp* pp)
     ac_source_file src_file;
     if (!ac_manager_load_content(pp->mgr, pp->path_buffer, &src_file))
     {
+        ac_set_token_error(&pp->lex);
         return false;
     }
 
