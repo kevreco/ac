@@ -608,7 +608,7 @@ static bool parse_macro_definition(ac_pp* pp)
         }
     }
    
-    /* Skip spaces or comment right after the macro name or the function-like "macro prototype"
+    /* Skip spaces or comments right after the macro name or the function-like "macro prototype"
       to go to the first token from the macro body */
     if (token(pp).type == ac_token_type_HORIZONTAL_WHITESPACE
         || token(pp).type == ac_token_type_COMMENT)
