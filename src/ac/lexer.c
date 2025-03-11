@@ -1491,7 +1491,8 @@ static ac_token* parse_string_literal(ac_lex* l, strv prefix) {
     AC_ASSERT(prefix.data == no_prefix.data
         || prefix.data == utf8.data
         || prefix.data == utf16.data
-        || prefix.data == utf32.data);
+        || prefix.data == utf32.data
+        || prefix.data == wide.data);
 
     consume_one(l); /* Skip '"'. */
     strv literal = string_or_char_literal_to_buffer(l, '"', &l->tok_buf);
