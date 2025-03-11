@@ -1638,21 +1638,21 @@ static ac_token_info token_infos[] = {
 
     /* Preprocessor conditionals */
 
-    { true,  ac_token_type_DEFINE, IDENT("define") },
-    { true,  ac_token_type_DEFINED, IDENT("defined") },
-    { true,  ac_token_type_ELIF, IDENT("elif") },
-    { true,  ac_token_type_ELIFDEF, IDENT("elifdef") },
-    { true,  ac_token_type_ELIFNDEF, IDENT("elifndef") },
-    { true,  ac_token_type_ENDIF, IDENT("endif") },
-    { false, ac_token_type_ERROR, IDENT("error") },
-    { false, ac_token_type_EMBED, IDENT("embed") },
-    { true,  ac_token_type_IFDEF, IDENT("ifdef") },
-    { true,  ac_token_type_IFNDEF, IDENT("ifndef") },
+    { true, ac_token_type_DEFINE, IDENT("define") },
+    { true, ac_token_type_DEFINED, IDENT("defined") },
+    { true, ac_token_type_ELIF, IDENT("elif") },
+    { true, ac_token_type_ELIFDEF, IDENT("elifdef") },
+    { true, ac_token_type_ELIFNDEF, IDENT("elifndef") },
+    { true, ac_token_type_ENDIF, IDENT("endif") },
+    { true, ac_token_type_ERROR, IDENT("error") },
+    { true, ac_token_type_EMBED, IDENT("embed") },
+    { true, ac_token_type_IFDEF, IDENT("ifdef") },
+    { true, ac_token_type_IFNDEF, IDENT("ifndef") },
     { true, ac_token_type_INCLUDE, IDENT("include") },
-    { false, ac_token_type_PRAGMA, IDENT("pragma") },
-    { false, ac_token_type_LINE, IDENT("line") },
-    { true,  ac_token_type_UNDEF, IDENT("undef") },
-    { false, ac_token_type_WARNING, IDENT("warning") },
+    { true, ac_token_type_PRAGMA, IDENT("pragma") },
+    { true, ac_token_type_LINE, IDENT("line") },
+    { true, ac_token_type_UNDEF, IDENT("undef") },
+    { true, ac_token_type_WARNING, IDENT("warning") },
 
     /* Special Macros */
 

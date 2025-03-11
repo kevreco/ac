@@ -54,6 +54,8 @@ static ac_token* goto_next_macro_expanded(ac_pp* pp);
 /* @FIXME: all those "goto_next" are becoming messy. Make it clearer. */
 static ac_token* goto_next_macro_expanded_no_space(ac_pp* pp);
 
+static void skip_all_until_new_line(ac_pp* pp);
+
 static bool parse_directive(ac_pp* pp);
 static bool parse_macro_definition(ac_pp* pp);
 static bool parse_macro_parameters(ac_pp* pp, ac_macro* m);
@@ -288,7 +290,6 @@ static ac_token* goto_next_normal_token(ac_pp* pp)
 static ac_token* goto_next_token_from_directive(ac_pp* pp)
 {
     ac_token* token = goto_next_raw_token(pp);
-    ac_token* previous_token = token;
 
     while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
         || token->type == ac_token_type_COMMENT)
@@ -303,7 +304,6 @@ static ac_token* goto_next_token_from_directive(ac_pp* pp)
 static ac_token* goto_next_token_from_macro_agrument(ac_pp* pp)
 {
     ac_token* token = goto_next_normal_token(pp);
-    ac_token* previous_token = token;
 
     while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
         || token->type == ac_token_type_COMMENT
@@ -319,7 +319,6 @@ static ac_token* goto_next_token_from_macro_agrument(ac_pp* pp)
 static ac_token* goto_next_token_from_macro_body(ac_pp* pp)
 {
     ac_token* token = goto_next_raw_token(pp);
-    ac_token* previous_token = token;
 
     while (token->type == ac_token_type_HORIZONTAL_WHITESPACE
         || token->type == ac_token_type_COMMENT
@@ -356,6 +355,16 @@ static ac_token* goto_next_macro_expanded_no_space(ac_pp* pp)
     }
 
     return token;
+}
+
+static void skip_all_until_new_line(ac_pp* pp)
+{
+    /* Skip all tokens until end of line */
+    while (token_ptr(pp)->type != ac_token_type_NEW_LINE
+        && token_ptr(pp)->type != ac_token_type_EOF)
+    {
+        goto_next_raw_token(pp);
+    }
 }
 
 static bool parse_directive(ac_pp* pp)
@@ -534,12 +543,7 @@ branch_case:
             ac_report_warning("Extra tokens at end of '#undef' directive");
         }
 
-        /* Skip all tokens until end of line */
-        while (token_ptr(pp)->type != ac_token_type_NEW_LINE
-            && token_ptr(pp)->type != ac_token_type_EOF)
-        {
-            goto_next_token_from_directive(pp);
-        }
+        skip_all_until_new_line(pp);
 
         /* Remove macro it's previously defined. */
         ac_macro* m = find_macro(pp, &identifier);
@@ -555,12 +559,15 @@ branch_case:
     case ac_token_type_PRAGMA:
     case ac_token_type_LINE:
     case ac_token_type_WARNING:
-        ac_report_internal_error_loc(location(pp), "unsupported directive");
-        return false;
-    case ac_token_type_IDENTIFIER:
-        ac_report_error_loc(location(pp), "unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
+        ac_report_warning_loc(location(pp), "ignoring unsupported directive");
         goto_next_raw_token(pp); /* Skip directive name. */
-        return false;
+        skip_all_until_new_line(pp);
+        return true;
+    case ac_token_type_IDENTIFIER:
+        ac_report_warning_loc(location(pp), "ignoring unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
+        goto_next_raw_token(pp); /* Skip directive name. */
+        skip_all_until_new_line(pp);
+        return true;
     case ac_token_type_NEW_LINE:
     case ac_token_type_EOF:
         /* Null directives, nothing needs to be done. */
@@ -865,12 +872,7 @@ static bool parse_include_path(ac_pp* pp, strv* path, bool* is_system_path)
     {
         ac_report_warning_loc(location(pp), "extra tokens found in #include directives");
 
-        /* @TODO create a "skip_until_new_line" function, since it was used for other directives. */
-        while (token(pp).type != ac_token_type_EOF
-            && token(pp).type != ac_token_type_NEW_LINE)
-        {
-            goto_next_raw_token(pp);
-        }
+        skip_all_until_new_line(pp);
     }
 
     return true;
@@ -1871,11 +1873,7 @@ static eval_t eval_expr(ac_pp* pp, bool expect_identifier_expression)
     if ((token(pp).type != ac_token_type_NEW_LINE && token(pp).type != ac_token_type_EOF)
         || !eval.succes)
     {
-        /* In case of expression failure, skip all tokens until the next new line. */
-        while (token(pp).type != ac_token_type_NEW_LINE && token(pp).type != ac_token_type_EOF)
-        {
-            goto_next_for_eval(pp);
-        }
+        skip_all_until_new_line(pp);
 
         return eval_false;
     }
