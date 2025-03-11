@@ -301,7 +301,7 @@ ac_lex_state ac_lex_save(ac_lex* l);
 void ac_lex_restore(ac_lex* l, ac_lex_state* s);
 
 /* Skip block of text between #if and #endif. */
-bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line);
+ac_token* ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line);
 
 /* Parse every characters until the first '>' */
 ac_token* ac_parse_include_path(ac_lex* l);

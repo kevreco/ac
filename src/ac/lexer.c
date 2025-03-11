@@ -573,7 +573,7 @@ void ac_lex_restore(ac_lex* l, ac_lex_state* s)
 
         #endif
 */
-bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
+ac_token* ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
 {
     int c;
     int nesting_level = 0;
@@ -584,7 +584,7 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
         c = *l->cur;
         switch (c) {
         case '\0': /* We should not encounter EOF in a preprocessor block. */
-            return false;
+            return token_eof(l);
         case '\r':
         case '\n':
             skip_newlines(l);
@@ -643,7 +643,7 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
 
                 if (nesting_level == 0 && is_ending_token)
                 {
-                    return true;
+                    return t;
                 }
 
                 bool is_starting_token = t->type == ac_token_type_IF
@@ -662,7 +662,8 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
             was_end_of_line = false;
         }
     }
-    return true;
+    AC_ASSERT(0 && "Unreachable");
+    return token_eof(l);
 }
 
 ac_token* ac_parse_include_path(ac_lex* l)

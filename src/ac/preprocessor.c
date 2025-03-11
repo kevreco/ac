@@ -481,8 +481,12 @@ branch_case:
             if (need_to_skip_block) /* Eval expression */
             {
                 bool was_end_of_line = token(pp).type == ac_token_type_NEW_LINE;
-                if (!ac_skip_preprocessor_block(&pp->lex, was_end_of_line))
+
+                pp->current_token = ac_skip_preprocessor_block(&pp->lex, was_end_of_line);
+
+                if (pp->current_token->type == ac_token_type_EOF)
                 {
+                    /* NOTE: "unterminated <branch> error will be displayed later */
                     return false;
                 }
 
@@ -502,8 +506,7 @@ branch_case:
                     /* Loop again. */
                     continue;
                 default:
-                    ac_report_internal_error("unterminated branch '%s'", ac_token_type_to_str(t));
-                    return false;
+                    AC_ASSERT(0 && "UNREACHABLE");
                 }
             }
             break; /* end of the for(;;) */
