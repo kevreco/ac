@@ -600,15 +600,13 @@ static bool parse_macro_definition(ac_pp* pp)
             return false;
         }
     }
-    else
+   
+    /* Skip spaces or comment right after the macro name or the function-like "macro prototype"
+      to go to the first token from the macro body */
+    if (token(pp).type == ac_token_type_HORIZONTAL_WHITESPACE
+        || token(pp).type == ac_token_type_COMMENT)
     {
-        /* There are spaces or comment right after the macro name. */
-
-        if (token(pp).type == ac_token_type_HORIZONTAL_WHITESPACE
-            || token(pp).type == ac_token_type_COMMENT)
-        {
-            goto_next_token_from_directive(pp); /* Skip whitespaces to go to the macro value. */
-        }
+        goto_next_token_from_directive(pp);
     }
 
     /* Parse body of macro. Which are all tokens until the next EOL or EOF. */
@@ -656,7 +654,7 @@ static bool parse_macro_parameters(ac_pp* pp, ac_macro* m)
         return false;
     }
 
-    goto_next_token_from_macro_body(pp); /* Skip ')' */
+    goto_next_token_from_directive(pp); /* Skip ')' */
 
     range r = { 0u, darrT_size(&m->definition) };
     m->params = r;
