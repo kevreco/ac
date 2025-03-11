@@ -625,9 +625,16 @@ bool ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
         case '#':
             if (was_end_of_line)
             {
-                consume_one(l);
-                ac_token* t = ac_lex_goto_next(l);
+                consume_one(l); /* Skip '#'. */
+                ac_token* t;
 
+                /* Skip all whitespace and comment. */
+                do {
+                    t = ac_lex_goto_next(l);
+                } while (t->type == ac_token_type_HORIZONTAL_WHITESPACE
+                    || t->type == ac_token_type_COMMENT);
+                
+                
                 bool is_ending_token = t->type == ac_token_type_ELSE
                     || t->type == ac_token_type_ELIF
                     || t->type == ac_token_type_ELIFDEF
