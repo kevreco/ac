@@ -907,21 +907,24 @@ static bool combine_filepath(ac_pp* pp, strv folder, strv filepath)
 
     char* dst = pp->path_buffer;
 
-    /* Add folder. */
-    memcpy(dst, folder.data, folder.size);
-    dst += folder.size;
-
-    /* Add directory separator if needed. */
-    if (dst[0] != '\\' && dst[0] != '/')
+    if (folder.size)
     {
-        if ((folder.size + filepath.size + 1) > ac_pp_MAX_FILEPATH)
-        {
-            ac_report_error_loc(location(pp), "path longer than %d characters are not yet supported.", ac_pp_MAX_FILEPATH);
-            return false;
-        }
+        /* Add folder. */
+        memcpy(dst, folder.data, folder.size);
+        dst += folder.size;
 
-        dst[0] = '/';
-        dst += 1;
+        /* Add directory separator if needed. */
+        if (dst[0] != '\\' && dst[0] != '/')
+        {
+            if ((folder.size + filepath.size + 1) > ac_pp_MAX_FILEPATH)
+            {
+                ac_report_error_loc(location(pp), "path longer than %d characters are not yet supported.", ac_pp_MAX_FILEPATH);
+                return false;
+            }
+
+            dst[0] = '/';
+            dst += 1;
+        }
     }
 
     /* Add leaf. */
