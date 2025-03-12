@@ -18,6 +18,7 @@ static const struct options {
     strv output_extension;
     strv parse_only;
     strv preprocess;
+    strv preprocess_benchmark;
     strv preserve_comment;
     strv reject_hex_float;
     strv system_include;
@@ -29,6 +30,7 @@ static const struct options {
     .output_extension = STRV("--output-extension"),
     .parse_only = STRV("--parse-only"),
     .preprocess = STRV("--preprocess"),
+    .preprocess_benchmark = STRV("--preprocess-benchmark"),
     .preserve_comment = STRV("--preserve-comment"),
     .reject_hex_float = STRV("--reject-hex-float"),
     .system_include = STRV("--system-include"),
@@ -88,6 +90,10 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         else if (arg_equals(arg, cli_options.preprocess))
         {
             o->preprocess = true;
+        }
+        else if (arg_equals(arg, cli_options.preprocess_benchmark))
+        {
+            o->preprocess_benchmark = true;
         }
         else if (arg_equals(arg, cli_options.preserve_comment))
         {

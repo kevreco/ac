@@ -90,6 +90,9 @@ void ac_pp_destroy(ac_pp* pp);
 
 ac_token* ac_pp_goto_next(ac_pp* pp);
 
+void ac_pp_preprocess(ac_pp* pp, FILE* file);
+void ac_pp_preprocess_benchmark(ac_pp* pp, FILE* file);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

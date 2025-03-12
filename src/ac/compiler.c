@@ -44,30 +44,15 @@ bool ac_compiler_compile(ac_compiler* c)
     }
 
     /*** Preprocess only ***/
-    if (options(c)->preprocess)
+    if (options(c)->preprocess || options(c)->preprocess_benchmark)
     {
         ac_pp pp;
         ac_pp_init(&pp, &c->mgr, src_file.content, src_file.filepath);
 
-        /* Print preprocessed tokens in the standard output. */
-        const ac_token* token = NULL;
-
-        ac_token previous_token = { 0 };
-        previous_token.type = ac_token_type_NEW_LINE;
-
-        while ((token = ac_pp_goto_next(&pp)) != NULL
-            && token->type != ac_token_type_EOF)
-        {
-            /* Avoid printing multiple new lines in a row. */
-            if (previous_token.type == ac_token_type_NEW_LINE && token->type == ac_token_type_NEW_LINE)
-            {
-                continue;
-            }
-
-            ac_token_fprint(stdout, *token);
-          
-            previous_token = *token;
-        }
+        if (options(c)->preprocess)
+            ac_pp_preprocess(&pp, stdout);
+        else
+            ac_pp_preprocess_benchmark(&pp, stdout);
 
         ac_pp_destroy(&pp);
         return true;

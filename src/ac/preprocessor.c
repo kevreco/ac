@@ -251,6 +251,42 @@ ac_token* ac_pp_goto_next(ac_pp* pp)
     return t;
 }
 
+void ac_pp_preprocess(ac_pp* pp, FILE* file)
+{
+    /* Print preprocessed tokens in the standard output. */
+    const ac_token* token = NULL;
+
+    ac_token previous_token = { 0 };
+    previous_token.type = ac_token_type_NEW_LINE;
+
+    while ((token = ac_pp_goto_next(pp)) != NULL
+        && token->type != ac_token_type_EOF)
+    {
+        /* Avoid printing multiple new lines in a row. */
+        if (previous_token.type == ac_token_type_NEW_LINE && token->type == ac_token_type_NEW_LINE)
+        {
+            continue;
+        }
+
+        ac_token_fprint(stdout, *token);
+
+        previous_token = *token;
+    }
+}
+
+void ac_pp_preprocess_benchmark(ac_pp* pp, FILE* file)
+{
+    const ac_token* token = NULL;
+
+    while ((token = ac_pp_goto_next(pp)) != NULL
+        && token->type != ac_token_type_EOF)
+    {
+    }
+
+    /* @TODO display line count, byte count, and number of identifiers.
+       @TODO display time, line per seconds and bytes per seconds. */
+}
+
 static ac_token* goto_next_raw_token(ac_pp* pp)
 {
     ac_token* token = NULL;
