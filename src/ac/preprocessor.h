@@ -64,13 +64,13 @@ struct ac_pp {
 	int counter_value;
 
 	/* @OPT: We could use an octect for this branch_flags struct instead of two int. */
-	struct branch_flags {
+	struct branch_state {
 		enum ac_token_type type;  /* none/if/else/elif/ifndef/elifdef/elifndef */
 		ac_location loc;
 		bool was_enabled;         /* Once this value is non-zero this mean we can skip all else/elif/elifdef/elifndef. */
 	};
 	/* Only allow MAX_DEPTH of nested #if/#else */
-	struct branch_flags if_else_stack[ac_pp_branch_MAX_DEPTH];
+	struct branch_state if_else_stack[ac_pp_branch_MAX_DEPTH];
 	int if_else_level;
 	
 	/* Buffer to combine include paths from #include directives. */

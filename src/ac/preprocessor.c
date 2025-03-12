@@ -226,35 +226,28 @@ ac_token* ac_pp_goto_next(ac_pp* pp)
     /* Once the end of file is reached the include stack needs to be popped if we are not already in the top level file.
        'while' loop is used instead of 'if' because we might need to pop from multiple files
        in case the '#include' directive is at the end of the file consecutively. */
-    while (t->type == ac_token_type_EOF
-        && t->is_premature_eof == false
-        && pp->include_stack_depth > 0)
+    while (t->type == ac_token_type_EOF)
     {
-       
-        pop_include_stack(pp);
-
-        /* The previous lexer must have me left on a NEW_LINE or EOF token, right after the #include "file.h" */
-        AC_ASSERT(token(pp).type == ac_token_type_NEW_LINE || token(pp).type == ac_token_type_EOF);
-
         if (pp->if_else_level > pp->include_stack[pp->include_stack_depth].starting_if_else_level)
         {
-            struct branch_flags b = pp->if_else_stack[pp->if_else_level];
+            struct branch_state b = pp->if_else_stack[pp->if_else_level];
             ac_report_error_loc(b.loc, "unterminated #%s", ac_token_type_to_str(b.type));
             return ac_set_token_error(&pp->lex);
         }
 
+        if (pp->include_stack_depth > 0)
+        {
+            pop_include_stack(pp);
+
+            /* The previous lexer must have left on a NEW_LINE or EOF token, right after the #include "file.h" */
+            AC_ASSERT(token(pp).type == ac_token_type_NEW_LINE || token(pp).type == ac_token_type_EOF);
+        }
+        else
+        {
+            break;
+        }
     }
 
-    /* Ensure that the if/else stack level is correct for the top level file. */
-    if (t->type == ac_token_type_EOF
-        && pp->include_stack_depth == 0
-        && pp->if_else_level > pp->include_stack[pp->include_stack_depth].starting_if_else_level)
-    {
-        struct branch_flags b = pp->if_else_stack[pp->if_else_level];
-        ac_report_error_loc(b.loc, "unterminated #%s", ac_token_type_to_str(b.type));
-        return ac_set_token_error(&pp->lex);
-    }
-        
     return t;
 }
 
@@ -505,7 +498,7 @@ branch_case:
                 if (pp->current_token->type == ac_token_type_EOF)
                 {
                     /* NOTE: "unterminated <branch> error will be displayed later */
-                    return false;
+                    return ac_set_token_error(&pp->lex);
                 }
 
                 switch (token_ptr(pp)->type)
@@ -1930,8 +1923,7 @@ static bool branch_is(ac_pp* pp, enum ac_token_type type)
 
 static bool branch_is_empty(ac_pp* pp)
 {
-    return pp->if_else_level < pp->include_stack[pp->include_stack_depth].starting_if_else_level
-        || pp->if_else_stack[pp->if_else_level].type == ac_token_type_NONE;
+    return pp->if_else_level <= pp->include_stack[pp->include_stack_depth].starting_if_else_level;
 }
 
 static bool branch_was_enabled(ac_pp* pp)
@@ -1941,17 +1933,19 @@ static bool branch_was_enabled(ac_pp* pp)
 
 static void push_include_stack(ac_pp* pp, strv content, strv filepath)
 {
-    pp->include_stack[pp->include_stack_depth].lex_state = ac_lex_save(&pp->lex);
-    pp->include_stack[pp->include_stack_depth].starting_if_else_level = pp->if_else_level;
-
+    ac_lex_state state = ac_lex_save(&pp->lex);
+    
     pp->include_stack_depth += 1;
+
+    pp->include_stack[pp->include_stack_depth].starting_if_else_level = pp->if_else_level;
+    pp->include_stack[pp->include_stack_depth].lex_state = state;
 
     ac_lex_set_content(&pp->lex, content, filepath);
 }
 
 static void pop_include_stack(ac_pp* pp)
 {
-    pp->include_stack_depth -= 1;
-
     ac_lex_restore(&pp->lex, &pp->include_stack[pp->include_stack_depth].lex_state);
+
+    pp->include_stack_depth -= 1;
 }
