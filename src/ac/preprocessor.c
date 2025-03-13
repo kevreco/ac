@@ -1620,7 +1620,7 @@ static ac_token_cmd to_cmd_token_list(darr_token* arr)
 static ht_hash_t macro_hash(ht_ptr_handle* handle)
 {
     ac_macro* m = (ac_macro*)handle->ptr;
-    return ac_djb2_hash((char*)m->identifier.ident->text.data, m->identifier.ident->text.size);
+    return ac_hash((char*)m->identifier.ident->text.data, m->identifier.ident->text.size);
 }
 
 static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright)

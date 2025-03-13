@@ -171,7 +171,7 @@ bool ac_manager_load_content(ac_manager* m, char* filepath, ac_source_file* resu
 
 ac_ident_holder ac_create_or_reuse_identifier(ac_manager* m, strv ident)
 {
-    return ac_create_or_reuse_identifier_h(m, ident, ac_djb2_hash((char*)ident.data, ident.size));
+    return ac_create_or_reuse_identifier_h(m, ident, ac_hash((char*)ident.data, ident.size));
 }
 
 ac_ident_holder ac_create_or_reuse_identifier_h(ac_manager* m, strv ident_text, size_t hash)
@@ -205,13 +205,13 @@ void ac_register_known_identifier(ac_manager* m, ac_ident* id, /* enum ac_token_
 {
     ac_ident_holder holder = { .ident = id, .token_type = token_type };
   
-    ht_hash_t h = ac_djb2_hash((char*)id->text.data, id->text.size);
+    ht_hash_t h = ac_hash((char*)id->text.data, id->text.size);
     ht_insert_h(&m->identifiers, &holder, h);
 }
 
 strv ac_create_or_reuse_literal(ac_manager* m, strv literal_text)
 {
-    return ac_create_or_reuse_literal_h(m, literal_text, ac_djb2_hash((char*)literal_text.data, literal_text.size));
+    return ac_create_or_reuse_literal_h(m, literal_text, ac_hash((char*)literal_text.data, literal_text.size));
 }
 
 strv ac_create_or_reuse_literal_h(ac_manager* m, strv literal_text, size_t hash)
@@ -448,7 +448,7 @@ static darr_bool source_file_less_predicate(source_file* left, source_file* righ
 
 static ht_hash_t identifier_hash(ac_ident_holder* i)
 {
-    return ac_djb2_hash((char*)i->ident->text.data, i->ident->text.size);
+    return ac_hash((char*)i->ident->text.data, i->ident->text.size);
 }
 
 static ht_bool identifiers_are_same(ac_ident_holder* left, ac_ident_holder* right)
@@ -466,7 +466,7 @@ static void swap_identifiers(ac_ident_holder* left, ac_ident_holder* right)
 
 static ht_hash_t literal_hash(strv* literal)
 {
-    return ac_djb2_hash((char*)literal->data, literal->size);
+    return ac_hash((char*)literal->data, literal->size);
 }
 
 static ht_bool literals_are_same(strv* left, strv* right)

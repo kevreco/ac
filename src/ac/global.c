@@ -201,7 +201,7 @@ static void print_underline_cursor(FILE* file, strv line, size_t pos)
     printf("^");
 }
 
-size_t ac_djb2_hash(char* str, size_t count)
+size_t ac_hash(char* str, size_t count)
 {
     size_t hash = AC_HASH_INIT;
     size_t i = 0;

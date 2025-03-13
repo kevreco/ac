@@ -12,9 +12,15 @@
 #define AC_ASSERT assert
 #endif
 
-/* djb2 hash. */
-#define AC_HASH_INIT (5381)
-#define AC_HASH(h, c) ((((h) << 5) + (h)) + (c))
+#define AC_DJB_HASH_INIT (5381)
+#define AC_DJB_HASH(h, c) ((((h) << 5) + (h)) + (c))
+
+#define FNV1_PRIME (16777619)
+#define FNV1_OFFSET_BASIS (2166136261) 
+#define FNV1_HASH(h, c) ((uint32_t)((((unsigned)(c)) ^ (h)) * FNV1_PRIME))
+
+#define AC_HASH_INIT FNV1_OFFSET_BASIS
+#define AC_HASH(h, c) FNV1_HASH(h,c)
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,7 +46,7 @@ void ac_report_warning_loc(ac_location loc, const char* fmt, ...);
 void ac_report_error_expr(ac_ast_expr* expr, const char* fmt, ...);
 void ac_report_warning_expr(ac_ast_expr* expr, const char* fmt, ...);
 
-size_t ac_djb2_hash(char* str, size_t size);
+size_t ac_hash(char* str, size_t size);
 
 #ifdef __cplusplus
 } /* extern "C" */
