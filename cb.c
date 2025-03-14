@@ -82,23 +82,23 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 
 	if (cb_str_equals(toolchain, "msvc"))
 	{
-		/* Don't use full path of the .pdb, only use the filename with the .pdb extension.
-		*  The reason is to make the build more deterministic.
-		*/
+		cb_add(cb_CXFLAGS, "/Zi");   /* Produce debugging information (.pdb) */
+
+		/* Use alternate location for the .pdb.
+		   In this case it will be next to the .exe */
+		cb_add(cb_LFLAGS, "/pdbaltpath:%_PDB%"); 
+
 		if (is_debug)
 		{
-			cb_add(cb_LFLAGS, "/pdbaltpath:%_PDB%");
 			cb_add(cb_LFLAGS, "/MANIFEST:EMBED");
 			cb_add(cb_LFLAGS, "/INCREMENTAL:NO"); /* No incremental linking */
 
-
-			cb_add(cb_CXFLAGS, "/Zi");   /* Produce debugging information (.pdb) */
 			cb_add(cb_CXFLAGS, "-Od");   /* Disable optimization */
 			cb_add(cb_DEFINES, "DEBUG"); /* Add DEBUG constant define */
 		}
 		else
 		{
-			cb_add(cb_CXFLAGS, "-O2");   /* Optimization level 2 */
+			cb_add(cb_CXFLAGS, "-O1");   /* Optimization level 1 */
 		}
 	}
 	else if (cb_str_equals(toolchain, "gcc"))
@@ -112,7 +112,7 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 		}
 		else
 		{
-			cb_add(cb_CXFLAGS, "-O2");   /* Optimization level 2 */
+			cb_add(cb_CXFLAGS, "-O1");   /* Optimization level 1 */
 		}
 	}
 }
