@@ -109,16 +109,6 @@ static ac_token_cmd make_cmd_macro_pop(ac_macro* m, darr_token tokens);
 static ac_token_cmd to_cmd_token_list(darr_token* arr);
 
 /*-----------------------------------------------------------------------*/
-/* macro hash table */
-/*-----------------------------------------------------------------------*/
-
-static ht_hash_t macro_hash(ht_ptr_handle* handle);
-static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright);
-static void add_macro(ac_pp* pp, ac_macro* m);
-static void undefine_macro(ac_pp* pp, ac_macro* m);
-static ac_macro* find_macro(ac_pp* pp, ac_token* identifer);
-
-/*-----------------------------------------------------------------------*/
 /* Preprocessor evaluation */
 /*-----------------------------------------------------------------------*/
 
@@ -170,10 +160,8 @@ void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath)
     ac_lex_set_content(&pp->lex, content, filepath);
     ac_lex_init(&pp->concat_lex, mgr);
 
-    ht_ptr_init(&pp->macros, (ht_hash_function_t)macro_hash, (ht_predicate_t)macros_are_same);
-
     darrT_init(&pp->cmd_stack);
-    darrT_init(&pp->undef_macros);
+    darrT_init(&pp->macros);
     darrT_init(&pp->buffer_for_peek);
     dstr_init(&pp->concat_buffer);
 }
@@ -194,28 +182,14 @@ void ac_pp_destroy(ac_pp* pp)
 
     darrT_destroy(&pp->cmd_stack);
 
-    /* Destroy all macros before destroying the macro hash table.
-       @FIXME: macros should be using an allocator and we should be able to destroy them all at once.
-    */
-    ht_cursor c;
-    ht_cursor_init(&pp->macros, &c);
-    while (ht_cursor_next(&c))
+    /* Destroy all macros. */
+    for (int i = 0; i < darrT_size(&pp->macros); i += 1)
     {
-        ht_ptr_handle* h = ht_cursor_item(&c);
-        ac_macro* m = h->ptr;
-        ac_macro_destroy(m);
-    }
-    ht_ptr_destroy(&pp->macros);
-   
-    /* Destroy all undef macros. */
-    for (int i = 0; i < darrT_size(&pp->undef_macros); i += 1)
-    {
-        ac_macro* m = darrT_at(&pp->undef_macros, i);
+        ac_macro* m = darrT_at(&pp->macros, i);
         ac_macro_destroy(m);
     }
 
-    darrT_destroy(&pp->undef_macros);
-
+    darrT_destroy(&pp->macros);
 }
 
 ac_token* ac_pp_goto_next(ac_pp* pp)
@@ -583,11 +557,10 @@ branch_case:
 
         skip_all_until_new_line(pp);
 
-        /* Remove macro it's previously defined. */
-        ac_macro* m = find_macro(pp, &identifier);
-        if (m)
+        /* Set macro to null if it was previously defined. */
+        if (identifier.ident->macro)
         {
-            undefine_macro(pp, m);
+            identifier.ident->macro = NULL;
         }
         break;
     }
@@ -660,7 +633,10 @@ static bool parse_macro_definition(ac_pp* pp)
         return false;
     }
 
-    add_macro(pp, m);
+    m->identifier.ident->macro = m;
+
+    /* Keep reference of macro to destroy it when preprocessor is destroy. */
+    darrT_push_back(&pp->macros, m);
 
     return true;
 }
@@ -1107,7 +1083,7 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
         return false;
     }
 
-    ac_macro* m = find_macro(pp, tok);
+    ac_macro* m = tok->ident->macro;
 
     if (!m)
     {
@@ -1630,27 +1606,6 @@ static ht_bool macros_are_same(ht_ptr_handle* hleft, ht_ptr_handle* hright)
     return left->identifier.ident == right->identifier.ident;
 }
 
-static void add_macro(ac_pp* pp, ac_macro* m)
-{
-    ht_ptr_insert(&pp->macros, m);
-}
-
-static void undefine_macro(ac_pp* pp, ac_macro* m)
-{
-    ht_ptr_remove(&pp->macros, m);
-
-    /* Add reference to undefined macro to garbage collect them. */
-    darrT_push_back(&pp->undef_macros, m);
-}
-
-static ac_macro* find_macro(ac_pp* pp, ac_token* identifer)
-{
-    ac_macro key;
-    key.identifier = *identifer;
-
-    return ht_ptr_get(&pp->macros, &key);
-}
-
 static ac_token* goto_next_for_eval(ac_pp* pp)
 {
     ac_token* token = goto_next_macro_expanded(pp);
@@ -1723,7 +1678,9 @@ static eval_t eval_primary(ac_pp* pp)
             break;
         }
 
-        result.value = find_macro(pp, token_ptr(pp)) != NULL;
+        bool macro_exist = token_ptr(pp)->ident->macro != NULL;
+        result.value = macro_exist;
+
         goto_next_for_eval(pp); /* Skip identifier. */
 
         if (expect_closing_parenthesis && expect(pp, ac_token_type_PAREN_R))
@@ -1897,7 +1854,8 @@ static eval_t eval_expr(ac_pp* pp, bool expect_identifier_expression)
         }
         else
         {
-            eval.value = find_macro(pp, token_ptr(pp)) != NULL;
+            bool macro_exist = token_ptr(pp)->ident->macro != NULL;
+            eval.value = macro_exist;
             goto_next_for_eval(pp); /* Skip identifier. */
         }
     }

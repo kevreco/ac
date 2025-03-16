@@ -184,9 +184,12 @@ struct ac_token_number {
     } u;
 };
 
+typedef struct ac_macro ac_macro;
+
 typedef struct ac_ident ac_ident;
 struct ac_ident {
     strv text;
+    ac_macro* macro; /* Contains macro if macro was defined, NULL otherwise. */
     bool cannot_expand;
 };
 

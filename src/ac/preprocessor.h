@@ -46,15 +46,15 @@ struct ac_pp {
 	ac_manager* mgr;
 	ac_lex lex;        /* Main lexer. */
 	ac_lex concat_lex; /* Lexer for string concatenation. */
-	ht macros;         /* Hash table containing macros. */
 
 	/* Stack of list of tokens. It's mostly used for macro but we should be able to add tokens if we peek some next ones. */
 	darrT(ac_token_cmd) cmd_stack;
-	/* Array of undefined macro.
-	   It's possible to undefine and redefine a macro while it's being expanded.
-	   We store the undefined macro here and destroy them when the preprocessor is destroyed.
-	   @OPT: find a better way to destroy them. It's a bit wastefull to keep instances of macro that we won't use. */
-	darrT(ac_macro*) undef_macros;
+	/* Keep a reference of all created macros.
+	   NOTE: It's possible to undefine and redefine a macro while it's being expanded.
+	         This mean we can't destroy the undefine macro right away, hence we keep them forever like defined macros.
+	   @OPT: It's wasteful to keep undefined macro. But at the same time it's not used that much.
+	         It shouldn't have significant impact overall. */
+	darrT(ac_macro*) macros;
 
 	ac_token* current_token;
 
