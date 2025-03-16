@@ -54,6 +54,13 @@
     - [./] Support defined(XXX) expression in #if/#elif
     - [./] Support #ifdef/#ifndef/#elifdef/#elifndef
     
+### 1.X
+
+    - Correctly compile the [SQLite amalgamation](https://www.sqlite.org/download.html) from file preprocessed by AC.
+    - Try to make it as fast as [TCC](https://bellard.org/tcc/).
+        - 16/03/2025 AC preprocessing is roughly two times slower than TCC.
+    - Create benchmark page in a dedicated Github repository.
+    
 # Stage 2 - C Parser and C converter
 
     - [] Support array declaration.
