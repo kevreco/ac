@@ -14,7 +14,7 @@ size_t range_size(range r) { return r.end - r.start; }
 
 typedef struct ac_macro ac_macro;
 struct ac_macro {
-    ac_token identifier;        /* Name of the macro */
+    ac_ident* ident;        /* Name of the macro */
     /* Example of function-like macro:
          #define X(x, y) (x + y)'
        Example of object-like macro:
@@ -96,7 +96,7 @@ static void add_empty_arg(darr_token* args, darr_range* ranges);
    The expanded tokens are pushed into a stack used to pick the next token. */
 static bool expand_macro(ac_pp* pp, ac_token* ident, ac_macro* m);
 
-static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location);
+static ac_macro* create_macro(ac_pp* pp, ac_ident* ident, ac_location location);
 
 static ac_location location(ac_pp* pp); /* Return location of the current token. */
 
@@ -604,7 +604,7 @@ static bool parse_macro_definition(ac_pp* pp)
 
     ac_token* identifier = token_ptr(pp);
     ac_location loc = location(pp);
-    ac_macro* m = create_macro(pp, identifier, loc);
+    ac_macro* m = create_macro(pp, identifier->ident, loc);
 
     goto_next_raw_token(pp); /* Skip identifier, but not the whitespaces or comment. */
 
@@ -633,7 +633,7 @@ static bool parse_macro_definition(ac_pp* pp)
         return false;
     }
 
-    m->identifier.ident->macro = m;
+    m->ident->macro = m;
 
     /* Keep reference of macro to destroy it when preprocessor is destroy. */
     darrT_push_back(&pp->macros, m);
@@ -952,7 +952,7 @@ static bool combine_filepath(ac_pp* pp, strv folder, strv filepath)
 
 static void macro_push(ac_pp* pp, ac_macro* m)
 {
-    m->identifier.ident->cannot_expand = true;
+    m->ident->cannot_expand = true;
     pp->macro_depth += 1;
 }
 
@@ -979,7 +979,7 @@ static ac_token* process_cmd(ac_pp* pp, ac_token_cmd* cmd)
         pp->macro_depth -= 1;
         ac_macro* m = cmd->macro_pop.macro;
 
-        m->identifier.ident->cannot_expand = false;
+        m->ident->cannot_expand = false;
 
         darrT_destroy(&cmd->macro_pop.tokens);
 
@@ -1092,7 +1092,7 @@ static bool try_expand(ac_pp* pp, ac_token* tok)
         return false;
     }
 
-    if (m->identifier.ident->cannot_expand)
+    if (m->ident->cannot_expand)
     {
         tok->cannot_expand = true;
     }
@@ -1274,7 +1274,7 @@ static void push_back_expanded_token(ac_pp* pp, darr_token* arr, ac_macro* m, ac
 
     /* If the token is the macro identifier we mark it as non expandable. */
     if (ac_token_is_keyword_or_identifier(token.type)
-        && token.ident == m->identifier.ident)
+        && token.ident == m->ident)
     {
         token.cannot_expand = true;
     }
@@ -1403,18 +1403,18 @@ static bool expand_macro(ac_pp* pp, ac_token* identifier, ac_macro* m)
 
         if (nesting_level != 0) {
             /* @TODO try to display this error. */
-            ac_report_error_loc(loc, "function-like macro invocation '"STRV_FMT"' does not end with ')'", STRV_ARG(m->identifier.ident->text));
+            ac_report_error_loc(loc, "function-like macro invocation '"STRV_FMT"' does not end with ')'", STRV_ARG(m->ident->text));
             goto cleanup;
         }
 
         if (current_param_index > param_count) /* No parameter should be left. */
         {
-            ac_report_warning_loc(loc, "too many argument in function-like macro invocation '"STRV_FMT"'", STRV_ARG(m->identifier.ident->text));
+            ac_report_warning_loc(loc, "too many argument in function-like macro invocation '"STRV_FMT"'", STRV_ARG(m->ident->text));
         }
 
         if (current_param_index < param_count) /* No parameter should be left. */
         {
-            ac_report_warning_loc(loc, "missing arguments in function-like macro invocation '"STRV_FMT"'", STRV_ARG(m->identifier.ident->text));
+            ac_report_warning_loc(loc, "missing arguments in function-like macro invocation '"STRV_FMT"'", STRV_ARG(m->ident->text));
 
             /* Where macro is missing argument we replace them with empty arguments. */
             for (int i = current_param_index; i < param_count; i += 1)
@@ -1532,16 +1532,15 @@ cleanup:
     return result;
 }
 
-static ac_macro* create_macro(ac_pp* pp, ac_token* macro_name, ac_location location)
+static ac_macro* create_macro(ac_pp* pp, ac_ident* macro_name, ac_location location)
 {
     AC_ASSERT(macro_name);
-    AC_ASSERT(macro_name->type == ac_token_type_IDENTIFIER);
     /* @FIXME: ast_arena should be renamed. */
     ac_macro* m = ac_allocator_allocate(&pp->mgr->ast_arena.allocator, sizeof(ac_macro));
     AC_ASSERT(m);
     ac_macro_init(m);
     if (m && macro_name) {
-        m->identifier = *macro_name;
+        m->ident = macro_name;
     }
     m->location = location;
     return m;
