@@ -1,27 +1,32 @@
 /*
-	strv - v0.0 - See end of file for license information.
-*/
 
-/*
+SUMMARY:
 
-String view C library.
+    A string view C library.
+    
+    See end of file for license information.
 
-Do this
-	#define STRV_IMPLEMENTATION
-before you include this file in *one* C or C++ file to create the implementation.
+    Do this
+        #define STRV_IMPLEMENTATION
+    before you include this file in *one* C or C++ file to create the implementation.
 
-Assert can be redefined with:
-	#define STRV_ASSERT(x) my_assert(x)
+NOTES:
 
-Example of use:
+    Assert can be redefined with:
+        #define STRV_ASSERT(x) my_assert(x)
 
-	int main() {
+EXAMPLE:
 
-		strv sv = strv_from_str("    HELLO    ");
-		strv trimmed = strv_trimmed(sv);
+    #define STRV_IMPLEMENTATION
+    #include "strv.h"
+    
+    int main() {
 
-		return strv_equals_str(trimmed, "HELLO");
-	}
+        strv sv = strv_from_str("    HELLO    ");
+        strv trimmed = strv_trimmed(sv);
+
+        return strv_equals_str(trimmed, "HELLO");
+    }
 */
 
 #ifndef RE_STRV_H
@@ -34,10 +39,6 @@ Example of use:
 #define STRV_API
 #endif
 
-#ifndef STRV_INTERNAL /* use for internal functions */
-#define STRV_INTERNAL static
-#endif
-
 #ifndef STRV_ASSERT
 #include <assert.h>
 #define STRV_ASSERT(x) assert(x)
@@ -45,13 +46,11 @@ Example of use:
 
 /* Literal contructor */
 #define STRV(x) \
-	{ sizeof(x)-1 , (const char*)(x)  }
+    { sizeof(x)-1 , (const char*)(x)  }
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-static const size_t STRV_NPOS = (size_t)-1;
 
 #ifndef STRV_FMT
 #define STRV_FMT "%.*s"
@@ -61,10 +60,12 @@ static const size_t STRV_NPOS = (size_t)-1;
 #define STRV_ARG(strv) (int) (strv).size, (strv).data
 #endif
 
+static const size_t STRV_NPOS = (size_t)-1;
+
 typedef struct strv strv;
 struct strv {
-	size_t size;
-	const char* data;
+    size_t size;
+    const char* data;
 };
 
 /* Create zero-initialized strv */
@@ -208,443 +209,448 @@ STRV_API void* strv_memory_find(strv mem, strv pattern);
 STRV_API strv
 strv_make(void)
 {
-	strv sv;
-	sv.data = 0;
-	sv.size = 0;
-	return sv;
+    strv sv;
+    sv.data = 0;
+    sv.size = 0;
+    return sv;
 }
 
 STRV_API strv
 strv_make_from(const char* data, size_t size)
 {
-	strv sv;
-	sv.data = data;
-	sv.size = size;
-	return sv;
+    strv sv;
+    sv.data = data;
+    sv.size = size;
+    return sv;
 }
 
 STRV_API strv
 strv_make_from_str(const char* str)
 {
-	return strv_make_from(str, strlen(str));
+    return strv_make_from(str, strlen(str));
 }
 
 STRV_API void
 strv_clear(strv* sv)
 {
-	sv->size = 0;
-	sv->data = NULL;
+    sv->size = 0;
+    sv->data = NULL;
 }
 
 STRV_API void
 strv_assign(strv* sv, strv other)
 {
-	sv->size = other.size;
-	sv->data = other.data;
+    sv->size = other.size;
+    sv->data = other.data;
 }
 
 STRV_API void
 strv_assign_str(strv* sv, const char* str)
 {
-	strv_assign(sv, strv_make_from_str(str));
+    strv_assign(sv, strv_make_from_str(str));
 }
 
 STRV_API bool
 strv_empty(strv sv)
 {
-	return sv.size == 0;
+    return sv.size == 0;
 }
 
 STRV_API int
 strv_lexicagraphical_compare(strv left, strv right)
 {
-	char left_char, right_char;
-	size_t min_size = left.size < right.size ? left.size : right.size;
-	while (min_size-- > 0)
-	{
-		left_char = *left.data++;
-		right_char = *right.data++;
-		if (left_char != right_char)
-			return left_char < right_char ? 1 : -1;
-	};
+    char left_char, right_char;
+    size_t min_size = left.size < right.size ? left.size : right.size;
+    while (min_size-- > 0)
+    {
+        left_char = *left.data++;
+        right_char = *right.data++;
+        if (left_char != right_char)
+            return left_char < right_char ? -1 : 1;
+    };
 
-	return left.size - right.size;
+    if (left.size < right.size)
+        return -1;
+    else if (left.size > right.size)
+        return 1;
+
+    return 0;
 }
 
 STRV_API int
 strv_compare(strv sv, strv other)
 {
-	return strv_lexicagraphical_compare(sv, other);
+    return strv_lexicagraphical_compare(sv, other);
 }
 
 STRV_API int
 strv_compare_str(strv sv, const char* str)
 {
-	return strv_compare(sv, strv_make_from_str(str));
+    return strv_compare(sv, strv_make_from_str(str));
 }
 
 STRV_API bool
 strv_equals(strv sv, strv other)
 {
-	return sv.size == other.size
-		&& strv_compare(sv, other) == 0;
+    return sv.size == other.size
+        && memcmp(sv.data, other.data, sv.size) == 0;
 }
 
 STRV_API bool
 strv_equals_str(strv sv, const char* str)
 {
-	return strv_equals(sv, strv_make_from_str(str));
+    return strv_equals(sv, strv_make_from_str(str));
 }
 
 STRV_API bool
 strv_less_than(strv sv, strv other)
 {
-	return strv_compare(sv, other) < 0;
+    return strv_compare(sv, other) < 0;
 }
 
 STRV_API bool
 strv_less_than_str(strv sv, const char* str)
 {
-	return strv_less_than(sv, strv_make_from_str(str));
+    return strv_less_than(sv, strv_make_from_str(str));
 }
 
 STRV_API bool
 strv_greater_than(strv sv, strv other)
 {
-	return strv_compare(sv, other) > 0;
+    return strv_compare(sv, other) > 0;
 }
 
 STRV_API bool
 strv_greater_than_str(strv sv, const char* str)
 {
-	return strv_greater_than(sv, strv_make_from_str(str));
+    return strv_greater_than(sv, strv_make_from_str(str));
 }
 
 STRV_API char*
 strv_begin(strv sv)
 {
-	return (char*)(sv.data);
+    return (char*)(sv.data);
 }
 
 STRV_API char*
 strv_end(strv sv)
 {
-	return (char*)(sv.data + sv.size);
+    return (char*)(sv.data + sv.size);
 }
 
 STRV_API char
 strv_front(strv sv)
 {
-	STRV_ASSERT(sv.size > 0);
-	return sv.data[0];
+    STRV_ASSERT(sv.size > 0);
+    return sv.data[0];
 }
 
 STRV_API char
 strv_back(strv sv)
 {
-	STRV_ASSERT(sv.size > 0);
-	return sv.data[sv.size - 1];
+    STRV_ASSERT(sv.size > 0);
+    return sv.data[sv.size - 1];
 }
 
 STRV_API size_t
 strv_find(strv sv, strv sub)
 {
-	size_t result = STRV_NPOS;
+    size_t result = STRV_NPOS;
 
-	if (sv.size >= sub.size) {
+    if (sv.size >= sub.size) {
 
-		void* found = strv_memory_find(sv, sub);
+        void* found = strv_memory_find(sv, sub);
 
-		if (found) {
-			result = (char*)found - sv.data;
-		}
-	}
+        if (found) {
+            result = (char*)found - sv.data;
+        }
+    }
 
-	return result;
+    return result;
 }
 
 STRV_API size_t
 strv_find_str(strv sv, const char* sub)
 {
-	return strv_find(sv, strv_make_from_str(sub));
+    return strv_find(sv, strv_make_from_str(sub));
 }
 
 STRV_API size_t
 strv_find_char(strv sv, char ch)
 {
-	return strv_find(sv, strv_make_from(&ch, 1));
+    return strv_find(sv, strv_make_from(&ch, 1));
 }
 
 STRV_API size_t
 strv_find_first_of_chars(strv str, strv chars)
 {
-	size_t index = STRV_NPOS;
+    size_t index = STRV_NPOS;
 
-	if (str.size <= 0)
-	{
-		return index;
-	}
+    if (str.size <= 0)
+    {
+        return index;
+    }
 
-	const char* begin = str.data;
-	const char* data = str.data;
-	const char* end = str.data + str.size;
+    const char* begin = str.data;
+    const char* data = str.data;
+    const char* end = str.data + str.size;
 
-	while (data < end)
-	{
-		if (strv_contains_char(chars, *data))
-		{
-			index = data - begin;
-			break;
-		}
-		data++;
-	}
+    while (data < end)
+    {
+        if (strv_contains_char(chars, *data))
+        {
+            index = data - begin;
+            break;
+        }
+        data++;
+    }
 
-	return index;
+    return index;
 }
 
 STRV_API size_t
 strv_find_last_of_char(strv sv, char c)
 {
-	size_t index = STRV_NPOS;
+    size_t index = STRV_NPOS;
 
-	if (!sv.size)
-	{
-		return index;
-	}
+    if (!sv.size)
+    {
+        return index;
+    }
 
-	const char* begin = strv_begin(sv);
-	const char* cursor = sv.data + sv.size;
+    const char* begin = strv_begin(sv);
+    const char* cursor = sv.data + sv.size;
 
-	size_t i = cursor - begin;
-	for (; cursor >= begin; --cursor, --i) {
-		if (*cursor == c) {
-			index = i;
-			break;
-		}
-	}
+    size_t i = cursor - begin;
+    for (; cursor >= begin; --cursor, --i) {
+        if (*cursor == c) {
+            index = i;
+            break;
+        }
+    }
 
-	return index;
+    return index;
 }
 
 STRV_API size_t
 strv_find_last_of_chars(strv sv, strv chars)
 {
-	size_t index = STRV_NPOS;
+    size_t index = STRV_NPOS;
 
-	if (!sv.size)
-	{
-		return index;
-	}
+    if (!sv.size)
+    {
+        return index;
+    }
 
-	const char* begin = strv_begin(sv);
-	const char* cursor = sv.data + sv.size;
+    const char* begin = strv_begin(sv);
+    const char* cursor = sv.data + sv.size;
 
-	size_t i = cursor - begin;
-	for (; cursor >= begin; cursor -= 1, i -= 1) {
-		if (strv_contains_char(chars, *cursor)) {
-			index = i;
-			break;
-		}
-	}
+    size_t i = cursor - begin;
+    for (; cursor >= begin; cursor -= 1, i -= 1) {
+        if (strv_contains_char(chars, *cursor)) {
+            index = i;
+            break;
+        }
+    }
 
-	return index;
+    return index;
 }
 
 STRV_API bool
 strv_contains_char(strv sv, char ch)
 {
-	return strv_find_char(sv, ch) != STRV_NPOS;
+    return strv_find_char(sv, ch) != STRV_NPOS;
 }
 
 STRV_API bool
 strv_contains_chars(strv sv, strv chars)
 {
-	const char* end = chars.data + chars.size;
-	const char* cursor = chars.data;
-	while (cursor < end)
-	{
-		if (strv_contains_char(sv, *cursor))
-		{
-			return true;
-		}
+    const char* end = chars.data + chars.size;
+    const char* cursor = chars.data;
+    while (cursor < end)
+    {
+        if (strv_contains_char(sv, *cursor))
+        {
+            return true;
+        }
 
-		++cursor;
-	}
+        ++cursor;
+    }
 
-	return false;
+    return false;
 }
 
 STRV_API strv
 strv_substr(strv sv, const char* pos, size_t count)
 {
-	const char* last = pos + count;
-	STRV_ASSERT(pos >= strv_begin(sv));
-	STRV_ASSERT(pos <= strv_end(sv));
-	STRV_ASSERT(last >= pos);
-	STRV_ASSERT(last <= strv_end(sv));
+    const char* last = pos + count;
+    STRV_ASSERT(pos >= strv_begin(sv));
+    STRV_ASSERT(pos <= strv_end(sv));
+    STRV_ASSERT(last >= pos);
+    STRV_ASSERT(last <= strv_end(sv));
 
-	strv result;
+    strv result;
 
-	result.data = pos;
-	result.size = count;
+    result.data = pos;
+    result.size = count;
 
-	return result;
+    return result;
 }
 
 STRV_API strv
 strv_substr_from(strv sv, size_t index, size_t count)
 {
-	const char* it = (sv.data + index);
-	return strv_substr(sv, it, count);
+    const char* it = (sv.data + index);
+    return strv_substr(sv, it, count);
 }
 
 STRV_API void
 strv_swap(strv* s, strv* other)
 {
-	const strv tmp = *s;
-	*s = *other;
-	*other = tmp;
+    const strv tmp = *s;
+    *s = *other;
+    *other = tmp;
 }
 
 STRV_API bool
 strv_starts_with(strv sv, strv other)
 {
-	if (sv.size < other.size)
-	{
-		return false;
-	}
+    if (sv.size < other.size)
+    {
+        return false;
+    }
 
-	strv sub = strv_make_from(sv.data, other.size);
-	return strv_equals(sub, other);
+    strv sub = strv_make_from(sv.data, other.size);
+    return strv_equals(sub, other);
 }
 
 STRV_API bool
 strv_starts_with_str(strv sv, const char* str)
 {
-	return strv_starts_with(sv, strv_make_from_str(str));
+    return strv_starts_with(sv, strv_make_from_str(str));
 }
 
 STRV_API bool
 strv_ends_with(strv sv, strv other)
 {
-	if (sv.size < other.size)
-	{
-		return false;
-	}
+    if (sv.size < other.size)
+    {
+        return false;
+    }
 
-	strv sub = strv_make_from(sv.data + (sv.size - other.size), other.size);
-	return strv_equals(sub, other);
+    strv sub = strv_make_from(sv.data + (sv.size - other.size), other.size);
+    return strv_equals(sub, other);
 }
 
 STRV_API bool
 strv_ends_with_str(strv sv, const char* str)
 {
-	return strv_ends_with(sv, strv_make_from_str(str));
+    return strv_ends_with(sv, strv_make_from_str(str));
 }
 
 STRV_API strv
 strv_remove_left(strv sv, size_t count)
 {
-	strv result = sv;
-	size_t i = 0;
-	while (i < sv.size && i < count)
-	{
-		result.size -= 1;
-		result.data += 1;
-		i += 1;
-	}
-	return result;
+    strv result = sv;
+    size_t i = 0;
+    while (i < sv.size && i < count)
+    {
+        result.size -= 1;
+        result.data += 1;
+        i += 1;
+    }
+    return result;
 }
 
 STRV_API strv
 strv_remove_right(strv sv, size_t count)
 {
-	strv result = sv;
-	size_t i = count;
-	while (result.size > 0 && i > 0)
-	{
-		result.size -= 1;
-		i -= 1;
-	}
-	return result;
+    strv result = sv;
+    size_t i = count;
+    while (result.size > 0 && i > 0)
+    {
+        result.size -= 1;
+        i -= 1;
+    }
+    return result;
 }
 
 STRV_API strv
 strv_trimmed_left_by(strv sv, strv chars)
 {
-	size_t i = 0;
+    size_t i = 0;
 
-	while (i < sv.size
-		&& strv_contains_char(chars, sv.data[i]))
-	{
-		i += 1;
-	}
+    while (i < sv.size
+        && strv_contains_char(chars, sv.data[i]))
+    {
+        i += 1;
+    }
 
-	return strv_make_from(sv.data + i, sv.size - i);
+    return strv_make_from(sv.data + i, sv.size - i);
 }
 
 STRV_API strv
 strv_trimmed_right_by(strv sv, strv chars)
 {
-	size_t i = 0;
+    size_t i = 0;
 
-	while (sv.size > 0
-		&& strv_contains_char(chars, sv.data[sv.size - 1]))
-	{
-		sv.size -= 1;
-	}
+    while (sv.size > 0
+        && strv_contains_char(chars, sv.data[sv.size - 1]))
+    {
+        sv.size -= 1;
+    }
 
-	return strv_make_from(sv.data, sv.size - i);
+    return strv_make_from(sv.data, sv.size - i);
 }
 
 STRV_API strv
 strv_trimmed_by(strv sv, strv chars)
 {
-	strv left = strv_trimmed_left_by(sv, chars);
-	return strv_trimmed_right_by(left, chars);
+    strv left = strv_trimmed_left_by(sv, chars);
+    return strv_trimmed_right_by(left, chars);
 }
 
 STRV_API strv
 strv_trimmed_by_str(strv sv, const char* str)
 {
-	return strv_trimmed_by(sv, strv_make_from_str(str));
+    return strv_trimmed_by(sv, strv_make_from_str(str));
 }
 
 STRV_API strv
 strv_trimmed(strv sv)
 {
-	static strv chars = { 6, "\n\r\t \f\v" };
-	return strv_trimmed_by(sv, chars);
+    static strv chars = { 6, "\n\r\t \f\v" };
+    return strv_trimmed_by(sv, chars);
 }
 
 STRV_API void*
 strv_memory_find(strv mem, strv pattern)
 {
-	/* pattern.size can't be greater than mem.size */
-	if ((mem.size == 0) || (pattern.size == 0) || pattern.size > mem.size) {
-		return NULL;
-	}
+    /* pattern.size can't be greater than mem.size */
+    if ((mem.size == 0) || (pattern.size == 0) || pattern.size > mem.size) {
+        return NULL;
+    }
 
-	/* Pattern is a single char */
-	if (pattern.size == 1) {
-		return memchr((void*)mem.data, *pattern.data, mem.size);
-	}
+    /* Pattern is a single char */
+    if (pattern.size == 1) {
+        return memchr((void*)mem.data, *pattern.data, mem.size);
+    }
 
-	/* Last possible position */
-	const char* cur = mem.data;
-	const char* last = mem.data + mem.size - pattern.size;
+    /* Last possible position */
+    const char* cur = mem.data;
+    const char* last = mem.data + mem.size - pattern.size;
 
-	while (cur <= last)
-	{
-		/* Test the first char before calling a function */
-		if (*cur == *pattern.data && memcmp(cur, pattern.data, pattern.size) == 0)
-		{
-			return (void*)cur;
-		}
-		++cur;
-	}
+    while (cur <= last)
+    {
+        /* Test the first char before calling a function */
+        if (*cur == *pattern.data && memcmp(cur, pattern.data, pattern.size) == 0)
+        {
+            return (void*)cur;
+        }
+        ++cur;
+    }
 
-	return NULL;
+    return NULL;
 }
 
 #endif /* STRV_IMPLEMENTATION */
