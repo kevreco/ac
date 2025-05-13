@@ -1,5 +1,6 @@
 # where the builds are generated from premake or cb.bat/cb.sh
 .build/
+.ignore/
 
 # generated files
 *.g.c
