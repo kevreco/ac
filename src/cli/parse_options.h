@@ -15,6 +15,7 @@ static const struct options {
     strv colored_output;
     strv debug_parser;
     strv display_surrounding_lines;
+    strv no_system_specific;
     strv output_extension;
     strv parse_only;
     strv preprocess;
@@ -27,6 +28,7 @@ static const struct options {
     .colored_output = STRV("--colored-output"),
     .debug_parser     = STRV("--debug-parser"),
     .display_surrounding_lines = STRV("--display-surrounding-lines"),
+    .no_system_specific = STRV("--no-system-specific"),
     .output_extension = STRV("--output-extension"),
     .parse_only = STRV("--parse-only"),
     .preprocess = STRV("--preprocess"),
@@ -78,6 +80,10 @@ parse_from_arguments(ac_options* o, int* argc, char*** argv)
         {
             /* @FIXME it's already true by default. We need to read "true" or "false" from the input. */
             o->global.display_surrounding_lines = true;
+        }
+        else if (arg_equals(arg, cli_options.no_system_specific))
+        {
+            o->no_system_specific = true;
         }
         else if (arg_equals(arg, cli_options.output_extension))
         {

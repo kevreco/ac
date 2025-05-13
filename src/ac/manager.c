@@ -52,6 +52,9 @@ void ac_options_init_default(ac_options* o)
     o->step = ac_compilation_step_ALL;
 
     darrT_init(&o->files);
+    
+    o->no_system_specific = false;
+
     o->output_extension = strv_make_from_str(".g.c");
     dstr_init(&o->config_file_memory);
     darrT_init(&o->config_file_args);

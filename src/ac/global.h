@@ -22,6 +22,9 @@
 #define AC_HASH_INIT FNV1_OFFSET_BASIS
 #define AC_HASH(h, c) FNV1_HASH(h,c)
 
+#define AC_XSTRINGIZE(x) #x
+#define AC_STRINGIZE(x) AC_XSTRINGIZE(x)
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -39,6 +39,7 @@ struct ac_options {
     enum ac_compilation_step step;
 
     darrT(const char*) files;            /* Files to compile. */
+    bool no_system_specific;             /* Prevent system specific option like "_MSC_VER" to be defined. */
     strv output_extension;               /* Extension of generated c file. */
     dstr config_file_memory;             /* Config file content with line endings replaced with \0 */
     darrT(const char*) config_file_args; /* Args parsed from the config file. */

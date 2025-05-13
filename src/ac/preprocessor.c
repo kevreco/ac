@@ -147,6 +147,8 @@ static bool branch_was_enabled(ac_pp* pp);
 static void push_include_stack(ac_pp* pp, strv content, strv filepath);
 static void pop_include_stack(ac_pp* pp);
 
+static void consume_predefines(ac_pp* pp);
+
 /*-----------------------------------------------------------------------*/
 /* API */
 /*-----------------------------------------------------------------------*/
@@ -157,13 +159,24 @@ void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath)
     pp->mgr = mgr;
 
     ac_lex_init(&pp->lex, mgr);
-    ac_lex_set_content(&pp->lex, content, filepath);
+    
     ac_lex_init(&pp->concat_lex, mgr);
 
     darrT_init(&pp->cmd_stack);
     darrT_init(&pp->macros);
     darrT_init(&pp->buffer_for_peek);
     dstr_init(&pp->concat_buffer);
+
+    /* Predefine system-specific macro. */
+    if ( ! mgr->options.no_system_specific)
+    {
+        consume_predefines(pp);
+
+        /* Reset concat buffer after predefines. */
+        dstr_clear(&pp->concat_buffer);
+    }
+
+    ac_lex_set_content(&pp->lex, content, filepath);
 }
 
 void ac_pp_destroy(ac_pp* pp)
@@ -1928,4 +1941,41 @@ static void pop_include_stack(ac_pp* pp)
     ac_lex_restore(&pp->lex, &pp->include_stack[pp->include_stack_depth].lex_state);
 
     pp->include_stack_depth -= 1;
+}
+
+static void consume_predefines(ac_pp* pp)
+{
+    // String holding the predefined values.
+    dstr str;
+    dstr_init(&str);
+
+#ifdef _MSC_VER
+    dstr_append_str(&str, "#define _MSC_VER " AC_STRINGIZE(_MSC_VER) "\n");
+#endif
+
+#if !defined(_WIN32) && (defined(__unix__) || defined(__unix) || (defined(__APPLE__) && defined(__MACH__)))
+    dstr_append_str(&str, "#define __unix__\n");
+    dstr_append_str(&str, "#define __unix\n");
+#endif
+
+    // Supported C ISO version
+    // @FIXME: Support C89/C11? For now we don't care so we just set it to 0.
+    int c_version = 0;
+    dstr_append_f(&str, "#define __STDC_VERSION__ %d\n", c_version);
+
+    // Dummy file name.
+    strv predefine_file = strv_make_from_str("<predefine>");
+
+    // Setup lexer with the created content.
+    ac_lex_set_content(&pp->lex, dstr_to_strv(&str), predefine_file);
+    const ac_token* token = NULL;
+
+    // Consume all tokens to define all macros above.
+    while ((token = ac_pp_goto_next(pp)) != NULL
+        && token->type != ac_token_type_EOF)
+    {
+        // Do nothing.
+    }
+
+    dstr_destroy(&str);
 }
