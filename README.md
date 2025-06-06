@@ -43,7 +43,7 @@ You can check to [TODO](docs/TODO.md) list to see what has been implemented alre
 - Nested procedures and types.
 - dot operator as dereference operator. `a->b` should be equivalent to `a.b`.
 - `ptr(int) a = NULL;` will be an alias for `int *a = NULL`.
-- `arr(int, 10) a;` will be an alias for `int[10] a;`.
+- `arr(int, 10) a;` will be an alias for `int a[10];`.
 - All built-in operators or directives will be prefixed with `@` such as:
     - `@sizeof`
     - `@typeof`
@@ -54,18 +54,12 @@ You can check to [TODO](docs/TODO.md) list to see what has been implemented alre
 - [Generic types](docs/drafts/generic_type.md)
 - [Conditional access](docs/drafts/conditional_access.md)
 - [Concise if branches](docs/drafts/concise_if.md)
-- User-defined for loops. (@TODO)
-- [Enum bindings](docs/drafts/binding.md)
-- Declaration in conditions:
-```
-    if (is_even(v)
-        { int a = multiplied(v) }  /* This a statement that do no return any boolean values. */
-        && is_multiple_of_two(a))
-    {
-        /* Do something. */    
-    }
-```
 - Underscores in number [literals](docs/literals.md#more-lax-single-quotes-digit-separator).
+- [Identifier literal](docs/literals.md#identifier).
+    - `int @"Hello World" = 1;`
+- [Constants declaration](docs/constants.md#constants).
+    - `PI @= 3.14f;`
+- User-defined for loops. (@TODO)
 - Everything initialized with zero, unless explicit uninitialization.
 - Compile-time evaluation via bytecode + VM.
 

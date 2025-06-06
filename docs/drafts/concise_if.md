@@ -12,16 +12,16 @@ if {
 ```
 The AC code above equivalent to this C code:
 ```c
-if (value == 0) { printf("equal zero\n"); }
-else if (value < -10 && value > 10) { printf("between -10 and 10\n"); }
-else { printf("else\n") }
+if (value == 0) { printf("equal zero"); }
+else if (value < -10 && value > 10) { printf("between -10 and 10"); }
+else { printf("else") }
 ```
 This concise if statement can also be used like an expression.
 ```c
 const char* text = if {
-    (value == 0) "equal zero\n";
-    (value > 10 && value < -10) "between -10 and 10\n";
-    else "else\n";
+    (value == 0) "equal zero";
+    (value > 10 && value < -10) "between -10 and 10";
+    else "else";
 }
 printf(text);
 ```

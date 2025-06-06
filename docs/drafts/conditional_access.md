@@ -5,7 +5,7 @@ I'm not aware of a use case were we need to store optional types, however I ofte
 
 Here is a function using "conditional value".
 ```c
-? int get_item(key k)
+int get_item(key k) ??
 {
     item i = { 0 };
     if (try_find(map, k, &i))
@@ -34,8 +34,8 @@ if((result_a = get_result_a(value_a)) > 0)
 ```c
 /* Equivalent in AC */
 int final_result = -1;
-if (int a ? get_result_a(value_a)
-    && int b ? get_result_b(value_b))
+if (get_result_a(value_a) ?? a
+    && get_result_b(value_b) ?? b)
 {
     final_result = compute(a, b);
 }
@@ -44,7 +44,7 @@ if (int a ? get_result_a(value_a)
 ## Example 2 - Query an item from a container
 
 ```c
-if (auto value ? get_item(map, key))
+if (get_item(map, key) ?? value)
 {
     /* Do something with the value. */
 }
@@ -53,40 +53,9 @@ if (auto value ? get_item(map, key))
 ## Example 3 - Iteration
 
 ```c
-auto it = range_make(0, 10);
-while(auto i ? next(it)) {
+range it = range_make(0, 10);
+
+while(next(it) ?? i ) {
     print("value %d\n", i);
 }
 ```
-
-## Example 4 - Used with "binding"
-
-```c
-struct temperature_t {
-    enum { Celsius, Fahrenheit, Kelvin } temp_type;
-    double value;
-}
-
-struct temp { /* This body is not visible outside of this type */
-    temperature_t t; 
-} enum (t.temp_type) /* Use enum to bind to values. */
-{
-    Celsius = t.value;
-    Fahrenheit = t.value;
-    Kelvin = t.value;
-}
-
-temp t = temp.Celsius(10.0);
-
-if      (auto c ?= t.Celsius)    { printf("%f °C\n", c); }
-else if (auto f ?= t.Fahrenheit) { printf("%f °F\n", f); }
-else if (auto k ?= t.Kelvin)     { printf("%f K\n", k); }
-
-/*
-Output:
-10 °C
-*/
-
-```
-
-See also [binding](docs/drafts/binding.md).

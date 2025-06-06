@@ -49,10 +49,10 @@ Like integer literals, floats benefit from the lax single quotes digit separator
 - u'c-char ' is supported.
 - U'c-char ' is supported.
 - L'c-char ' is supported.
-- 'c-char-sequence ' is not supported.
-- u'c-char-sequence ' is not supported.
-- U'c-char-sequence ' is not supported.
-- L'c-char-sequence ' is not supported.
+- 'c-char-sequence ' is *not* supported.
+- u'c-char-sequence ' is *not* supported.
+- U'c-char-sequence ' is *not* supported.
+- L'c-char-sequence ' is *not* supported.
 
 ## String
 
@@ -61,3 +61,11 @@ Like integer literals, floats benefit from the lax single quotes digit separator
 - u" s-char-sequence " is supported.
 - U" s-char-sequence " is supported.
 - L" s-char-sequence " is supported.
+
+## Identifier
+
+`@"<identifier>"` can be used to declare identifiers.
+It allows any special characters (space, tab, UNICODE, etc.) to be part of an identifier.
+
+`int @"a" = 0;` is equivalent to: `int a = 0;`
+`int @"Hello@World?" = 0` is also allowed.
