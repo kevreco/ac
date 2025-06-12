@@ -1,4 +1,4 @@
-#ifdef _MSC_VER
+#ifdef _WIN32
 foo
 #endif
 #ifdef __unix__

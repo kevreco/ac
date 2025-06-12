@@ -4,6 +4,7 @@
 
 # generated files
 *.g.c
+*.g.h
 
 # svn files
 .svn

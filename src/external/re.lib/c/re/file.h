@@ -121,7 +121,7 @@ re_file_open(const char* path, const char* mode)
 	if (!file)
 #endif
 	{
-		fprintf(stderr, "Could not open file '%s'", path);
+		fprintf(stderr, "Could not open file '%s'\n", path);
 		return NULL;
 	}
 
@@ -155,7 +155,7 @@ re_file_close(FILE* file)
 {
 	if (fclose(file) != 0)
 	{
-		fprintf(stderr, "Could not close file '%p'", file);
+		fprintf(stderr, "Could not close file '%p'\n", file);
 		return 0;
 	}
 	return 1;

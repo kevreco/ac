@@ -2,6 +2,13 @@
 
 #include <time.h>
 
+/* @FIXME: predefines are always static for now. */
+#define AC_STATIC_PREDEFINES
+
+#ifdef AC_STATIC_PREDEFINES
+#include "predefines.g.h"
+#endif
+
 typedef struct range range;
 struct range {
     size_t start;
@@ -16,14 +23,14 @@ typedef struct ac_macro ac_macro;
 struct ac_macro {
     ac_ident* ident;        /* Name of the macro */
     /* Example of function-like macro:
-         #define X(x, y) (x + y)'
+         #define X(x, y) (x + y)
        Example of object-like macro:
-         #define Y (1 + 2)*/
+         #define Y (1 + 2) */
     bool is_function_like;
 
     darr_token definition; /* Contains tokens from parameters and body. */
-    range params;               /* If function-like macro, range of tokens from definition representing the parameters. Parsed at directive-time. */
-    range body;                 /* Range of token from definition representing the body. Parsed at directive-time.*/
+    range params;          /* If function-like macro, range of tokens from definition representing the parameters. Parsed at directive-time. */
+    range body;            /* Range of token from definition representing the body. Parsed at directive-time.*/
 
     ac_location location;
 };
@@ -1949,32 +1956,48 @@ static void consume_predefines(ac_pp* pp)
     dstr str;
     dstr_init(&str);
 
-#ifdef _MSC_VER
-    dstr_append_str(&str, "#define _MSC_VER " AC_STRINGIZE(_MSC_VER) "\n");
+    dstr_append_str(&str,
+    ""
+#ifdef _WIN32
+    "#define _WIN32\n"
+#endif
+
+#ifdef _WIN64
+    "#define _WIN64\n"
 #endif
 
 #if !defined(_WIN32) && (defined(__unix__) || defined(__unix) || (defined(__APPLE__) && defined(__MACH__)))
-    dstr_append_str(&str, "#define __unix__\n");
-    dstr_append_str(&str, "#define __unix\n");
+    "#define __unix__\n"
+    "#define __unix\n"
 #endif
-
-    // Supported C ISO version
-    // @FIXME: Support C89/C11? For now we don't care so we just set it to 0.
+    ); /* dstr_append_str */
+    
+    /* Supported C ISO version */
+    /* @FIXME: Support C89/C11? For now we don't care so we just set it to 0. */
     int c_version = 0;
     dstr_append_f(&str, "#define __STDC_VERSION__ %d\n", c_version);
 
-    // Dummy file name.
+    /* Add more predefines. */
+    dstr_append_str(&str,
+#if defined(AC_STATIC_PREDEFINES)
+        static_predefines
+#else
+        "#include <predefines.h>\n" /* load at runtime */
+#endif
+    );
+
+    /* Dummy file name. */
     strv predefine_file = strv_make_from_str("<predefine>");
 
-    // Setup lexer with the created content.
+    /* Setup lexer with the created content. */
     ac_lex_set_content(&pp->lex, dstr_to_strv(&str), predefine_file);
     const ac_token* token = NULL;
 
-    // Consume all tokens to define all macros above.
+    /* Consume all tokens to define all macros above. */
     while ((token = ac_pp_goto_next(pp)) != NULL
         && token->type != ac_token_type_EOF)
     {
-        // Do nothing.
+        /* Do nothing. */
     }
 
     dstr_destroy(&str);

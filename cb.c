@@ -17,6 +17,7 @@ const char* root_dir = "./";
 
 /* Forward declarations */
 
+void file_to_c_str(const char* variable_name, const char* src_file, const char* dst_file);
 void assert_path(const char* path);
 void assert_process(const char* cmd);
 void assert_run(const char* exe);
@@ -31,6 +32,11 @@ void test_c_generation(const char* exe, const char* directory);
 int main()
 {
 	cb_init();
+
+	/* Turn file content into another file containing a static char* with the value of the original file.
+	   We do this only once per build. */
+	
+ 	file_to_c_str("static_predefines", "./src/ac/predefines.h", "./src/ac/predefines.g.h");
 
 	build_with("Release");
 
@@ -160,6 +166,68 @@ const char* build_with(const char* config)
 	}
 
 	return ac_exe;
+}
+
+/* Turn file into another file containing a C string literal. */
+void file_to_c_str(const char* variable_name, const char* src_filepath, const char* dst_filepath)
+{
+	dstr src_content;
+	dstr_init(&src_content);
+	
+	dstr dst_content;
+	dstr_init(&dst_content);
+
+	if (!re_file_open_and_read(&src_content, src_filepath))
+	{
+		fprintf(stderr, "Cannot open file to convert: %s\n", src_filepath);
+		exit(1);
+	}
+
+	const char* c = src_content.data;
+	const char* end = src_content.data + src_content.size;
+
+	while (c < end)
+	{
+		switch (*c)
+		{
+		case '\r':
+		{
+			c += 1;
+			if (*c != '\n')
+			{
+				dstr_append_char(&dst_content, '\\');
+				dstr_append_char(&dst_content, 'n');
+				break; /* Break */
+				
+			}
+			/* FALLTHROUGH  */
+		}
+		case '\n':
+		{
+			/* Add '\n' */
+			dstr_append_char(&dst_content, '\\');
+			dstr_append_char(&dst_content, 'n');
+			break;
+		}
+		case '"':{
+		
+			dstr_append_char(&dst_content, '/');
+			dstr_append_char(&dst_content, '"');
+			/* FALLTHROUGH */
+			break;
+		}
+		default:
+			dstr_append_char(&dst_content, *c);
+		}
+
+		c += 1;
+	}
+	
+	FILE* dst_file = re_file_open_readwrite(dst_filepath);
+
+	fprintf(dst_file, "const char* %s = \"" STRV_FMT "\";", variable_name, STRV_ARG(dstr_to_strv(&dst_content)));
+
+	re_file_close(dst_file);
 }
 
 void assert_path(const char* path)
