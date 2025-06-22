@@ -1,0 +1,4 @@
+./tests/preprocessor_message/011_error.c:1:6: #error: foo
+1 | #error foo
+         ^
+2 | #error bar

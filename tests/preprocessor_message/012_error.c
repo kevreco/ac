@@ -1,0 +1,2 @@
+#warning foo
+#error bar

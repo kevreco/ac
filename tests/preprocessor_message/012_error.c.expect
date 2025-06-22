@@ -1,0 +1,8 @@
+./tests/preprocessor_message/012_error.c:1:8: #warning: foo
+1 | #warning foo
+           ^
+2 | #error bar
+./tests/preprocessor_message/012_error.c:3:6: #error: bar
+2 | #warning foo
+3 | #error bar
+         ^

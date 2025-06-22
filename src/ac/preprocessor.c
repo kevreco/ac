@@ -588,6 +588,9 @@ branch_case:
     case ac_token_type_ERROR: {
 
         ac_consume_and_display_message(&pp->lex, ac_token_type_ERROR);
+
+        // set error as the next token to stop the lexer.
+        ac_set_token_error(&pp->lex);
         return false;
     } case ac_token_type_WARNING: {
 
