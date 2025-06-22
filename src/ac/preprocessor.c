@@ -585,15 +585,20 @@ branch_case:
         break;
     }
 
-    case ac_token_type_ERROR:
+    case ac_token_type_ERROR: {
+
+        ac_consume_and_display_message(&pp->lex, ac_token_type_ERROR);
+        return false;
+    } case ac_token_type_WARNING: {
+
+        ac_consume_and_display_message(&pp->lex, ac_token_type_WARNING);
+
+        // @TODO return false if "treat warning as error" is set to true".
+        return true;
+    }
     case ac_token_type_EMBED:
     case ac_token_type_PRAGMA:
     case ac_token_type_LINE:
-    case ac_token_type_WARNING:
-        ac_report_warning_loc(location(pp), "ignoring unsupported directive");
-        goto_next_raw_token(pp); /* Skip directive name. */
-        skip_all_until_new_line(pp);
-        return true;
     case ac_token_type_IDENTIFIER:
         ac_report_warning_loc(location(pp), "ignoring unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
         goto_next_raw_token(pp); /* Skip directive name. */

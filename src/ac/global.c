@@ -14,7 +14,11 @@ enum message_type
     message_type_NONE,
     message_type_WARNING,
     message_type_ERROR,
-    message_type_INTERNAL_ERROR
+    message_type_INTERNAL_ERROR,
+    // Preprocessor warning
+    message_type_PP_WARNING,
+    // Preprocessor error
+    message_type_PP_ERROR,
 };
 
 static void display_message_v(FILE* file, enum message_type type, ac_location location, int surrounding_lines, const char* fmt, va_list args);
@@ -71,6 +75,16 @@ void ac_report_internal_error_loc(ac_location loc, const char* fmt, ...)
 {
     REPORT_ERROR_LOC(message_type_INTERNAL_ERROR);
     exit(1);
+}
+
+void ac_report_pp_warning_loc(ac_location loc, const char* fmt, ...)
+{
+    REPORT_ERROR_LOC(message_type_PP_WARNING);
+}
+
+void ac_report_pp_error_loc(ac_location loc, const char* fmt, ...)
+{
+    REPORT_ERROR_LOC(message_type_PP_ERROR);
 }
 
 void ac_report_error_expr(ac_ast_expr* expr, const char* fmt, ...)
@@ -173,6 +187,8 @@ static const char* get_message_prefix(enum message_type type)
     case message_type_WARNING: return "warning:";
     case message_type_ERROR: return "error:";
     case message_type_INTERNAL_ERROR: return "internal error:";
+    case message_type_PP_WARNING: return "#warning:";
+    case message_type_PP_ERROR: return "#error:";
     default: return "";
     }
     return "";

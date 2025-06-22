@@ -306,6 +306,10 @@ void ac_lex_restore(ac_lex* l, ac_lex_state* s);
 /* Skip block of text between #if and #endif. */
 ac_token* ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line);
 
+/* Display all tokens after #warning or #error until EOF or end-of-line. 
+   'type' must be a warning or an error. */
+void ac_consume_and_display_message(ac_lex* l, enum ac_token_type type);
+
 /* Parse every characters until the first '>' */
 ac_token* ac_parse_include_path(ac_lex* l);
 

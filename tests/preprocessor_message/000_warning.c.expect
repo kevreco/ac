@@ -1,0 +1,3 @@
+./tests/preprocessor_message/000_warning.c:1:8: #warning: foo
+1 | #warning foo
+           ^

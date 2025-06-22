@@ -34,6 +34,7 @@ static bool next_is(const ac_lex* l, char c);      /* next char equal to */
 static bool next_next_is(const ac_lex* l, char c); /* next next char equal to */
 
 static int consume_one(ac_lex* l);     /* Goto next char and keep up with location of the token. */
+static void skip_horizontal_whitespace(ac_lex* l);
 static void skip_newlines(ac_lex* l);  /* Deal with \n, an \r and \r\n. \r\n should be skipped at the same time. */
 static bool skip_comment(ac_lex* l);         /* Skip C comment. */
 static void skip_inline_comment(ac_lex* l);  /* Skip inline comment. */
@@ -155,11 +156,9 @@ ac_token* ac_lex_goto_next(ac_lex* l)
         case '\v': {
             /* Parse group of horizontal whitespace. */
             const char* start = l->cur;
-            while (is_horizontal_whitespace(l->cur[0])) {
-                consume_one(l);
-            }
-           
-           return token_from_text(l, ac_token_type_HORIZONTAL_WHITESPACE, strv_make_from(start, l->cur - start));
+            skip_horizontal_whitespace(l);
+
+            return token_from_text(l, ac_token_type_HORIZONTAL_WHITESPACE, strv_make_from(start, l->cur - start));
         }
 
         case '\n':
@@ -301,7 +300,6 @@ ac_token* ac_lex_goto_next(ac_lex* l)
             }
             return token_from_type(l, ac_token_type_TILDE);
         }
-
 
         case '/': {
             c = next_char_no_splice(l); /* Skip '/' */
@@ -658,6 +656,46 @@ ac_token* ac_skip_preprocessor_block(ac_lex* l, bool was_end_of_line)
     return token_eof(l);
 }
 
+void ac_consume_and_display_message(ac_lex* l, enum ac_token_type type)
+{
+    AC_ASSERT(type == ac_token_type_WARNING || type == ac_token_type_ERROR);
+
+    ac_location loc = l->location;
+
+    dstr_clear(&l->tok_buf);
+
+    skip_horizontal_whitespace(l);
+
+    int c = l->cur[0]; 
+
+    /* Add every single character until EOF or end-of-line. */
+    do {
+        dstr_append_char(&l->tok_buf, c);
+        c = next_char_no_splice(l);
+    } while (c != '\n' && c != '\r' && c != '\0');
+
+ 
+    if (l->token.type == ac_token_type_ERROR)
+    {
+        ac_report_pp_error_loc(loc, "%s", l->tok_buf.data);
+    }
+    else
+    {
+        ac_report_pp_warning_loc(loc, "%s", l->tok_buf.data);
+    }
+
+    bool ended_with_new_line = c == '\n' || c == '\r';
+
+    if (ended_with_new_line)
+    {
+        location_increment_row(&l->location, 1);
+    }
+
+    /* The last token was the "error" or "warning", however we advanced past them and we are now on a EOF or new line,
+       The lexer is advanced to the next token to properly continue. */
+    ac_lex_goto_next(l);
+}
+
 ac_token* ac_parse_include_path(ac_lex* l)
 {
     /* Current token is '<' and current char is the one following it. */
@@ -730,6 +768,14 @@ static inline int consume_one(ac_lex* l) {
     l->cur++;
     location_increment_column(&l->location, 1);
     return l->cur[0];
+}
+
+static void skip_horizontal_whitespace(ac_lex* l)
+{
+    while (is_horizontal_whitespace(l->cur[0]))
+    {
+        consume_one(l);
+    }
 }
 
 static void skip_newlines(ac_lex* l) {

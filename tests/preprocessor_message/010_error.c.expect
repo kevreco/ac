@@ -1,0 +1,3 @@
+./tests/preprocessor_message/010_error.c:1:6: #error: foo
+1 | #error foo
+         ^

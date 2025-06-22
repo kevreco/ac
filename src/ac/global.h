@@ -46,6 +46,9 @@ void ac_report_warning(const char* fmt, ...);
 void ac_report_error_loc(ac_location loc, const char* fmt, ...);
 void ac_report_internal_error_loc(ac_location loc, const char* fmt, ...);
 void ac_report_warning_loc(ac_location loc, const char* fmt, ...);
+void ac_report_pp_warning_loc(ac_location loc, const char* fmt, ...);
+void ac_report_pp_error_loc(ac_location loc, const char* fmt, ...);
+
 void ac_report_error_expr(ac_ast_expr* expr, const char* fmt, ...);
 void ac_report_warning_expr(ac_ast_expr* expr, const char* fmt, ...);
 
