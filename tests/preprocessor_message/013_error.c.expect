@@ -1,0 +1,4 @@
+./tests/preprocessor_message/013_error.c:1:6: #error: foo
+1 | #error f\
+         ^
+2 | oo

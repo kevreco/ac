@@ -1,0 +1,4 @@
+./tests/preprocessor_message/002_warning.c:1:8: #warning: foo
+1 | #warning f\
+           ^
+2 | oo
