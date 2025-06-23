@@ -1299,6 +1299,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
                 return token_error(l);
             }
             /* Not float so we return an integer. */
+            num.is_unsigned = true;
             num.u.int_value = hex_string_to_int(l->tok_buf.data, l->tok_buf.size);
             return token_integer_literal(l, num);
         }
@@ -1317,6 +1318,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
                 ac_report_error_loc(l->leading_location, "invalid binary value");
                 return token_error(l);
             }
+            num.is_unsigned = true;
             num.u.int_value = n;
             return token_integer_literal(l, num);
         }
@@ -1358,6 +1360,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
     }
 
     /* Return the parsed integer. */
+    num.is_unsigned = true;
     num.u.int_value = n;
     return token_integer_literal(l, num);
 }

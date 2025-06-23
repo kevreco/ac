@@ -54,6 +54,7 @@ int main()
 	test_preprocessor(ac_exe, "./tests/preprocessor_include/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_unsupported/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_predefine/");
+	test_preprocessor(ac_exe, "./tests/preprocessor_line/");
 
 	test_error(ac_exe, "./tests/preprocessor_message/");
 	test_error(ac_exe, "./tests/errors/preprocessor/");

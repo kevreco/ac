@@ -61,6 +61,7 @@ static ac_token* goto_next_macro_expanded(ac_pp* pp);
 /* @FIXME: all those "goto_next" are becoming messy. Make it clearer. */
 static ac_token* goto_next_macro_expanded_no_space(ac_pp* pp);
 
+/* Skip until new line or EOF. */
 static void skip_all_until_new_line(ac_pp* pp);
 
 static bool parse_directive(ac_pp* pp);
@@ -599,9 +600,44 @@ branch_case:
         // @TODO return false if "treat warning as error" is set to true".
         return true;
     }
+    case ac_token_type_LINE: {
+    
+        ac_location loc = pp->lex.location;
+        goto_next_token_from_directive(pp); /* Skip 'line' */
+
+        expect(pp, ac_token_type_LITERAL_INTEGER);
+
+        if (!pp->lex.token.u.number.is_unsigned)
+        {
+            ac_report_error_loc(pp->lex.location, "integer expected after #line");
+        }
+
+        /* Save line number and set it after the #line directive. */
+        int64_t line_number = pp->lex.token.u.number.u.int_value;
+
+        goto_next_token_from_directive(pp); /* Skip 'number' */
+
+        if (token_ptr(pp)->type == ac_token_type_LITERAL_STRING)
+        {
+            /* Set new filename. */
+            pp->lex.filepath = pp->lex.token.text;
+          
+            goto_next_token_from_directive(pp); /* Skip 'string' */
+        }
+
+        if (token_ptr(pp)->type != ac_token_type_EOF && token_ptr(pp)->type != ac_token_type_NEW_LINE)
+        {
+            ac_report_warning_loc(loc, "extra tokens at end of #line directive");
+        }
+        skip_all_until_new_line(pp);
+        goto_next_raw_token(pp); /* Skip new line or EOF. */
+
+        /* Change line number after the #line directive line. */
+        pp->lex.location.row = line_number;
+        return true;
+    }
     case ac_token_type_EMBED:
     case ac_token_type_PRAGMA:
-    case ac_token_type_LINE:
     case ac_token_type_IDENTIFIER:
         ac_report_warning_loc(location(pp), "ignoring unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));
         goto_next_raw_token(pp); /* Skip directive name. */

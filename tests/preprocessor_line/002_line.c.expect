@@ -1,0 +1,10 @@
+int main()
+{
+    const char* foo;
+    foo = 4;
+    foo = "./tests/preprocessor_line/002_line.c";
+    foo = 100;
+    foo = "./tests/preprocessor_line/002_line.c";
+    foo = 200;
+    foo = "foo.c";
+}
