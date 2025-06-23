@@ -54,7 +54,9 @@ We need the following feature to test `__func__`, `__FUNCTION__` and `__PRETTY_F
  - ☑ Support defined(XXX) expression in #if/#elif
  - ☑ Support #ifdef/#ifndef/#elifdef/#elifndef
  - ☑ Support #warning and #error
-
+ - ☑ Support #line
+ - ☐ Support #embed
+ 
 ### 1.X
 
  - ☐ Correctly compile the [SQLite amalgamation](https://www.sqlite.org/download.html) from file preprocessed by AC.
