@@ -1824,16 +1824,16 @@ void ac_token_fprint(FILE* file, ac_token t)
     strv prefix = ac_token_prefix(t);
     if (prefix.size)
     {
-        fprintf(file, "%.*s", (int)prefix.size, prefix.data);
+        fprintf(file, STRV_FMT, STRV_ARG(prefix));
     }
-    const char* format = "%.*s";
+    const char* format = STRV_FMT;
     if (t.type == ac_token_type_LITERAL_STRING)
-        format = t.u.str.is_system_path ? "<%.*s>" : "\"%.*s\"";
+        format = t.u.str.is_system_path ? "<" STRV_FMT ">" : "\"" STRV_FMT "\"";
     else  if (t.type == ac_token_type_LITERAL_CHAR)
-        format = "'%.*s'";
+        format = "'"STRV_FMT"'";
 
     strv s = ac_token_to_strv(t);
-    fprintf(file, format, (int)s.size, s.data);
+    fprintf(file, format, STRV_ARG(s));
 }
 
 void ac_token_sprint(dstr* str, ac_token t)
@@ -1846,16 +1846,16 @@ void ac_token_sprint(dstr* str, ac_token t)
     strv prefix = ac_token_prefix(t);
     if (prefix.size)
     {
-        dstr_append_f(str, "%.*s", (int)prefix.size, prefix.data);
+        dstr_append_f(str, STRV_FMT, (int)prefix.size, prefix.data);
     }
-    const char* format = "%.*s";
+    const char* format = STRV_FMT;
     if (t.type == ac_token_type_LITERAL_STRING)
-        format = t.u.str.is_system_path ? "<%.*s>" : "\"%.*s\"";
+        format = t.u.str.is_system_path ? "<" STRV_FMT ">" : "\"" STRV_FMT "\"";
     else  if (t.type == ac_token_type_LITERAL_CHAR)
-        format = "'%.*s'";
+        format = "'" STRV_FMT "'";
 
     strv s = ac_token_to_strv(t);
-    dstr_append_f(str, format, (int)s.size, s.data);
+    dstr_append_f(str, format, STRV_ARG(s));
 }
 
 ac_token_info* ac_token_infos()
