@@ -49,6 +49,7 @@ ac_allocator_allocate(ac_allocator* a, size_t byte_size)
     AC_ASSERT(a);
     void* ptr = a->malloc(a->user_data, NULL, byte_size);
     AC_ASSERT(ptr && "Could not allocate memory.");
+    memset(ptr, 0, byte_size);
     return ptr;
 }
 
