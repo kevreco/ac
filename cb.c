@@ -21,13 +21,26 @@ void file_to_c_str(const char* variable_name, const char* src_file, const char* 
 void assert_path(const char* path);
 void assert_process(const char* cmd);
 void assert_run(const char* exe);
+void assert_file_against_content(const char* expected_file, dstr* expected_content, strv actual_content);
+void assert_same_file_content(const char* expected_filename, dstr* expected_content, const char* actual_filename, dstr* actual_content, bool new_line_insensitive);
+void assert_same_content(strv expected, strv actual, bool new_line_insensitive);
 void build_generated_exe_and_run(const char* file);
 const char* build_with(const char* config);
 void my_project(const char* project_name, const char* toolchain, const char* config);
 void test_parse_only(const char* exe, const char* directory);
 void test_preprocessor(const char* exe, const char* directory);
 void test_error(const char* exe, const char* directory);
-void test_c_generation(const char* exe, const char* directory);
+void test_generated_source(const char* exe, const char* directory);
+void test_program_output(const char* exe, const char* directory);
+
+enum test_type {
+	/* Test the content of "file.g.c" against "file.g.c.expect". */
+	test_type_SOURCE,
+	/* Test the output of the generated program "program.exe". The exit code must be 0. */
+	test_type_OUTPUT
+};
+
+void test_generated_source_or_program_output(const char* exe, const char* directory, enum test_type type);
 
 int main()
 {
@@ -45,7 +58,7 @@ int main()
 	const char* ac_exe = build_with("Debug");
 
 	test_parse_only(ac_exe,   "./tests/parse_declarations/");
-	test_c_generation(ac_exe, "./tests/generate_c/");
+	test_program_output(ac_exe, "./tests/generate_c/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_literals/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_splice/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_null/");
@@ -262,6 +275,61 @@ void assert_run(const char* exe)
 	}
 }
 
+void assert_file_against_content(const char* expected_file, dstr* expected_content, strv actual_content)
+{
+	cb_assert_file_exists(expected_file);
+
+	if (!re_file_open_and_read(expected_content, expected_file))
+	{
+		fprintf(stderr, "Can't open file: %s\n", expected_file);
+		exit(1);
+	}
+
+	strv expected_strv = dstr_to_strv(expected_content);
+	assert_same_content(expected_strv, actual_content, true);
+}
+
+void assert_same_file_content(const char* expected_filename, dstr* expected_content, const char* actual_filename, dstr* actual_content, bool new_line_insensitive)
+{
+	cb_assert_file_exists(expected_filename);
+	cb_assert_file_exists(actual_filename);
+
+	if (!re_file_open_and_read(expected_content, expected_filename))
+	{
+		fprintf(stderr, "Can't open file: %s\n", expected_filename);
+		exit(1);
+	}
+
+	if (!re_file_open_and_read(actual_content, actual_filename))
+	{
+		fprintf(stderr, "Can't open file: %s\n", actual_filename);
+		exit(1);
+	}
+
+	strv expected_strv = dstr_to_strv(expected_content);
+	strv actual_strv = dstr_to_strv(actual_content);
+	assert_same_content(expected_strv, actual_strv, new_line_insensitive);
+}
+
+void assert_same_content(strv expected, strv actual, bool new_line_insensitive)
+{
+	bool is_same = new_line_insensitive
+		? strv_equals_newline_insensitive(expected, actual)
+		: strv_equals(expected, actual);
+
+	if (!is_same)
+	{
+		/* In case of failure, display both expected and actual content. */
+		fprintf(stderr, "<<<<<<<<<<<<<<<<<<<<<<<<< EXPECTED\n'" STRV_FMT "'\n", STRV_ARG(expected));
+		fprintf(stderr, "==================================\n'" STRV_FMT "'\n", STRV_ARG(actual));
+		fprintf(stderr, ">>>>>>>>>>>>>>>>>>>>>>>>> ACTUAL  \n'");
+
+		fprintf(stderr, "ERROR: contents do not match.\n");
+
+		exit(1);
+	}
+}
+
 void test_parse_only(const char* exe, const char* directory)
 {
 	assert_path(exe);
@@ -289,7 +357,6 @@ void test_parse_only(const char* exe, const char* directory)
 	cb_file_it_destroy(&it);
 	dstr_destroy(&cmd);
 }
-
 
 int str_ends_with(const char* str, const char* suffix)
 {
@@ -368,34 +435,12 @@ void test_output(const char* exe, const char* directory, enum output_type type, 
 		}
 
 		/* Compare output with the expected content. */
-		{
-			dstr_assign_f(&expected_filename, "%s.expect", file);
 
-			cb_assert_file_exists(expected_filename.data);
+		dstr_assign_f(&expected_filename, "%s.expect", file);
 
-			if (!re_file_open_and_read(&expected_content, expected_filename.data))
-			{
-				fprintf(stderr, "Can't open file: %s\n", expected_filename.data);
-				exit(1);
-			}
-
-			bool is_same = new_line_insensitive
-				? strv_equals_newline_insensitive(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content))
-				: strv_equals(dstr_to_strv(&expected_content), dstr_to_strv(&preprocessor_content));
-
-			if (!is_same)
-			{
-				/* In case of failure, display both expected and actual content. */
-				fprintf(stderr,"<<<<<<<<<<<<<<<<<<<<<<<<< EXPECTED\n'" STRV_FMT "'\n", STRV_ARG(expected_content));
-				fprintf(stderr,"==================================\n'" STRV_FMT "'\n", STRV_ARG(preprocessor_content));
-				fprintf(stderr,">>>>>>>>>>>>>>>>>>>>>>>>> ACTUAL  \n'");
-
-				fprintf(stderr, "ERROR: Preprocessor contents do not match.\n");
-
-				exit(1);
-			}
-		}
-
+		strv actual_strv = dstr_to_strv(&preprocessor_content);
+		assert_file_against_content(expected_filename.data, &expected_content, actual_strv);
+	
 		printf("OK\n");
 	}
 
@@ -421,7 +466,17 @@ void test_error(const char* exe, const char* directory)
 	test_output(exe, directory, output_type_STDERR, new_line_insensitive);
 }
 
-void test_c_generation(const char* exe, const char* directory)
+void test_generated_source(const char* exe, const char* directory)
+{
+	test_generated_source_or_program_output(exe, directory, test_type_SOURCE);
+}
+
+void test_program_output(const char* exe, const char* directory)
+{
+	test_generated_source_or_program_output(exe, directory, test_type_OUTPUT);
+}
+
+void test_generated_source_or_program_output(const char* exe, const char* directory, enum test_type type)
 {
 	assert_path(exe);
 	assert_path(directory);
@@ -430,6 +485,15 @@ void test_c_generation(const char* exe, const char* directory)
 	dstr_init(&cmd);
 	dstr generated_file_name;
 	dstr_init(&generated_file_name);
+
+	dstr expected_filename;
+	dstr_init(&expected_filename);
+
+	dstr expected_content;
+	dstr_init(&expected_content);
+
+	dstr actual_content;
+	dstr_init(&actual_content);
 
 	cb_file_it it;
 	cb_file_it_init(&it, directory);
@@ -450,16 +514,31 @@ void test_c_generation(const char* exe, const char* directory)
 		dstr_assign_f(&generated_file_name, "%s", file);
 		/* Replace .c extension with .g.c extension */
 		dstr_append_from(&generated_file_name, generated_file_name.size - c_ext.size, gc_ext);
-
+		
 		cb_assert_file_exists(generated_file_name.data);
 
-		build_generated_exe_and_run(generated_file_name.data);
+		if (type == test_type_SOURCE)
+		{
+			/* Create string like "XXX.g.c.expect". */
+			dstr_assign_f(&expected_filename, "%s.expect", generated_file_name.data);
 
+			assert_same_file_content(expected_filename.data, &expected_content, generated_file_name.data, &actual_content, true);
+		}
+		else if (type == test_type_OUTPUT)
+		{
+			/* Test executable outpudt*/
+			build_generated_exe_and_run(generated_file_name.data);
+		}
+		
 		printf("OK\n");
 	}
 
 	cb_file_it_destroy(&it);
 	dstr_destroy(&generated_file_name);
+	dstr_destroy(&expected_filename);
+	dstr_destroy(&expected_content);
+	dstr_destroy(&actual_content);
+	
 	dstr_destroy(&cmd);
 }
 
