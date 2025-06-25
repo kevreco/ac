@@ -108,7 +108,17 @@ static void print_expr(ac_converter_c* c, ac_ast_expr* expr)
         || expr->type == ac_ast_type_LITERAL_STRING)
     {
         CAST_TO(ac_ast_literal*, literal, expr);
-        ac_token_sprint(&c->string_buffer, literal->token);
+        if (expr->type == ac_ast_type_LITERAL_STRING
+            && literal->token.u.str.is_embed_path)
+        {
+            print_str(c, "\n#embed ");
+            ac_token_sprint(&c->string_buffer, literal->token);
+            print_str(c, "\n");
+        }
+        else
+        {
+            ac_token_sprint(&c->string_buffer, literal->token);
+        }
     }
     else if (expr->type == ac_ast_type_PARAMETER)
     {
@@ -251,6 +261,7 @@ static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator)
     if (declarator->pointer_depth)
     {
         print_pointers(c, declarator->pointer_depth);
+        print_str(c, " ");
     }
 
     /* True declarator contains an identifier, however we also use declarator to handle parameters.

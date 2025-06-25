@@ -1828,7 +1828,7 @@ void ac_token_fprint(FILE* file, ac_token t)
     }
     const char* format = "%.*s";
     if (t.type == ac_token_type_LITERAL_STRING)
-        format = "\"%.*s\"";
+        format = t.u.str.is_system_path ? "<%.*s>" : "\"%.*s\"";
     else  if (t.type == ac_token_type_LITERAL_CHAR)
         format = "'%.*s'";
 
@@ -1850,7 +1850,7 @@ void ac_token_sprint(dstr* str, ac_token t)
     }
     const char* format = "%.*s";
     if (t.type == ac_token_type_LITERAL_STRING)
-        format = "\"%.*s\"";
+        format = t.u.str.is_system_path ? "<%.*s>" : "\"%.*s\"";
     else  if (t.type == ac_token_type_LITERAL_CHAR)
         format = "'%.*s'";
 

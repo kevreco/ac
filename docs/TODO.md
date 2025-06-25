@@ -55,7 +55,11 @@ We need the following feature to test `__func__`, `__FUNCTION__` and `__PRETTY_F
  - ☑ Support #ifdef/#ifndef/#elifdef/#elifndef
  - ☑ Support #warning and #error
  - ☑ Support #line
- - ☐ Support #embed
+ - ➖ Support #embed
+     Naive implementation of #embed, the directive "#embed "file.h" is translated into a string literal,
+     and then converted back into a #embed in the generated C file.
+     This assumes the final C compiler supports the #embed directive.
+     No more complicated cases are currently handled.
  
 ### 1.X
 

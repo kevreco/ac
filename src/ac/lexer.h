@@ -212,6 +212,10 @@ struct ac_token {
             bool is_utf16;   /* @TODO @OPT place this in a flag. */
             bool is_utf32;   /* @TODO @OPT place this in a flag. */
             bool is_wide;    /* @TODO @OPT place this in a flag. */
+            /* To know if string literal coming from an #embed directive. */
+            bool is_embed_path;  /* @TODO @OPT place this in a flag. */
+            /* To know if the literal is coming for "path.txt" or <path.txt> */
+            bool is_system_path; /* @TODO @OPT place this in a flag. */
         } str;
         struct {
             int64_t value;   /* @TODO @OPT place this in a flag. */

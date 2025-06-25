@@ -636,7 +636,38 @@ branch_case:
         pp->lex.location.row = line_number;
         return true;
     }
-    case ac_token_type_EMBED:
+    case ac_token_type_EMBED: {
+    
+        ac_location loc = pp->lex.location;
+        goto_next_token_from_directive(pp); /* Skip 'line' */
+
+        strv path;
+        bool is_system_path;
+        if (!parse_include_path(pp, &path, &is_system_path))
+        {
+            return false;
+        }
+
+        if (token_ptr(pp)->type != ac_token_type_EOF && token_ptr(pp)->type != ac_token_type_NEW_LINE)
+        {
+            ac_report_warning_loc(loc, "extra tokens at end of #embed directive");
+        }
+        skip_all_until_new_line(pp);
+
+        /* The lexer's current token is either a new line or an EOF.
+           We transform it into a "#embed" string literal.
+        */
+       
+        ac_token embed = { 0 };
+        embed.type = ac_token_type_LITERAL_STRING;
+        embed.text = path;
+        embed.u.str.is_embed_path = true;
+        embed.u.str.is_system_path = is_system_path;
+
+        pp->lex.token = embed;
+
+        return true;
+    }
     case ac_token_type_PRAGMA:
     case ac_token_type_IDENTIFIER:
         ac_report_warning_loc(location(pp), "ignoring unknown directive '" STRV_FMT "'", STRV_ARG(tok->ident->text));

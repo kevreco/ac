@@ -68,6 +68,7 @@ int main()
 	test_preprocessor(ac_exe, "./tests/preprocessor_unsupported/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_predefine/");
 	test_preprocessor(ac_exe, "./tests/preprocessor_line/");
+	test_generated_source(ac_exe, "./tests/preprocessor_embed/");
 
 	test_error(ac_exe, "./tests/preprocessor_message/");
 	test_error(ac_exe, "./tests/errors/preprocessor/");
