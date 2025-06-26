@@ -21,7 +21,7 @@ void file_to_c_str(const char* variable_name, const char* src_file, const char* 
 void assert_path(const char* path);
 void assert_process(const char* cmd);
 void assert_run(const char* exe);
-void assert_file_against_content(const char* expected_file, dstr* expected_content, strv actual_content);
+void assert_file_against_content(const char* expected_file, dstr* expected_content, strv actual_content, bool new_line_insensitive);
 void assert_same_file_content(const char* expected_filename, dstr* expected_content, const char* actual_filename, dstr* actual_content, bool new_line_insensitive);
 void assert_same_content(strv expected, strv actual, bool new_line_insensitive);
 void build_generated_exe_and_run(const char* file);
@@ -276,7 +276,7 @@ void assert_run(const char* exe)
 	}
 }
 
-void assert_file_against_content(const char* expected_file, dstr* expected_content, strv actual_content)
+void assert_file_against_content(const char* expected_file, dstr* expected_content, strv actual_content, bool new_line_insensitive)
 {
 	cb_assert_file_exists(expected_file);
 
@@ -287,7 +287,7 @@ void assert_file_against_content(const char* expected_file, dstr* expected_conte
 	}
 
 	strv expected_strv = dstr_to_strv(expected_content);
-	assert_same_content(expected_strv, actual_content, true);
+	assert_same_content(expected_strv, actual_content, new_line_insensitive);
 }
 
 void assert_same_file_content(const char* expected_filename, dstr* expected_content, const char* actual_filename, dstr* actual_content, bool new_line_insensitive)
@@ -440,7 +440,7 @@ void test_output(const char* exe, const char* directory, enum output_type type, 
 		dstr_assign_f(&expected_filename, "%s.expect", file);
 
 		strv actual_strv = dstr_to_strv(&preprocessor_content);
-		assert_file_against_content(expected_filename.data, &expected_content, actual_strv);
+		assert_file_against_content(expected_filename.data, &expected_content, actual_strv, new_line_insensitive);
 	
 		printf("OK\n");
 	}
