@@ -63,14 +63,14 @@ struct ac_pp {
 	darr_token buffer_for_peek; /* Sometimes we need to peek some tokens and send them on the stack. */
 	int counter_value;
 
+	/* Only allow MAX_DEPTH of nested #if/#else */
 	/* @OPT: We could use an octect for this branch_flags struct instead of two int. */
 	struct branch_state {
 		enum ac_token_type type;  /* none/if/else/elif/ifndef/elifdef/elifndef */
 		ac_location loc;
 		bool was_enabled;         /* Once this value is non-zero this mean we can skip all else/elif/elifdef/elifndef. */
-	};
-	/* Only allow MAX_DEPTH of nested #if/#else */
-	struct branch_state if_else_stack[ac_pp_branch_MAX_DEPTH];
+	} if_else_stack[ac_pp_branch_MAX_DEPTH];
+
 	int if_else_level;
 	
 	/* Buffer to combine include paths from #include directives. */
