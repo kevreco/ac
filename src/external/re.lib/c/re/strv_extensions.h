@@ -284,7 +284,8 @@ strv_equals_newline_insensitive(strv left_str, strv right_str)
 
     for (;;)
     {
-        if ((left[0] == '\r' || left[0] == '\n')
+        while ((left < left_end || right < right_end)
+            && (left[0] == '\r' || left[0] == '\n')
             && (right[0] == '\r' || right[0] == '\n')) {
 
             if (left[0] == '\r') ++left;
