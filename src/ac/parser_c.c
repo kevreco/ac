@@ -934,7 +934,7 @@ static bool expect_and_consume(ac_parser_c* p, enum ac_token_type type)
         return true;
     }
 
-    return true;
+    return false;
 }
 
 static bool consume_if(ac_parser_c* p, bool value)
