@@ -1,0 +1,5 @@
+./tests/errors/parsing/010_missing_type_specifier.c:2:12: error: missing type specifier
+1 | int main(void) {
+2 |     extern a;
+               ^
+3 | }

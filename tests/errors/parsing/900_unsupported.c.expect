@@ -1,0 +1,3 @@
+./tests/errors/parsing/900_unsupported.c:1:12: error: 'thread_local' is not supported
+1 | thread_local int a;
+               ^

@@ -38,6 +38,12 @@ static ac_ast_block* parse_block_or_inline_block(ac_parser_c* p);
 static bool parse_statements(ac_parser_c* p, ensure_expr_t post_check, const char* message);
 static ac_ast_expr* parse_statement(ac_parser_c* p);
 static ac_ast_identifier* parse_identifier(ac_parser_c* p);
+
+static ac_ast_type_specifier* parse_type_specifier(ac_parser_c * p);
+static ac_ast_type_specifier* multiple_type_specifier_error(ac_parser_c * p, enum ac_token_type left, enum ac_token_type right);
+static ac_ast_type_specifier* duplicate_type_specifier_warning(ac_parser_c * p, enum ac_token_type type);
+static ac_ast_type_specifier* cannot_combine_error(ac_parser_c * p, enum ac_token_type left, enum ac_token_type type);
+
 static ac_ast_declaration* parse_declaration_list(ac_parser_c* p, ac_ast_type_specifier* type_specifier);
 static ac_ast_declaration* make_simple_declaration(ac_parser_c* p, ac_ast_type_specifier* type_specifier, ac_ast_declarator* declarator);
 static ac_ast_declaration* make_function_declaration(ac_parser_c* p, ac_ast_type_specifier* type_specifier, ac_ast_declarator* declarator, ac_ast_block* block);
@@ -48,11 +54,10 @@ static ac_ast_parameters* parse_parameter_list(ac_parser_c* p, enum ac_token_typ
 static ac_ast_parameter* parse_parameter(ac_parser_c* p);
 static int count_and_consume_pointers(ac_parser_c* p);
 static ac_ast_array_specifier* parse_array_specifier(ac_parser_c* p);
-static ac_ast_expr* parse_statement_from_identifier(ac_parser_c* p, ac_ast_identifier* identifier);
 static ac_ast_expr* parse_unary(ac_parser_c* p);
-static ac_ast_type_specifier* try_parse_type(ac_parser_c* p, ac_ast_identifier* identifier);
 
 static bool is_basic_type_or_identifier(enum ac_token_type type);
+static bool is_leading_declaration(enum ac_token_type type);
 
 static ac_token token(const ac_parser_c* p); /* Current token by value. */
 static const ac_token* token_ptr(const ac_parser_c * p);  /* Current token by pointer. */
@@ -449,32 +454,28 @@ static ac_ast_expr* parse_statement(ac_parser_c* p)
     }
 
     default: {
-        if (is_basic_type_or_identifier(type))
+      
+        /* Built-in type, struct or typedef */
+        ac_ast_type_specifier* type_specifier = parse_type_specifier(p);
+
+        if (!type_specifier) { return 0; }
+
+        ac_ast_expr* declaration = to_expr(parse_declaration_list(p, type_specifier));
+
+        if (!declaration) { return 0; }
+
+        AC_ASSERT(ac_ast_is_declaration(declaration));
+
+        /* All declarations (exception function definition) requires a trailing semi-colon. */
+        if (declaration->type != ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
         {
-            ac_ast_identifier* ident = parse_identifier(p);
-
-            /* Any kind of declarations etc. */
-            ac_ast_expr* declaration = parse_statement_from_identifier(p, ident);
-
-            if (!declaration) { return 0; }
-
-            AC_ASSERT(ac_ast_is_declaration(declaration));
-
-            /* All declarations (exception function definition) requires a trailing semi-colon. */
-            if (declaration->type != ac_ast_type_DECLARATION_FUNCTION_DEFINITION)
+            if (!expect_and_consume(p, ac_token_type_SEMI_COLON))
             {
-                if (!expect_and_consume(p, ac_token_type_SEMI_COLON))
-                {
-                    return 0;
-                }
+                return 0;
             }
+        }
 
-            return declaration;
-        }
-        else
-        {
-            ac_report_internal_error_loc(location(p), "token type not handled: '%s'", ac_token_type_to_str(token_type(p)));
-        }
+        return declaration;
     }
     }
 
@@ -498,14 +499,6 @@ static ac_ast_expr* parse_unary(ac_parser_c* p) {
     return to_expr(unary);
 }
 
-static ac_ast_type_specifier* try_parse_type(ac_parser_c* p, ac_ast_identifier* identifier)
-{
-    AST_NEW_CTOR(p, ac_ast_type_specifier, type_specifier, location(p), ac_ast_type_specifier_init);
-    type_specifier->identifier = identifier;
-
-    return type_specifier;
-}
-
 static ac_ast_identifier* parse_identifier(ac_parser_c* p) {
 
     AC_ASSERT(ac_token_is_keyword_or_identifier(token(p).type));
@@ -518,13 +511,200 @@ static ac_ast_identifier* parse_identifier(ac_parser_c* p) {
     return result;
 }
 
-static ac_ast_expr* parse_statement_from_identifier(ac_parser_c* p, ac_ast_identifier* identifier)
+static ac_ast_type_specifier* parse_type_specifier(ac_parser_c* p)
 {
-    /* Built-in type, struct or typedef */
-    ac_ast_type_specifier* parsed_type = try_parse_type(p, identifier);
+    ac_token_type type = token_type(p);
 
-    return to_expr(parse_declaration_list(p, parsed_type));
+    if (!is_leading_declaration(type))
+    {
+        ac_report_internal_error_loc(location(p), "Invalid start of type specifier, this must be handled earlier.");
+        return NULL;
+    }
+
+    AST_NEW_CTOR(p, ac_ast_type_specifier, ts, location(p), ac_ast_type_specifier_init);
+    
+    bool another_one = true;
+    while(another_one)
+    {
+        ac_token_type type = token_type(p);
+        switch (type)
+        {
+       
+        case ac_token_type_BOOL:
+        case ac_token_type_CHAR:
+        case ac_token_type_DOUBLE:
+        case ac_token_type_FLOAT:
+        case ac_token_type_INT:
+        case ac_token_type_VOID:
+        {
+            if (ts->type_specifier != ac_token_type_NONE)
+            {
+                return multiple_type_specifier_error(p, ts->type_specifier, type);
+            }
+
+            ts->type_specifier = type;
+            break;
+        }
+
+        case ac_token_type_AUTO:
+        case ac_token_type_EXTERN:
+        case ac_token_type_REGISTER:
+        case ac_token_type_STATIC:
+        case ac_token_type_ATOMIC:
+        case ac_token_type_THREAD_LOCAL:
+        case ac_token_type_THREAD_LOCAL2:
+        case ac_token_type_INLINE:
+        case ac_token_type_CONST:
+        case ac_token_type_VOLATILE: {
+
+            enum ac_specifier spec = ac_specifier_NONE;
+            switch (type)
+            {
+         
+            case ac_token_type_AUTO: spec = ac_specifier_AUTO; break;
+            case ac_token_type_EXTERN: spec = ac_specifier_EXTERN; break;
+            case ac_token_type_REGISTER: spec = ac_specifier_REGISTER; break;
+            case ac_token_type_STATIC: spec = ac_specifier_STATIC; break;
+
+            case ac_token_type_ATOMIC: {
+                ac_report_error_loc(location(p), "'atomic' is not supported");
+                return NULL;
+            }
+            case ac_token_type_THREAD_LOCAL:
+            case ac_token_type_THREAD_LOCAL2: {
+                ac_report_error_loc(location(p), "'thread_local' is not supported");
+                return NULL;
+            }
+            case ac_token_type_INLINE: spec = ac_specifier_INLINE; break;
+            case ac_token_type_CONST: spec = ac_specifier_CONST; break;
+            case ac_token_type_VOLATILE: spec = ac_specifier_VOLATILE; break;
+
+            }
+
+            if (ts->specifiers & spec)
+            {
+                return duplicate_type_specifier_warning(p, type);
+            }
+
+            ts->specifiers |= spec;
+
+            break;
+        }
+
+        /* Special case for signed and unsigned. */
+        case ac_token_type_SIGNED:
+        case ac_token_type_UNSIGNED: {
+
+            if (type == ac_token_type_SIGNED && (ts->specifiers & ac_specifier_UNSIGNED))
+                return cannot_combine_error(p, ac_token_type_SIGNED, ac_token_type_UNSIGNED);
+            else if (type == ac_token_type_UNSIGNED && (ts->specifiers & ac_specifier_SIGNED))
+                return cannot_combine_error(p, ac_token_type_UNSIGNED, ac_token_type_SIGNED);
+
+            enum ac_specifier spec = ac_specifier_NONE;
+            switch (type)
+            {
+            case ac_token_type_SIGNED: spec = ac_specifier_SIGNED; break;
+            case ac_token_type_UNSIGNED: spec = ac_specifier_UNSIGNED; break;
+            }
+            ts->specifiers |= spec;
+            break;
+        }
+        case ac_token_type_SHORT:
+        {
+            if (ts->specifiers & ac_specifier_SHORT)
+            {
+                return duplicate_type_specifier_warning(p, type);
+            }
+
+            ts->specifiers |= ac_specifier_SHORT;
+            break;
+        }
+        /* Special case for long since it can be stacked twice. */
+        case ac_token_type_LONG:
+        {
+            if (ts->specifiers & ac_specifier_LONG)
+            {
+                ts->specifiers &= ~ac_specifier_LONG;
+                ts->specifiers |= ac_specifier_LONG_LONG;
+
+            }
+            else if (ts->specifiers & ac_specifier_LONG_LONG)
+            {
+                ac_report_error_loc(location(p), "too many 'long' specifier");
+                return NULL;
+            }
+            else
+            {
+                ts->specifiers |= ac_specifier_LONG;
+            }
+          
+            break;
+        }
+      
+        case ac_token_type_ENUM:
+        case ac_token_type_STRUCT:
+        case ac_token_type_TYPEDEF:
+        case ac_token_type_UNION:
+        {
+            if (ts->type_specifier != ac_token_type_NONE)
+            {
+                return multiple_type_specifier_error(p, ts->type_specifier, type);
+            }
+
+            ac_report_internal_error("parse_type_specifier: '%s' not handled yet", ac_token_type_to_str(type));
+            ts->type_specifier = type;
+            break;
+        }
+        case ac_token_type_IDENTIFIER:
+        default:
+
+            if (ts->type_specifier == ac_specifier_NONE)
+            {
+                if (ts->specifiers & ac_specifier_LONG_LONG
+                    || ts->specifiers & ac_specifier_LONG
+                    || ts->specifiers & ac_specifier_SHORT
+                    || ts->specifiers & ac_specifier_UNSIGNED
+                    || ts->specifiers & ac_specifier_SIGNED)
+                {
+                    ts->type_specifier = ac_token_type_INT;
+                }
+            }
+
+            if (ts->type_specifier == ac_token_type_NONE && !(ts->specifiers & ac_specifier_AUTO))
+            {
+                ac_report_error_loc(location(p), "missing type specifier");
+                return NULL;
+            }
+            return ts;
+        }
+
+        goto_next_token(p);
+    }
+
+    AC_ASSERT(0 && "Unreachable");
+    return NULL;
 }
+
+static ac_ast_type_specifier* multiple_type_specifier_error(ac_parser_c* p, enum ac_token_type left, enum ac_token_type right)
+{
+    ac_report_error_loc(location(p), "invalid declaration with multiple type specifiers: '%s' and '%s'", ac_token_type_to_str(left), ac_token_type_to_str(right));
+
+    return NULL;
+}
+
+static ac_ast_type_specifier* duplicate_type_specifier_warning(ac_parser_c* p, enum ac_token_type type)
+{
+    ac_report_warning_loc(location(p), "duplicate specifiers used: '%s'", ac_token_type_to_str(type));
+
+    return NULL;
+}
+static ac_ast_type_specifier* cannot_combine_error(ac_parser_c* p, enum ac_token_type left, enum ac_token_type type)
+{
+    ac_report_error_loc(location(p), "cannot combine '%s' and '%s'", ac_token_type_to_str(left), ac_token_type_to_str(type));
+
+    return NULL;
+}
+
 
 static ac_ast_declaration* parse_declaration_list(ac_parser_c* p, ac_ast_type_specifier* type_specifier)
 {
@@ -599,6 +779,12 @@ static ac_ast_declarator* parse_declarator_core(ac_parser_c* p, bool from_declar
     if (token_is(p, ac_token_type_STAR))
     {
         declarator->pointer_depth = count_and_consume_pointers(p);
+    }
+
+    if (token_is(p, ac_token_type_RESTRICT))
+    {
+        goto_next_token(p); /* skip 'restrict' */
+        declarator->is_restrict = true;
     }
 
     /* Declarator from declaration must contain an identifier */
@@ -723,26 +909,14 @@ static ac_ast_parameter* parse_parameter(ac_parser_c* p)
         return param;
     }
 
-    if (!is_basic_type_or_identifier(token(p).type))
-    {
-        ac_report_error_loc(location(p), "parameter must start with a basic type or an identifier");
-        return 0;
-    }
-    
-    ac_ast_identifier* type_name = parse_identifier(p);
-    param->type_name = type_name;
+    ac_ast_type_specifier* type_specifier = parse_type_specifier(p);
 
-
-    if (strv_equals_str(param->type_name->name, "void"))
+    if (!type_specifier)
     {
-        goto_next_token(p);
-        /* we return early because void parameter function cannot contains other parameters */
-        if (!expect(p, ac_token_type_PAREN_R))
-        {
-            return 0;
-        }
-        return param;
+        return NULL;
     }
+
+    param->type_specifier = type_specifier;
 
     /* End of the parameter expression we return early. */
     if (token_is(p, ac_token_type_COMMA)
@@ -753,10 +927,11 @@ static ac_ast_parameter* parse_parameter(ac_parser_c* p)
 
     ac_ast_declarator* declarator = parse_declarator_for_parameter(p);
 
-    if (!declarator) { return 0; }
+    if (!declarator)
+    {
+        return NULL;
+    }
 
-    /* at this point parsing declarator is the only option */
-    //ac_ast_declarator* declarator = parse_declarator(p);
     param->declarator = declarator;
 
     return param;
@@ -830,6 +1005,7 @@ static ac_ast_array_specifier* parse_array_specifier(ac_parser_c* p)
 static bool is_basic_type_or_identifier(enum ac_token_type type)
 {
     return type == ac_token_type_IDENTIFIER
+        || type == ac_token_type_BOOL
         || type == ac_token_type_CHAR
         || type == ac_token_type_DOUBLE
         || type == ac_token_type_FLOAT
@@ -839,6 +1015,29 @@ static bool is_basic_type_or_identifier(enum ac_token_type type)
         || type == ac_token_type_SIGNED
         || type == ac_token_type_UNSIGNED
         || type == ac_token_type_VOID;
+}
+
+static bool is_leading_declaration(enum ac_token_type type)
+{
+    return is_basic_type_or_identifier(type)
+
+        || type == ac_token_type_AUTO
+        || type == ac_token_type_EXTERN
+        || type == ac_token_type_REGISTER
+        || type == ac_token_type_STATIC
+
+        || type == ac_token_type_ATOMIC
+        || type == ac_token_type_THREAD_LOCAL
+        || type == ac_token_type_THREAD_LOCAL2
+
+        || type == ac_token_type_INLINE
+        || type == ac_token_type_CONST
+        || type == ac_token_type_VOLATILE
+
+        || type == ac_token_type_ENUM
+        || type == ac_token_type_STRUCT
+        || type == ac_token_type_TYPEDEF
+        ;
 }
 
 static ac_token token(const ac_parser_c* p)

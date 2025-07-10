@@ -1,0 +1,3 @@
+./tests/errors/parsing/004.c:1:12: error: syntax error: expected ';', actual '<end-of-line>'
+1 | static int a
+               ^

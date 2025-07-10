@@ -1,0 +1,3 @@
+./tests/errors/parsing/003_double_type.c:1:7: error: invalid declaration with multiple type specifiers: 'int' and 'int'
+1 | int int
+          ^

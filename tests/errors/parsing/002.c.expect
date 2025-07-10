@@ -1,0 +1,3 @@
+./tests/errors/parsing/002.c:1:5: error: syntax error: expected ';', actual '<end-of-line>'
+1 | int a
+        ^

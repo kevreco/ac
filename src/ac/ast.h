@@ -88,6 +88,42 @@ struct ac_ast_identifier {
     strv name;
 };
 
+/* Specifiers and qualifiers */
+enum ac_specifier
+{
+    ac_specifier_NONE = 0,
+
+    /* Type modifier (subcategory of type specifier) */
+
+    ac_specifier_SIGNED   = 1 << 0,
+    ac_specifier_UNSIGNED = 1 << 1,
+    ac_specifier_SHORT = 1 << 2,
+
+    /* Storage specifier. */
+
+    ac_specifier_AUTO     = 1 << 3,
+    ac_specifier_EXTERN   = 1 << 4,
+    ac_specifier_REGISTER = 1 << 5,
+    ac_specifier_STATIC   = 1 << 6,
+
+    /* Special Storage specifier, can be combined with static or extern to adjust linkage. */
+
+    ac_specifier_ATOMIC = 1 << 7, /* Could also be */
+    ac_specifier_THREAD_LOCAL = 1 << 8,
+
+    /* Other type specifier. */
+   
+    ac_specifier_INLINE = 1 << 9,
+    ac_specifier_LONG = 1 << 10,
+    ac_specifier_LONG_LONG = 1 << 11,
+
+    /* Type qualifiers */
+   
+    ac_specifier_CONST = 1 << 12,
+    ac_specifier_RESTRICT = 1 << 13,
+    ac_specifier_VOLATILE = 1 << 14,
+};
+
 /* Type specifier can be int, int* etc.
    But right now it can only handle simple "int" so we only consider identifier.
    see more here https://en.cppreference.com/w/c/language/declarations#Specifiers
@@ -96,6 +132,10 @@ struct ac_ast_type_specifier {
     INCLUDE_AST_EXPR_BASE
 
     ac_ast_identifier* identifier;
+
+    enum ac_specifier specifiers;
+    /* For bool, int, struct, enum, typedef, etc. This cannot be stacked. */
+    enum ac_token_type type_specifier;
 };
 
 void ac_ast_type_specifier_init(ac_ast_type_specifier* node);
@@ -116,6 +156,7 @@ struct ac_ast_declarator {
     int pointer_depth;
     ac_ast_identifier* ident;
     ac_ast_array_specifier* array_specifier; /* No member so that we already pre-handle this case */
+    bool is_restrict;              /* Optional. */
     /* NOTE: declarator cannot have parameter and initializer at the same time. */
     ac_ast_expr* initializer;      /* Optional. If the variable is initialized with something. */
     ac_ast_parameters* parameters; /* Optional. If it's a function declaration. */
@@ -146,8 +187,8 @@ void ac_ast_parameters_init(ac_ast_parameters* node);
 /* This represent a function parameter, it's quite similar to a simple declaration */
 struct ac_ast_parameter {
     INCLUDE_AST_EXPR_BASE
-    ac_ast_identifier* type_name;
-    bool is_var_args;                     /* optional */
+    ac_ast_type_specifier* type_specifier;
+    bool is_var_args;              /* optional */
     ac_ast_declarator* declarator; /* optional */
 };
 

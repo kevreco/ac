@@ -1,0 +1,3 @@
+./tests/errors/parsing/902_unsupported.c:1:7: error: 'atomic' is not supported
+1 | _Atomic int a;
+          ^

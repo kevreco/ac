@@ -1,0 +1,5 @@
+./tests/errors/parsing/006_missing_type_specifier.c:2:14: error: missing type specifier
+1 | int main(void) {
+2 |     register a;
+                 ^
+3 | }

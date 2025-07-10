@@ -158,7 +158,82 @@ static void print_identifier(ac_converter_c* c, ac_ast_identifier* identifier)
 
 static void print_type_specifier(ac_converter_c* c, ac_ast_type_specifier* type_specifier)
 {
-    print_identifier(c, type_specifier->identifier);
+    if (type_specifier->specifiers & ac_specifier_EXTERN)
+    {
+        print_str(c, "extern ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_REGISTER)
+    {
+        print_str(c, "register ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_STATIC)
+    {
+        print_str(c, "static ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_THREAD_LOCAL)
+    {
+        assert(0 && "Unreachable. thread_local is not handled.");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_ATOMIC)
+    {
+        assert(0 && "Unreachable. _Atomic is not handled.");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_INLINE)
+    {
+        print_str(c, "inline ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_CONST)
+    {
+        print_str(c, "const ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_SIGNED)
+    {
+        print_str(c, "signed ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_UNSIGNED)
+    {
+        print_str(c, "unsigned ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_SHORT)
+    {
+        print_str(c, "short ");
+    }
+
+    /* Special case for "long" and "long long" */
+    if (type_specifier->specifiers & ac_specifier_LONG_LONG)
+    {
+        print_str(c, "long long ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_LONG)
+    {
+        print_str(c, "long ");
+    }
+
+    if (type_specifier->specifiers & ac_specifier_VOLATILE)
+    {
+        print_str(c, "volatile ");
+    }
+
+    /* @FIXME (Once the type check is active). At this stage, every single type of 'auto' declaration are already resolved.
+            Which means they are no longer "auto". */
+    if (type_specifier->specifiers & ac_specifier_AUTO)
+    {
+        print_str(c, "auto ");
+    }
+    else
+    {
+        print_f(c, "%s", ac_token_type_to_str(type_specifier->type_specifier));
+    }
 }
 
 static void print_pointers(ac_converter_c* c, int count)
@@ -198,7 +273,7 @@ static void print_parameters(ac_converter_c* c, ac_ast_parameters* parameters)
 
 static void print_parameter(ac_converter_c* c, ac_ast_parameter* parameter)
 {
-    print_identifier(c, parameter->type_name);
+    print_type_specifier(c, parameter->type_specifier);
 
     if (parameter->is_var_args)
     {
@@ -262,6 +337,11 @@ static void print_declarator(ac_converter_c* c, ac_ast_declarator* declarator)
     {
         print_pointers(c, declarator->pointer_depth);
         print_str(c, " ");
+    }
+
+    if (declarator->is_restrict)
+    {
+        print_str(c, "restrict ");
     }
 
     /* True declarator contains an identifier, however we also use declarator to handle parameters.

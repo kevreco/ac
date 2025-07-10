@@ -1,0 +1,3 @@
+./tests/errors/parsing/005_duplicate_specifier.c:1:13: warning: duplicate specifiers used: 'static'
+1 | static static int a;
+                ^
