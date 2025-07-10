@@ -83,7 +83,10 @@ We need the following feature to test `__func__`, `__FUNCTION__` and `__PRETTY_F
 # Later
 
  - ☐ Handle raw string literals and utf8/utf16/utf32 raw literal as well.
- - ☐ Add `__STDC_NO_VLA__` as default macro. We don't want to support VLA at all.
+ - ☑ Add `__STDC_NO_VLA__` as predefined macro. We don't want to support VLA at all.
+ - ☑ Add `__STDC_NO_ATOMICS__` as predefined macro. Maybe add support later.
+ - ☑ Add `__STDC_NO_COMPLEX__` as predefined macro. Maybe add support later.
+ - ☑ Add `__STDC_NO_THREADS__` as predefined macro. Maybe add support later.
  - ☐ Support special macro `__STDC_VERSION__`?
  - ☐ Expand the "Generic type" section.
  - ☐ Expand the "User-defined for loop" section.
