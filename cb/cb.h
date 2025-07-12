@@ -86,13 +86,25 @@ typedef unsigned int cb_bool;
 typedef size_t cb_size;
 
 /* All various typedef since c89 does not allow typedef redefinition */
-typedef struct cb_toolchain cb_toolchain;
+typedef struct cb_toolchain_t cb_toolchain_t;
 typedef struct cb_project_t cb_project_t;
 typedef struct cb_strv cb_strv;
 typedef struct cb_darr cb_darr;
 typedef struct cb_kv cb_kv;
 typedef struct cb_context cb_context;
 typedef struct cb_process_handle cb_process_handle;
+
+/* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain. */
+typedef const char* (*cb_toolchain_bake_t)(cb_toolchain_t* tc, const char* project_name);
+
+struct cb_toolchain_t {
+	cb_toolchain_bake_t bake;
+	const char* name;
+	const char* program;
+	const char* family;
+	/* Name of the default directory. */
+	const char* default_directory_base;
+};
 
 CB_API void cb_init(void);
 CB_API void cb_destroy(void);
@@ -105,6 +117,18 @@ CB_API cb_project_t* cb_project(const char* name);
 
 /* Wrapper around cb_project with string formatting. */
 CB_API cb_project_t* cb_project_f(const char* format, ...);
+
+/* Set current toolchain. */
+CB_API void cb_toolchain_set(cb_toolchain_t tc);
+
+/* Get current toolchain. */
+CB_API cb_toolchain_t cb_toolchain_get();
+
+/* Return the default C toolchain, MSVC on Windows machine, GCC otherwise. */
+CB_API cb_toolchain_t cb_toolchain_default_c(void);
+
+/* Return the default CPP toolchain, MSVC on Windows machine, G++ otherwise. */
+CB_API cb_toolchain_t cb_toolchain_default_cpp(void);
 
 /* Add value for the specific key. */
 CB_API void cb_add(const char* key, const char* value);
@@ -144,28 +168,20 @@ CB_API cb_bool cb_remove_one_f(const char* key, const char* format, ...);
 /* Check if key/value already exists in the current project. */
 CB_API cb_bool cb_contains(const char* key, const char* value);
 
-/* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain. */
-typedef const char* (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
-
-struct cb_toolchain {
-	cb_toolchain_bake_t bake;
-	/* Name of the toolchain, mostly for debugging purpose. */
-	const char* name;
-	/* Name of the default directory. */
-	const char* default_directory_base;
-};
-
 /* Process the current project using the default toolchain.
    Returns the name of the result, which could be the path of a library or any other value depending on the toolchain.
-   Use the default toolchain (gcc or msvc).
+   Use the default C toolchain (gcc or msvc).
 */
 CB_API const char* cb_bake(void);
+
+/* Same as cb_bake. Using an explicit toolchain. */
+CB_API const char* cb_bake_with(cb_toolchain_t toolchain);
 
 /* Same as cb_bake. Using an explicit projectname. */
 CB_API const char* cb_bake_project(const char* project_name);
 
-/* Same as cb_bake. Take an explicit toolchain instead of using the default one. */
-CB_API const char* cb_bake_project_with(cb_toolchain toolchain, const char* project_name);
+/* Same as cb_bake. Take an explicit toolchain instead of using the current one. */
+CB_API const char* cb_bake_project_with(const char* project_name, cb_toolchain_t toolchain);
 
 /* Run executable path. Path is double quoted before being run, in case path contains some space.
    Returns exit code. Returns -1 if command could not be executed.
@@ -174,8 +190,6 @@ CB_API int cb_run(const char* cmd);
 
 /* Turn on/off debug messages */
 CB_API void cb_debug(cb_bool value);
-
-CB_API cb_toolchain cb_toolchain_default(void);
 
 /* Run command and returns exit code. */
 CB_API int cb_process(const char* cmd);
@@ -380,6 +394,7 @@ struct cb_project_t {
 struct cb_context {
 	cb_mmap projects;
 	cb_project_t* current_project;
+	cb_toolchain_t current_toolchain;
 };
 
 static cb_context default_ctx;
@@ -1774,6 +1789,20 @@ cb_move_file_to_dir(const char* file, const char* directory)
 	return cb_true;
 }
 
+/*-----------------------------------------------------------------------*/
+/* forward declarations */
+/*-----------------------------------------------------------------------*/
+
+#ifdef _WIN32
+CB_INTERNAL const char* cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name);
+#else
+CB_INTERNAL const char* cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name);
+#endif
+
+/*-----------------------------------------------------------------------*/
+/* API */
+/*-----------------------------------------------------------------------*/
+
 CB_API void
 cb_init(void)
 {
@@ -1828,6 +1857,88 @@ cb_project_f(const char* format, ...)
 	va_end(args);
 
 	return p;
+}
+
+/* Set current toolchain. */
+CB_API void
+cb_toolchain_set(cb_toolchain_t tc)
+{
+	cb_current_context()->current_toolchain = tc;
+}
+
+/* Get current toolchain. */
+CB_API cb_toolchain_t
+cb_toolchain_get()
+{
+	cb_toolchain_t tc = cb_current_context()->current_toolchain;
+	/* No toolchain: return the default C toolchain. */
+	if (!tc.name)
+	{
+		return cb_toolchain_default_c();
+	}
+	return tc;
+}
+
+
+#if _WIN32
+
+CB_INTERNAL cb_toolchain_t
+cb_toolchain_msvc(void)
+{
+	cb_toolchain_t tc;
+	tc.bake = cb_toolchain_msvc_bake;
+	tc.name = "msvc";
+	tc.program = "cl";
+	tc.family = "msvc";
+	tc.default_directory_base = ".build/msvc";
+	return tc;
+}
+
+#else
+
+CB_INTERNAL cb_toolchain_t
+cb_toolchain_gcc()
+{
+	cb_toolchain_t tc;
+	tc.bake = cb_toolchain_gcc_bake;
+	tc.name = "gcc";
+	tc.program = "gcc";
+	tc.family = "gcc";
+	tc.default_directory_base = ".build/gcc";
+	return tc;
+}
+
+CB_INTERNAL cb_toolchain_t
+cb_toolchain_gpp()
+{
+	cb_toolchain_t tc;
+	tc.bake = cb_toolchain_gcc_bake;
+	tc.name = "g++";
+	tc.program = "g++";
+	tc.family = "gcc";
+	tc.default_directory_base = ".build/g++";
+	return tc;
+}
+#endif
+
+CB_API cb_toolchain_t
+cb_toolchain_default_c(void)
+{
+#ifdef _WIN32
+	return cb_toolchain_msvc();
+#else
+	return cb_toolchain_gcc();
+#endif
+}
+
+CB_API cb_toolchain_t
+cb_toolchain_default_cpp(void)
+{
+#ifdef _WIN32
+	return cb_toolchain_msvc();
+#else
+	return cb_toolchain_gpp();
+#endif
 }
 
 CB_API void
@@ -2033,7 +2144,7 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 }
 
 CB_API const char*
-cb_bake_project_with(cb_toolchain toolchain, const char* project_name)
+cb_bake_project_with(const char* project_name, cb_toolchain_t toolchain)
 {
 	const char* result = toolchain.bake(&toolchain, project_name);
 	cb_log_important("%s", result);
@@ -2043,18 +2154,25 @@ cb_bake_project_with(cb_toolchain toolchain, const char* project_name)
 CB_API const char*
 cb_bake_project(const char* project_name)
 {
-	return cb_bake_project_with(cb_toolchain_default(), project_name);
+	return cb_bake_project_with(project_name, cb_toolchain_get());
 }
 
 CB_API const char*
 cb_bake(void)
 {
 	cb_project_t* p = cb_current_project();
-	return cb_bake_project(p->name.data);
+	return cb_bake_project_with(p->name.data, cb_toolchain_get());
+}
+
+CB_API const char*
+cb_bake_with(cb_toolchain_t toolchain)
+{
+	cb_project_t* p = cb_current_project();
+	return cb_bake_project_with(p->name.data, toolchain);
 }
 
 CB_INTERNAL const char*
-cb_get_output_directory(cb_project_t* project, const cb_toolchain* tc)
+cb_get_output_directory(cb_project_t* project, const cb_toolchain_t* tc)
 {
 	cb_strv out_dir;
 	if (try_get_property_strv(project, cb_OUTPUT_DIR, &out_dir))
@@ -2586,8 +2704,8 @@ cleanup:
 
 /* #msvc #toolchain */
 
-CB_API const char*
-cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
+CB_INTERNAL const char*
+cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 {
 	cb_dstr str; /* cl.exe command */
 	/* @FIXME use an array of string instead to make it straigthforward to follow */
@@ -2628,7 +2746,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Use /utf-8 by default since it's retrocompatible with utf-8 */
 	/* Use /nologo to avoid undesirable messages in the command line. */
-	cb_dstr_append_str(&str, "cl.exe /utf-8 /nologo ");
+	cb_dstr_append_f(&str, "%s.exe /utf-8 /nologo ", tc->program);
 
 	/* Handle binary type */
 
@@ -2817,16 +2935,6 @@ exit:
 	return artefact;
 }
 
-CB_API cb_toolchain
-cb_toolchain_msvc(void)
-{
-	cb_toolchain tc;
-	tc.bake = cb_toolchain_msvc_bake;
-	tc.name = "msvc";
-	tc.default_directory_base = ".build/msvc";
-	return tc;
-}
-
 #else
 
 /* ================================================================ */
@@ -2849,7 +2957,7 @@ cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 }
 
 CB_API const char*
-cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
+cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 {
 	cb_dstr str;
 	cb_dstr str_obj; /* to keep track of the .o generated */
@@ -2902,7 +3010,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_create_directories(output_dir, strlen(output_dir));
 
 	/* Start command */
-	cb_dstr_append_str(&str, "cc ");
+	cb_dstr_append_f(&str, "%s ", tc->program);
 
 	/* Handle binary type */
 	is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_EXE);
@@ -3079,27 +3187,7 @@ exit:
 	return artefact;
 }
 
-CB_API cb_toolchain
-cb_toolchain_gcc()
-{
-	cb_toolchain tc;
-	tc.bake = cb_toolchain_gcc_bake;
-	tc.name = "gcc";
-	tc.default_directory_base = ".build/gcc";
-	return tc;
-}
-
 #endif /* #else of _WIN32 */
-
-CB_API cb_toolchain
-cb_toolchain_default(void)
-{
-#ifdef _WIN32
-	return cb_toolchain_msvc();
-#else
-	return cb_toolchain_gcc();
-#endif
-}
 
 #endif /* CB_IMPLEMENTATION_CPP  */
 

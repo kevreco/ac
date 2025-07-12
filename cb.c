@@ -142,7 +142,7 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 
 const char* build_with(const char* config)
 {
-	const char* toolchain_name = cb_toolchain_default().name;
+	const char* toolchain_name = cb_toolchain_default_c().name;
 
 	/* Library */
 	{
