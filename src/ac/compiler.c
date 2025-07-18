@@ -104,5 +104,5 @@ bool ac_compiler_compile(ac_compiler* c)
 
 static ac_options* options(ac_compiler* c)
 {
-    return &c->mgr.options;
+    return c->mgr.options;
 }

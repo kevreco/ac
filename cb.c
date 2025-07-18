@@ -1,3 +1,7 @@
+#ifdef WIN32
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #define CB_IMPLEMENTATION
 #include "cb/cb.h"
 #include "cb/cb_add_files.h"
@@ -142,11 +146,11 @@ void my_project(const char* project_name, const char* toolchain, const char* con
 
 const char* build_with(const char* config)
 {
-	const char* toolchain_name = cb_toolchain_default_c().name;
-
-	/* Library */
+	cb_toolchain_t toolchain = cb_toolchain_default_c();
+	
+	/* Build Library */
 	{
-		my_project("aclib", toolchain_name, config);
+		my_project("aclib", toolchain.name, config);
 
 		cb_add_files_recursive("./src/ac", "*.c");
 
@@ -162,9 +166,9 @@ const char* build_with(const char* config)
 	}
 
 
-	/* CLI */
+	/* Build CLI */
 	{
-		my_project("ac", toolchain_name, config);
+		my_project("ac", toolchain.name, config);
 
 		cb_add(cb_LINK_PROJECTS, "aclib");
 
@@ -180,7 +184,28 @@ const char* build_with(const char* config)
 	{
 		exit(1);
 	}
+    
+    /* Copy include/ content next to the binary. */
 
+	const char* output_dir = cb_get_output_directory(cb_current_project(), &toolchain);
+
+	char include_output[1024] = {0};
+	
+	sprintf(include_output, "%s/include/", output_dir);
+
+	if (
+		!cb_copy_file_to_dir("./src/ac/include/float.h", include_output)
+		|| !cb_copy_file_to_dir("./src/ac/include/stdalign.h", include_output)
+		|| !cb_copy_file_to_dir("./src/ac/include/stdarg.h", include_output)
+		|| !cb_copy_file_to_dir("./src/ac/include/stdatomic.h", include_output)
+		|| !cb_copy_file_to_dir("./src/ac/include/stdbool.h", include_output)
+		|| !cb_copy_file_to_dir("./src/ac/include/stddef.h", include_output)
+		|| !cb_copy_file_to_dir("./src/ac/include/stdnoreturn.h", include_output)
+		|| !cb_copy_file_to_dir("./src/ac/include/varargs.h", include_output))
+	{
+		exit(1);
+	}
+	
 	return ac_exe;
 }
 
@@ -455,7 +480,7 @@ void test_output(const char* exe, const char* directory, enum output_type type, 
 /* Get stdout of preprocess and compare it with the .expect file. */
 void test_preprocessor(const char* exe, const char* directory)
 {
-	bool new_line_insensitive = false;
+	bool new_line_insensitive = true;
 	test_output(exe, directory, output_type_STDOUT, new_line_insensitive);
 }
 

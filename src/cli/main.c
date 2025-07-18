@@ -82,7 +82,7 @@ compile(const struct cmd* cmd, int argc, char** argv)
 
     ac_options options;
     ac_options_init_default(&options);
-    
+
     if (parse_options(&options, &argc, &argv))
     {
         ac_compiler c;

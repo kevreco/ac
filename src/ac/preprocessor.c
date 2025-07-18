@@ -176,7 +176,7 @@ void ac_pp_init(ac_pp* pp, ac_manager* mgr, strv content, strv filepath)
     dstr_init(&pp->concat_buffer);
 
     /* Predefine system-specific macro. */
-    if ( ! mgr->options.no_system_specific)
+    if ( ! mgr->options->no_system_specific)
     {
         consume_predefines(pp);
 
@@ -860,13 +860,13 @@ static bool parse_include_directive(ac_pp* pp)
         /* Try to look into the user include directory. */
         if (!file_found)
         {
-            file_found = look_for_filepath(pp, &pp->mgr->options.user_includes, path);
+            file_found = look_for_filepath(pp, &pp->mgr->options->user_includes, path);
         }
 
         /* Try to look into the system include directory. */
         if (!file_found)
         {
-            file_found = look_for_filepath(pp, &pp->mgr->options.system_includes, path);
+            file_found = look_for_filepath(pp, &pp->mgr->options->system_includes, path);
         }
 
         if (!file_found)

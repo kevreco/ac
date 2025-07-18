@@ -31,8 +31,6 @@ enum ac_compilation_step {
     ac_compilation_step_ALL = ~0,
 };
 
-typedef darrT(strv) path_array;
-
 typedef struct ac_options ac_options;
 struct ac_options {
 
@@ -66,7 +64,7 @@ void ac_options_destroy(ac_options* o);
 
 typedef struct ac_manager ac_manager;
 struct ac_manager {
-    ac_options options;
+    ac_options* options;
 
     /* Arena allocator to create new ast-related objects.
        They are freed when the managed is destroyed. */
