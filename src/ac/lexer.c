@@ -91,7 +91,7 @@ void ac_lex_init(ac_lex* l, ac_manager* mgr)
 
         l->mgr = mgr;
 
-        l->options.reject_hex_float = mgr->options.reject_hex_float;
+        l->options.reject_hex_float = mgr->options->reject_hex_float;
     }
 
     dstr_init(&l->tok_buf);
@@ -312,7 +312,7 @@ ac_token* ac_lex_goto_next(ac_lex* l)
 
                 skip_inline_comment(l);
 
-                if (l->mgr->options.preserve_comment) {
+                if (l->mgr->options->preserve_comment) {
                     return token_from_text(l, ac_token_type_COMMENT, strv_make_from(start, l->cur - start));
                 }
                 continue; /* Go to next token. */
@@ -324,7 +324,7 @@ ac_token* ac_lex_goto_next(ac_lex* l)
                     return token_error(l);
                 }
 
-                if (l->mgr->options.preserve_comment) {
+                if (l->mgr->options->preserve_comment) {
                     return token_from_text(l, ac_token_type_COMMENT, strv_make_from(start, l->cur - start));
                 }
                 continue; /* Go to next token. */
@@ -1353,7 +1353,7 @@ static ac_token* parse_integer_or_float_literal(ac_lex* l, int previous, int c)
         }
     }
 
-    if (is_eof(l) && !l->mgr->options.preprocess) /* Do not display error if we only preprocess. */
+    if (is_eof(l) && !l->mgr->options->preprocess) /* Do not display error if we only preprocess. */
     {
         ac_report_error_loc(l->leading_location, "unexpected end of file after number literal");
         return token_error(l);

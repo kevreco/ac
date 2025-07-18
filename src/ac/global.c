@@ -3,9 +3,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include "internal.h"
 #include "ast.h"
-#include "location.h"
-#include "re_lib.h"
 
 global_options_t global_options;
 
@@ -44,6 +43,61 @@ static void print_underline_cursor(FILE* file, strv line, size_t pos);
         display_message_v(stderr, message_type, loc, global_options.display_surrounding_lines, fmt, args); \
         va_end(args); \
     } while (0)
+
+#ifndef MAX_PATH
+#define MAX_PATH 4096
+#endif
+
+static char default_system_include[MAX_PATH];
+
+void ac_add_default_system_includes(path_array* items)
+{
+    if (default_system_include[0] != 0)
+    {
+        ac_report_internal_error("default system includes already added");
+    }
+
+    /* Retrieve default system include path.
+       By default, the include/ folder is located next to the binary.
+       @TODO: Implement a way to customize it. */
+    {
+#if _WIN32
+        GetModuleFileNameA(NULL, default_system_include, MAX_PATH);
+        char* p = strlwr(default_system_include); /* To lower. */
+#else
+        ssize_t len = readlink("/proc/self/exe", default_system_include, sizeof(default_system_include) - 1);
+
+        if (len == -1)
+        {
+            ac_report_internal_error("could not get assembly directory");
+            return;
+        }
+        char* p = default_system_include;
+#endif 
+
+        p = path_normalize_slashes(p);
+        p = path_basename(p);
+        int used = p - default_system_include;
+        int remaining = MAX_PATH - used;
+
+        if (remaining < strlen("include"))
+        {
+            ac_report_internal_error("default include path too long.");
+            return;
+        }
+
+        // Contatenate the executable directory with "include/"
+        snprintf(p, remaining, "include");
+    }
+
+    darrT_push_back(items, strv_make_from_str(default_system_include));
+#if _WIN32
+   /* @TODO create and include Windows only headers here. */
+#else
+    darrT_push_back(items, strv_make_from_str("/usr/local/include"));
+    darrT_push_back(items, strv_make_from_str("/usr/include"));
+#endif
+}
 
 void ac_report_warning(const char* fmt, ...)
 {

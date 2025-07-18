@@ -3,6 +3,7 @@
 
 #include <stdint.h> /* int32_t, int64_t */
 
+#include "re_lib.h"
 #include "location.h"
 
 #define AC_UNUSED(x) ((void)(x))
@@ -29,6 +30,8 @@
 extern "C" {
 #endif
 
+typedef darrT(strv) path_array;
+
 typedef struct global_options_t global_options_t;
 struct global_options_t {
     bool colored_output;
@@ -39,6 +42,12 @@ struct global_options_t {
 extern global_options_t global_options;
 
 typedef struct ac_ast_expr ac_ast_expr;
+typedef struct ac_options ac_options;
+
+void ac_init(ac_options* o);
+void ac_terminate();
+
+void ac_add_default_system_includes(path_array* items);
 
 void ac_report_error(const char* fmt, ...);
 void ac_report_internal_error(const char* fmt, ...);

@@ -103,7 +103,7 @@ void ac_manager_init(ac_manager* m, ac_options* o)
         (ht_swap_function_t)swap_literals,
         0);
 
-    m->options = *o;
+    m->options = o;
     global_options = o->global;
 
     ac_token_info* infos = ac_token_infos();
@@ -122,6 +122,8 @@ void ac_manager_init(ac_manager* m, ac_options* o)
 #if _WIN32
     darrT_init(&m->wchars);
 #endif
+
+    ac_add_default_system_includes(&m->options->system_includes);
 }
 
 void ac_manager_destroy(ac_manager* m)

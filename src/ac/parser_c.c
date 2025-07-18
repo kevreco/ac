@@ -112,7 +112,7 @@ static void* allocate(ac_parser_c* p, size_t byte_size)
 
 static ac_options* options(ac_parser_c* p)
 {
-    return &p->mgr->options;
+    return p->mgr->options;
 }
 
 static ac_ast_top_level* parse_top_level(ac_parser_c* p)
