@@ -1,5 +1,5 @@
-#ifndef AC_GLOBAL_H
-#define AC_GLOBAL_H
+#ifndef AC_H
+#define AC_H
 
 #include <stdint.h> /* int32_t, int64_t */
 
@@ -63,4 +63,4 @@ size_t ac_hash(char* str, size_t size);
 } /* extern "C" */
 #endif
 
-#endif /* AC_GLOBAL_H */
+#endif /* AC_H */

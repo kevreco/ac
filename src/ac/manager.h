@@ -3,9 +3,10 @@
 
 #include "stdbool.h"
 
-#include "alloc.h"
-#include "global.h"
 #include "re_lib.h"
+
+#include "alloc.h"
+#include "ac.h"
 
 #ifdef __cplusplus
 extern "C" {

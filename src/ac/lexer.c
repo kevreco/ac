@@ -2,7 +2,7 @@
 
 #include "float.h"  /* FLT_MAX */
 
-#include "global.h"
+#include "ac.h"
 
 #define AC_EOF ('\0')
 

@@ -1,7 +1,7 @@
 #ifndef AC_PARSE_OPTIONS_H
 #define AC_PARSE_OPTIONS_H
 
-#include <ac/global.h>
+#include <ac/ac.h>
 #include <ac/compiler.h>
 #include <ac/re_lib.h>
 

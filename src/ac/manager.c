@@ -10,7 +10,7 @@
 #include "re/file.h"
 #include "re/path.h"
 
-#include "global.h"
+#include "ac.h"
 #include "lexer.h"
 
 typedef struct source_file source_file;

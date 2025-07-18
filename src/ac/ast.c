@@ -1,6 +1,6 @@
 #include "ast.h"
 
-#include "global.h"
+#include "ac.h"
 
 void ac_expr_list_init(ac_expr_list* list)
 {

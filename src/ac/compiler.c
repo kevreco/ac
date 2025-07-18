@@ -2,7 +2,7 @@
 
 #include "re_lib.h"
 
-#include "global.h"
+#include "ac.h"
 #include "parser_c.h"
 #include "converter_c.h"
 

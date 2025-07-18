@@ -1,7 +1,7 @@
 #include "parser_c.h"
 
 #include "ast.h"
-#include "global.h"
+#include "ac.h"
 #include "lexer.h"
 
 #define CAST(type_, object_) (type_)(object_)

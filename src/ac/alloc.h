@@ -1,8 +1,8 @@
 #ifndef AC_ALLOC_H
 #define AC_ALLOC_H
 
-#include "global.h"
 #include "re_lib.h" /* re_arena */
+#include "ac.h"
 
 #ifdef __cplusplus
 extern "C" {
